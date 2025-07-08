@@ -1967,8 +1967,8 @@ public class AppController {
 							existingEmployee.getFirstname(), entity.getLeavetype(), sdf.format(entity.getStartdate()),
 							sdf.format(entity.getEnddate()), manager.getFirstname());
 					// Replace "noreply@company.com" with your sender email as needed.
-					// emailService.sendLeaveEmail(manager.getEmailid(), employeeEmail, subject,
-					// body);
+					 emailService.sendLeaveEmail(manager.getEmailid(), employeeEmail, subject,
+					 body);
 				}
 			} catch (Exception e) {
 				// Log the error but continue with the response
@@ -2142,8 +2142,8 @@ public class AppController {
 							employeeLeaveMasterTbl.getnoofdays(), employeeLeaveMasterTbl.getLeavereason(),
 							existingEmployee.getFirstname(), role.getRolename(), role.getDescription());
 
-					// emailService.sendLeaveEmail(existingEmployee.getEmailid(), managerEmail,
-					// subject, body);
+					 emailService.sendLeaveEmail(existingEmployee.getEmailid(), managerEmail,
+					 subject, body);
 					response.put("emailStatus", "Email sent to manager: " + managerEmail);
 				} else {
 					response.put("emailStatus", "Manager email not found");
@@ -4505,9 +4505,9 @@ public class AppController {
 							+ manager.getFirstname() + " has updated the payment status of an advance submitted by "
 							+ employee.getFirstname() + ".\n\n" + "Advance ID: " + advanceId + "\nUpdated Status: "
 							+ paymentStatus + "\n\nRegards,\nHRMS System";
-					// emailService.sendLeaveEmail(manager.getEmailid(),
-					// managersManager.getEmailid(),
-					// subjectToSuperManager, bodyToSuperManager);
+					 emailService.sendLeaveEmail(manager.getEmailid(),
+					 managersManager.getEmailid(),
+					 subjectToSuperManager, bodyToSuperManager);
 				}
 			}
 
