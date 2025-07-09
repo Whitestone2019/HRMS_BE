@@ -1967,8 +1967,7 @@ public class AppController {
 							existingEmployee.getFirstname(), entity.getLeavetype(), sdf.format(entity.getStartdate()),
 							sdf.format(entity.getEnddate()), manager.getFirstname());
 					// Replace "noreply@company.com" with your sender email as needed.
-					 emailService.sendLeaveEmail(manager.getEmailid(), employeeEmail, subject,
-					 body);
+					emailService.sendLeaveEmail(manager.getEmailid(), employeeEmail, subject, body);
 				}
 			} catch (Exception e) {
 				// Log the error but continue with the response
@@ -2142,8 +2141,7 @@ public class AppController {
 							employeeLeaveMasterTbl.getnoofdays(), employeeLeaveMasterTbl.getLeavereason(),
 							existingEmployee.getFirstname(), role.getRolename(), role.getDescription());
 
-					 emailService.sendLeaveEmail(existingEmployee.getEmailid(), managerEmail,
-					 subject, body);
+					emailService.sendLeaveEmail(existingEmployee.getEmailid(), managerEmail, subject, body);
 					response.put("emailStatus", "Email sent to manager: " + managerEmail);
 				} else {
 					response.put("emailStatus", "Manager email not found");
@@ -3478,10 +3476,10 @@ public class AppController {
 
 	@GetMapping("/payroll/employees")
 	public List<Map<String, String>> getAllEmployeeIds() {
-		return employeeProfileRepository.findAll().stream().map(emp -> {
+		return usermaintenanceRepository.findAll().stream().map(emp -> {
 			Map<String, String> empMap = new HashMap<>();
 			empMap.put("employeeId", emp.getEmpid()); // Employee ID
-			empMap.put("employeeName", emp.getEmployeename()); // Full Name
+			empMap.put("employeeName", emp.getFirstname()); // Full Name
 			return empMap;
 		}).collect(Collectors.toList());
 	}
@@ -4505,9 +4503,8 @@ public class AppController {
 							+ manager.getFirstname() + " has updated the payment status of an advance submitted by "
 							+ employee.getFirstname() + ".\n\n" + "Advance ID: " + advanceId + "\nUpdated Status: "
 							+ paymentStatus + "\n\nRegards,\nHRMS System";
-					 emailService.sendLeaveEmail(manager.getEmailid(),
-					 managersManager.getEmailid(),
-					 subjectToSuperManager, bodyToSuperManager);
+					emailService.sendLeaveEmail(manager.getEmailid(), managersManager.getEmailid(),
+							subjectToSuperManager, bodyToSuperManager);
 				}
 			}
 
@@ -4525,23 +4522,22 @@ public class AppController {
 
 	@PostMapping("/usermaintenance-save")
 	public ResponseEntity<usermaintenance> saveUser(@RequestBody usermaintenance user) {
-	    LocalDateTime now = LocalDateTime.now();
-	    Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
-	   String rawPassword = user.getPassword();
-	   
-	    user.setPassword(passwordEncoder.encode(rawPassword));
-	    user.setRcretime(nowDate);
-	    user.setRmodtime(nowDate);
-	    user.setRvfytime(nowDate);
-	    user.setUserid("2019"+user.getEmpid());
-	    user.setDisablefromdate(nowDate);
-	    LocalDate disableTo = LocalDate.now().plusYears(2);
-	    Date disableToDate = Date.from(disableTo.atStartOfDay(ZoneId.systemDefault()).toInstant());
-	    user.setDisabletodate(disableToDate);
-	    user.setLastlogin(nowDate);
-	    usermaintenance savedUser = usermaintenanceRepository.save(user);
-	    return ResponseEntity.ok(savedUser);
-	}
+		LocalDateTime now = LocalDateTime.now();
+		Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
+		String rawPassword = user.getPassword();
 
+		user.setPassword(passwordEncoder.encode(rawPassword));
+		user.setRcretime(nowDate);
+		user.setRmodtime(nowDate);
+		user.setRvfytime(nowDate);
+		user.setUserid("2019" + user.getEmpid());
+		user.setDisablefromdate(nowDate);
+		LocalDate disableTo = LocalDate.now().plusYears(2);
+		Date disableToDate = Date.from(disableTo.atStartOfDay(ZoneId.systemDefault()).toInstant());
+		user.setDisabletodate(disableToDate);
+		user.setLastlogin(nowDate);
+		usermaintenance savedUser = usermaintenanceRepository.save(user);
+		return ResponseEntity.ok(savedUser);
+	}
 
 }
