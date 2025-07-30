@@ -24,50 +24,49 @@ public class EmployeeLeaveSummary {
     private int year;
 
     @Column(name = "casual_leave_balance", nullable = false)
-    private Long casualLeaveBalance = 12L;  // Default 12 casual leaves
+    private Float casualLeaveBalance = 12.0f;  // Default 12 casual leaves
 
     @Column(name = "leave_taken", nullable = false)
-    private Long leaveTaken = 0L; // No leave taken initially
+    private Float leaveTaken = 0.0f;
 
     @Column(nullable = false)
-    private Long lop = 0L; // Total Loss of Pay (LOP) initially 0
+    private Float lop = 0.0f; // Total Loss of Pay (LOP)
 
-    // ✅ New columns for monthly LOP tracking
     @Column(name = "lop_jan", nullable = false)
-    private Long lopJan = 0L;
+    private Float lopJan = 0.0f;
 
     @Column(name = "lop_feb", nullable = false)
-    private Long lopFeb = 0L;
+    private Float lopFeb = 0.0f;
 
     @Column(name = "lop_mar", nullable = false)
-    private Long lopMar = 0L;
+    private Float lopMar = 0.0f;
 
     @Column(name = "lop_apr", nullable = false)
-    private Long lopApr = 0L;
+    private Float lopApr = 0.0f;
 
     @Column(name = "lop_may", nullable = false)
-    private Long lopMay = 0L;
+    private Float lopMay = 0.0f;
 
     @Column(name = "lop_jun", nullable = false)
-    private Long lopJun = 0L;
+    private Float lopJun = 0.0f;
 
     @Column(name = "lop_jul", nullable = false)
-    private Long lopJul = 0L;
+    private Float lopJul = 0.0f;
 
     @Column(name = "lop_aug", nullable = false)
-    private Long lopAug = 0L;
+    private Float lopAug = 0.0f;
 
     @Column(name = "lop_sep", nullable = false)
-    private Long lopSep = 0L;
+    private Float lopSep = 0.0f;
 
     @Column(name = "lop_oct", nullable = false)
-    private Long lopOct = 0L;
+    private Float lopOct = 0.0f;
 
     @Column(name = "lop_nov", nullable = false)
-    private Long lopNov = 0L;
+    private Float lopNov = 0.0f;
 
     @Column(name = "lop_dec", nullable = false)
-    private Long lopDec = 0L;
+    private Float lopDec = 0.0f;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -99,123 +98,123 @@ public class EmployeeLeaveSummary {
 		this.year = year;
 	}
 
-	public Long getCasualLeaveBalance() {
+	public Float getCasualLeaveBalance() {
 		return casualLeaveBalance;
 	}
 
-	public void setCasualLeaveBalance(Long casualLeaveBalance) {
+	public void setCasualLeaveBalance(Float casualLeaveBalance) {
 		this.casualLeaveBalance = casualLeaveBalance;
 	}
 
-	public Long getLeaveTaken() {
+	public Float getLeaveTaken() {
 		return leaveTaken;
 	}
 
-	public void setLeaveTaken(Long leaveTaken) {
+	public void setLeaveTaken(Float leaveTaken) {
 		this.leaveTaken = leaveTaken;
 	}
 
-	public Long getLop() {
+	public Float getLop() {
 		return lop;
 	}
 
-	public void setLop(Long lop) {
+	public void setLop(Float lop) {
 		this.lop = lop;
 	}
 
-	public Long getLopJan() {
+	public Float getLopJan() {
 		return lopJan;
 	}
 
-	public void setLopJan(Long lopJan) {
+	public void setLopJan(Float lopJan) {
 		this.lopJan = lopJan;
 	}
 
-	public Long getLopFeb() {
+	public Float getLopFeb() {
 		return lopFeb;
 	}
 
-	public void setLopFeb(Long lopFeb) {
+	public void setLopFeb(Float lopFeb) {
 		this.lopFeb = lopFeb;
 	}
 
-	public Long getLopMar() {
+	public Float getLopMar() {
 		return lopMar;
 	}
 
-	public void setLopMar(Long lopMar) {
+	public void setLopMar(Float lopMar) {
 		this.lopMar = lopMar;
 	}
 
-	public Long getLopApr() {
+	public Float getLopApr() {
 		return lopApr;
 	}
 
-	public void setLopApr(Long lopApr) {
+	public void setLopApr(Float lopApr) {
 		this.lopApr = lopApr;
 	}
 
-	public Long getLopMay() {
+	public Float getLopMay() {
 		return lopMay;
 	}
 
-	public void setLopMay(Long lopMay) {
+	public void setLopMay(Float lopMay) {
 		this.lopMay = lopMay;
 	}
 
-	public Long getLopJun() {
+	public Float getLopJun() {
 		return lopJun;
 	}
 
-	public void setLopJun(Long lopJun) {
+	public void setLopJun(Float lopJun) {
 		this.lopJun = lopJun;
 	}
 
-	public Long getLopJul() {
+	public Float getLopJul() {
 		return lopJul;
 	}
 
-	public void setLopJul(Long lopJul) {
+	public void setLopJul(Float lopJul) {
 		this.lopJul = lopJul;
 	}
 
-	public Long getLopAug() {
+	public Float getLopAug() {
 		return lopAug;
 	}
 
-	public void setLopAug(Long lopAug) {
+	public void setLopAug(Float lopAug) {
 		this.lopAug = lopAug;
 	}
 
-	public Long getLopSep() {
+	public Float getLopSep() {
 		return lopSep;
 	}
 
-	public void setLopSep(Long lopSep) {
+	public void setLopSep(Float lopSep) {
 		this.lopSep = lopSep;
 	}
 
-	public Long getLopOct() {
+	public Float getLopOct() {
 		return lopOct;
 	}
 
-	public void setLopOct(Long lopOct) {
+	public void setLopOct(Float lopOct) {
 		this.lopOct = lopOct;
 	}
 
-	public Long getLopNov() {
+	public Float getLopNov() {
 		return lopNov;
 	}
 
-	public void setLopNov(Long lopNov) {
+	public void setLopNov(Float lopNov) {
 		this.lopNov = lopNov;
 	}
 
-	public Long getLopDec() {
+	public Float getLopDec() {
 		return lopDec;
 	}
 
-	public void setLopDec(Long lopDec) {
+	public void setLopDec(Float lopDec) {
 		this.lopDec = lopDec;
 	}
 
@@ -235,54 +234,6 @@ public class EmployeeLeaveSummary {
 		this.updatedAt = updatedAt;
 	}
 
-	@Override
-	public String toString() {
-		return "EmployeeLeaveSummary [id=" + id + ", empId=" + empId + ", year=" + year + ", casualLeaveBalance="
-				+ casualLeaveBalance + ", leaveTaken=" + leaveTaken + ", lop=" + lop + ", lopJan=" + lopJan
-				+ ", lopFeb=" + lopFeb + ", lopMar=" + lopMar + ", lopApr=" + lopApr + ", lopMay=" + lopMay
-				+ ", lopJun=" + lopJun + ", lopJul=" + lopJul + ", lopAug=" + lopAug + ", lopSep=" + lopSep
-				+ ", lopOct=" + lopOct + ", lopNov=" + lopNov + ", lopDec=" + lopDec + ", createdAt=" + createdAt
-				+ ", updatedAt=" + updatedAt + ", getId()=" + getId() + ", getEmpId()=" + getEmpId() + ", getYear()="
-				+ getYear() + ", getCasualLeaveBalance()=" + getCasualLeaveBalance() + ", getLeaveTaken()="
-				+ getLeaveTaken() + ", getLop()=" + getLop() + ", getLopJan()=" + getLopJan() + ", getLopFeb()="
-				+ getLopFeb() + ", getLopMar()=" + getLopMar() + ", getLopApr()=" + getLopApr() + ", getLopMay()="
-				+ getLopMay() + ", getLopJun()=" + getLopJun() + ", getLopJul()=" + getLopJul() + ", getLopAug()="
-				+ getLopAug() + ", getLopSep()=" + getLopSep() + ", getLopOct()=" + getLopOct() + ", getLopNov()="
-				+ getLopNov() + ", getLopDec()=" + getLopDec() + ", getCreatedAt()=" + getCreatedAt()
-				+ ", getUpdatedAt()=" + getUpdatedAt() + ", getClass()=" + getClass() + ", hashCode()=" + hashCode()
-				+ ", toString()=" + super.toString() + "]";
-	}
-
-	public EmployeeLeaveSummary() {
-		super();
-		// TODO Auto-generated constructor stub
-	}
-
-	public EmployeeLeaveSummary(Long id, String empId, int year, Long casualLeaveBalance, Long leaveTaken, Long lop,
-			Long lopJan, Long lopFeb, Long lopMar, Long lopApr, Long lopMay, Long lopJun, Long lopJul, Long lopAug,
-			Long lopSep, Long lopOct, Long lopNov, Long lopDec, LocalDateTime createdAt, LocalDateTime updatedAt) {
-		super();
-		this.id = id;
-		this.empId = empId;
-		this.year = year;
-		this.casualLeaveBalance = casualLeaveBalance;
-		this.leaveTaken = leaveTaken;
-		this.lop = lop;
-		this.lopJan = lopJan;
-		this.lopFeb = lopFeb;
-		this.lopMar = lopMar;
-		this.lopApr = lopApr;
-		this.lopMay = lopMay;
-		this.lopJun = lopJun;
-		this.lopJul = lopJul;
-		this.lopAug = lopAug;
-		this.lopSep = lopSep;
-		this.lopOct = lopOct;
-		this.lopNov = lopNov;
-		this.lopDec = lopDec;
-		this.createdAt = createdAt;
-		this.updatedAt = updatedAt;
-	}
-    
+	
     
 }

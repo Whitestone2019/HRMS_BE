@@ -11,4 +11,6 @@ public interface EmployeeLeaveSummaryRepository extends JpaRepository<EmployeeLe
     Optional<EmployeeLeaveSummary> findByEmpIdAndYear(String empId, int year);
     
     EmployeeLeaveSummary findByEmpId(String empId); 
+    
+    EmployeeLeaveSummary findByEmpId_AndYear(String empId, int year);
 }

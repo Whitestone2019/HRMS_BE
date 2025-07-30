@@ -9,13 +9,14 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import com.whitestone.entity.UserMasterAttendance;
 import com.whitestone.entity.UserMasterAttendanceMod;
 
 @Repository
 public interface UserMasterAttendanceModRepository extends JpaRepository<UserMasterAttendanceMod, String> {
 	@Query("SELECT u FROM UserMasterAttendanceMod u WHERE u.attendanceid = :attendanceid AND TRUNC(u.attendancedate) = TRUNC(:attendancedate)")
 	Optional<UserMasterAttendanceMod> findByAttendanceidAndAttendancedate(@Param("attendanceid") String attendanceid,
-			@Param("attendancedate") java.sql.Date attendancedate);
+			@Param("attendancedate") Date date);
 
 	@Query("SELECT a FROM UserMasterAttendanceMod a WHERE a.srlnum = (SELECT MAX(b.srlnum) FROM UserMasterAttendanceMod b WHERE b.attendanceid = :attendanceId)")
 	Optional<UserMasterAttendanceMod> findLatestRecordBySrlNo(@Param("attendanceId") String attendanceId);
@@ -38,6 +39,17 @@ public interface UserMasterAttendanceModRepository extends JpaRepository<UserMas
 		    @Param("employeeId") String employeeId,
 		    @Param("startDate") Date startDate,
 		    @Param("endDate") Date endDate);
+	
+	
+	@Query("SELECT u FROM UserMasterAttendanceMod u WHERE u.attendanceid = :attendanceId AND u.attendancedate BETWEEN :startDate AND :endDate")
+	List<UserMasterAttendanceMod> findByAttendanceidAndDateRange(
+	    @Param("attendanceId") String attendanceId,
+	    @Param("startDate") Date startDate,
+	    @Param("endDate") Date endDate
+	);
+	
+	
+
 
 
 

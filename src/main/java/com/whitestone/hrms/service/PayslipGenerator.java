@@ -118,7 +118,7 @@ public class PayslipGenerator {
 
             // Retrieve LOP days
             EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository.findByEmpId(employeeId);
-            long lopDays = 0;
+            Float lopDays = 0.0f;
             if (leaveSummary != null) {
                 switch (requestedMonth) {
                     case JANUARY:

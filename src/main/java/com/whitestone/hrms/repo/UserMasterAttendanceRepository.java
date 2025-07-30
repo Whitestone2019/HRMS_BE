@@ -1,5 +1,6 @@
 package com.whitestone.hrms.repo;
 
+import java.util.Date;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -139,5 +140,8 @@ public interface UserMasterAttendanceRepository extends JpaRepository<UserMaster
 			nativeQuery = true)
 
 	List<Object[]> getEmployeeLeaveSummaryForAllEmployees();
+
+
+
 
 }

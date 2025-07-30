@@ -32,19 +32,19 @@ public class EmployeeLeaveModTbl {
  
     @Column(name = "LEAVE_TYPE", nullable = false, length = 80)
 
-    private String leaveType;
+    private String leavetype;
  
     @Column(name = "START_DATE", nullable = false)
 
     @JsonFormat(pattern = "yyyy-MM-DD")
 
-    private Timestamp startDate;
+    private Timestamp startdate;
  
     @Column(name = "END_DATE", nullable = false)
 
     @JsonFormat(pattern = "yyyy-MM-DD")
 
-    private Timestamp endDate;
+    private Timestamp enddate;
  
     @Column(name = "TEAM_EMAIL", nullable = false, length = 50)
 
@@ -52,7 +52,7 @@ public class EmployeeLeaveModTbl {
  
     @Column(name = "LEAVE_REASON", nullable = false, length = 255)
 
-    private String leaveReason;
+    private String leavereason;
  
     @Column(name = "STATUS", length = 20)
 
@@ -60,7 +60,7 @@ public class EmployeeLeaveModTbl {
  
     @Column(name = "NO_OF_DAYS")
 
-    private Long noofdays;
+    private Float noofdays;
  
     @Column(name = "ENTITY_CRE_FLG", length = 1)
 
@@ -102,225 +102,156 @@ public class EmployeeLeaveModTbl {
  
     @Column(name = "NO_OF_BOOKED_LEAVES")
 
-    private Long noofbooked;
- 
-    // Getters and Setters
+    private Float noofbooked;
+
+	public Long getSrlnum() {
+		return srlnum;
+	}
+
+	public void setSrlnum(Long srlnum) {
+		this.srlnum = srlnum;
+	}
+
+	public String getEmpid() {
+		return empid;
+	}
+
+	public void setEmpid(String empid) {
+		this.empid = empid;
+	}
+
+	public String getLeavetype() {
+		return leavetype;
+	}
+
+	public void setLeavetype(String leavetype) {
+		this.leavetype = leavetype;
+	}
+
+	public Timestamp getStartdate() {
+		return startdate;
+	}
+
+	public void setStartdate(Timestamp startdate) {
+		this.startdate = startdate;
+	}
+
+	public Timestamp getEnddate() {
+		return enddate;
+	}
+
+	public void setEnddate(Timestamp enddate) {
+		this.enddate = enddate;
+	}
+
+	public String getTeamEmail() {
+		return teamEmail;
+	}
+
+	public void setTeamEmail(String teamEmail) {
+		this.teamEmail = teamEmail;
+	}
 
-    public Long getSrlnum() {
+	public String getLeavereason() {
+		return leavereason;
+	}
 
-        return srlnum;
+	public void setLeavereason(String leavereason) {
+		this.leavereason = leavereason;
+	}
 
-    }
- 
-    public void setSrlnum(Long srlnum) {
+	public String getStatus() {
+		return status;
+	}
 
-        this.srlnum = srlnum;
+	public void setStatus(String status) {
+		this.status = status;
+	}
 
-    }
- 
-    public String getEmpid() {
+	public Float getNoofdays() {
+		return noofdays;
+	}
 
-        return empid;
+	public void setNoofdays(Float noofdays) {
+		this.noofdays = noofdays;
+	}
 
-    }
- 
-    public void setEmpid(String empid) {
+	public String getEntitycreflg() {
+		return entitycreflg;
+	}
 
-        this.empid = empid;
+	public void setEntitycreflg(String entitycreflg) {
+		this.entitycreflg = entitycreflg;
+	}
 
-    }
- 
-    public String getLeaveType() {
+	public String getDelflg() {
+		return delflg;
+	}
 
-        return leaveType;
+	public void setDelflg(String delflg) {
+		this.delflg = delflg;
+	}
 
-    }
- 
-    public void setLeaveType(String leaveType) {
+	public String getRcreuserid() {
+		return rcreuserid;
+	}
 
-        this.leaveType = leaveType;
+	public void setRcreuserid(String rcreuserid) {
+		this.rcreuserid = rcreuserid;
+	}
 
-    }
- 
-    public Timestamp getStartDate() {
+	public Timestamp getRcretime() {
+		return rcretime;
+	}
 
-        return startDate;
+	public void setRcretime(Timestamp rcretime) {
+		this.rcretime = rcretime;
+	}
 
-    }
- 
-    public void setStartDate(Timestamp startDate) {
+	public String getRmoduserid() {
+		return rmoduserid;
+	}
 
-        this.startDate = startDate;
+	public void setRmoduserid(String rmoduserid) {
+		this.rmoduserid = rmoduserid;
+	}
 
-    }
- 
-    public Timestamp getEndDate() {
+	public Timestamp getRmodtime() {
+		return rmodtime;
+	}
 
-        return endDate;
+	public void setRmodtime(Timestamp rmodtime) {
+		this.rmodtime = rmodtime;
+	}
 
-    }
- 
-    public void setEndDate(Timestamp endDate) {
+	public String getRvfyuserid() {
+		return rvfyuserid;
+	}
 
-        this.endDate = endDate;
+	public void setRvfyuserid(String rvfyuserid) {
+		this.rvfyuserid = rvfyuserid;
+	}
 
-    }
- 
-    public String getTeamEmail() {
+	public Timestamp getRvfytime() {
+		return rvfytime;
+	}
 
-        return teamEmail;
+	public void setRvfytime(Timestamp rvfytime) {
+		this.rvfytime = rvfytime;
+	}
 
-    }
- 
-    public void setTeamEmail(String teamEmail) {
+	public Float getNoofbooked() {
+		return noofbooked;
+	}
 
-        this.teamEmail = teamEmail;
+	public void setNoofbooked(Float noofbooked) {
+		this.noofbooked = noofbooked;
+	}
 
-    }
- 
-    public String getLeaveReason() {
+	
+	
 
-        return leaveReason;
-
-    }
- 
-    public void setLeaveReason(String leaveReason) {
-
-        this.leaveReason = leaveReason;
-
-    }
- 
-    public String getStatus() {
-
-        return status;
-
-    }
- 
-    public void setStatus(String status) {
-
-        this.status = status;
-
-    }
- 
-    public Long getNoofdays() {
-
-        return noofdays;
-
-    }
- 
-    public void setNoofdays(Long noofdays) {
-
-        this.noofdays = noofdays;
-
-    }
- 
-    public String getEntitycreflg() {
-
-        return entitycreflg;
-
-    }
- 
-    public void setEntitycreflg(String entitycreflg) {
-
-        this.entitycreflg = entitycreflg;
-
-    }
- 
-    public String getDelflg() {
-
-        return delflg;
-
-    }
- 
-    public void setDelflg(String delflg) {
-
-        this.delflg = delflg;
-
-    }
- 
-    public String getRcreuserid() {
-
-        return rcreuserid;
-
-    }
- 
-    public void setRcreuserid(String rcreuserid) {
-
-        this.rcreuserid = rcreuserid;
-
-    }
- 
-    public Timestamp getRcretime() {
-
-        return rcretime;
-
-    }
- 
-    public void setRcretime(Timestamp rcretime) {
-
-        this.rcretime = rcretime;
-
-    }
- 
-    public String getRmoduserid() {
-
-        return rmoduserid;
-
-    }
- 
-    public void setRmoduserid(String rmoduserid) {
-
-        this.rmoduserid = rmoduserid;
-
-    }
- 
-    public Timestamp getRmodtime() {
-
-        return rmodtime;
-
-    }
- 
-    public void setRmodtime(Timestamp rmodtime) {
-
-        this.rmodtime = rmodtime;
-
-    }
- 
-    public String getRvfyuserid() {
-
-        return rvfyuserid;
-
-    }
- 
-    public void setRvfyuserid(String rvfyuserid) {
-
-        this.rvfyuserid = rvfyuserid;
-
-    }
- 
-    public Timestamp getRvfytime() {
-
-        return rvfytime;
-
-    }
- 
-    public void setRvfytime(Timestamp rvfytime) {
-
-        this.rvfytime = rvfytime;
-
-    }
- 
-    public Long getNoofbooked() {
-
-        return noofbooked;
-
-    }
- 
-    public void setNoofbooked(Long noofbooked) {
-
-        this.noofbooked = noofbooked;
-
-    }
+   
 
 }
 

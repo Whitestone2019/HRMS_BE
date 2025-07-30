@@ -29,7 +29,7 @@ public class UserMasterAttendanceMod {
     private String attendanceid;
 
     @Column(name = "ATTENDANCE_DATE")
-    @JsonFormat(pattern = "YYYY-MM-DD")
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private Date attendancedate;
 
     @Column(name = "STATUS", length = 20)
