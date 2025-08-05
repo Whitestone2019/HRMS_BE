@@ -234,6 +234,4 @@ public class EmployeeLeaveSummary {
 		this.updatedAt = updatedAt;
 	}
 
-	
-    
 }

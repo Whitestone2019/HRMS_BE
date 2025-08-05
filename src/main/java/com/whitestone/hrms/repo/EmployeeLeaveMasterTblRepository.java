@@ -31,6 +31,8 @@ public interface EmployeeLeaveMasterTblRepository extends JpaRepository<Employee
 	List<EmployeeLeaveMasterTbl> findAllByDelflg(String string);
 
 	EmployeeLeaveMasterTbl findByEmpidAndLeavereason(String empid, String leavereason);
+	
+	EmployeeLeaveMasterTbl findByEmpidAndSrlnum(String empid, Long srlnum);
 
 	List<EmployeeLeaveMasterTbl> findByEmpidInAndEntitycreflgIn(List<String> empIds, List<String> entityFlags);
 

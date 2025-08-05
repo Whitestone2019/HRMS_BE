@@ -14,21 +14,21 @@ import com.whitestone.entity.UserMasterAttendanceMod;
 
 @Repository
 public interface UserMasterAttendanceModRepository extends JpaRepository<UserMasterAttendanceMod, String> {
+	
 	@Query("SELECT u FROM UserMasterAttendanceMod u WHERE u.attendanceid = :attendanceid AND TRUNC(u.attendancedate) = TRUNC(:attendancedate)")
 	Optional<UserMasterAttendanceMod> findByAttendanceidAndAttendancedate(@Param("attendanceid") String attendanceid,
 			@Param("attendancedate") Date date);
 
 	@Query("SELECT a FROM UserMasterAttendanceMod a WHERE a.srlnum = (SELECT MAX(b.srlnum) FROM UserMasterAttendanceMod b WHERE b.attendanceid = :attendanceId)")
 	Optional<UserMasterAttendanceMod> findLatestRecordBySrlNo(@Param("attendanceId") String attendanceId);
-
+	
 	@Query("SELECT u FROM UserMasterAttendanceMod u WHERE u.attendanceid = :attendanceid AND u.attendancedate BETWEEN :startDate AND :endDate")
 	List<UserMasterAttendanceMod> findAttendanceByEmployeeIdAndDateRange(@Param("attendanceid") String employeeId,
 			@Param("startDate") Date startDate, @Param("endDate") Date endDate);
-	
+		
 	@Query("SELECT u FROM UserMasterAttendanceMod u WHERE u.attendancedate BETWEEN :startDate AND :endDate")
 	List<UserMasterAttendanceMod> findAttendanceByDateRange(@Param("startDate") Date startDate, 
 	                                                         @Param("endDate") Date endDate);
-
 
 	@Query("SELECT a FROM UserMasterAttendanceMod a " +
 		       "WHERE a.attendanceid = :employeeId " +
@@ -39,8 +39,7 @@ public interface UserMasterAttendanceModRepository extends JpaRepository<UserMas
 		    @Param("employeeId") String employeeId,
 		    @Param("startDate") Date startDate,
 		    @Param("endDate") Date endDate);
-	
-	
+		
 	@Query("SELECT u FROM UserMasterAttendanceMod u WHERE u.attendanceid = :attendanceId AND u.attendancedate BETWEEN :startDate AND :endDate")
 	List<UserMasterAttendanceMod> findByAttendanceidAndDateRange(
 	    @Param("attendanceId") String attendanceId,
@@ -48,9 +47,12 @@ public interface UserMasterAttendanceModRepository extends JpaRepository<UserMas
 	    @Param("endDate") Date endDate
 	);
 	
-	
-
-
+	@Query("SELECT u FROM UserMasterAttendanceMod u WHERE u.attendancedate >= :start AND u.attendancedate < :end AND u.attendanceid IN :attendanceIds")
+	List<UserMasterAttendanceMod> findAllByAttendancedateAndAttendanceidIn(
+	    @Param("start") Date start,
+	    @Param("end") Date end,
+	    @Param("attendanceIds") List<String> attendanceIds
+	);
 
 
 
