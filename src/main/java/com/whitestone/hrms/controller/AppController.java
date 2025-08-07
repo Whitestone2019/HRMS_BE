@@ -2241,7 +2241,7 @@ public class AppController {
 			Map<String, Object> response = new HashMap<>();
 			response.put("message", "Leave Request sent successfully");
 			response.put("data", savedRequest);
-			// updateConsolidatedLeave(employeeLeaveMasterTbl);
+			updateConsolidatedLeave(employeeLeaveMasterTbl);
 			// Retrieve manager's email
 			try {
 				usermaintenance existingEmployee = usermaintenanceRepository
@@ -2279,7 +2279,7 @@ public class AppController {
 							employeeLeaveMasterTbl.getNoofdays(), employeeLeaveMasterTbl.getLeavereason(),
 							existingEmployee.getFirstname(), role.getRolename(), role.getDescription());
 
-					emailService.sendLeaveEmail(existingEmployee.getEmailid(), managerEmail, subject, body);
+					//emailService.sendLeaveEmail(existingEmployee.getEmailid(), managerEmail, subject, body);
 					response.put("emailStatus", "Email sent to manager: " + managerEmail);
 				} else {
 					response.put("emailStatus", "Manager email not found");
