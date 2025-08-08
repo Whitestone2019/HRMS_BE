@@ -19,8 +19,8 @@ public interface UserMasterAttendanceModRepository extends JpaRepository<UserMas
 	Optional<UserMasterAttendanceMod> findByAttendanceidAndAttendancedate(@Param("attendanceid") String attendanceid,
 			@Param("attendancedate") Date date);
 
-	@Query("SELECT a FROM UserMasterAttendanceMod a WHERE a.srlnum = (SELECT MAX(b.srlnum) FROM UserMasterAttendanceMod b WHERE b.attendanceid = :attendanceId)")
-	Optional<UserMasterAttendanceMod> findLatestRecordBySrlNo(@Param("attendanceId") String attendanceId);
+	@Query("SELECT a FROM UserMasterAttendanceMod a WHERE a.srlnum = (SELECT MAX(b.srlnum) FROM UserMasterAttendanceMod b WHERE b.attendanceid = :attendanceId AND TRUNC(b.attendancedate) = TRUNC(:attendancedate))")
+	Optional<UserMasterAttendanceMod> findLatestRecordBySrlNo(@Param("attendanceId") String attendanceId,@Param("attendancedate") Date date);
 	
 	@Query("SELECT u FROM UserMasterAttendanceMod u WHERE u.attendanceid = :attendanceid AND u.attendancedate BETWEEN :startDate AND :endDate")
 	List<UserMasterAttendanceMod> findAttendanceByEmployeeIdAndDateRange(@Param("attendanceid") String employeeId,
@@ -55,5 +55,7 @@ public interface UserMasterAttendanceModRepository extends JpaRepository<UserMas
 	);
 
 
-
+	@Query("SELECT u FROM UserMasterAttendanceMod u WHERE u.attendanceid = :attendanceid AND TRUNC(u.srlnum) = TRUNC(:srlnum)")
+	Optional<UserMasterAttendanceMod> findByAttendanceidAndSrlnum(@Param("attendanceid") String attendanceid,
+			@Param("srlnum") Long srlnum);
 }

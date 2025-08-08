@@ -26,4 +26,7 @@ public interface usermaintenanceRepository extends JpaRepository<usermaintenance
     // You can define custom query methods here if needed.
     
     usermaintenance findByEmpid(String empid);
+    
+    List<usermaintenance> findByEmpidIn(List<String> empIds);
+
 }

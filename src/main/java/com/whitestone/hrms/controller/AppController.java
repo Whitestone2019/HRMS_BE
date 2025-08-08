@@ -311,16 +311,16 @@ public class AppController {
 
 	@PostMapping("/checkIn")
 	public ResponseEntity<?> checkIn(@RequestBody UserMasterAttendanceMod attendancePayload) {
-		return handleAttendanceRecord(attendancePayload.getAttendanceid(), true, attendancePayload);
+		return handleAttendanceRecord(attendancePayload.getAttendanceid(), true, attendancePayload,attendancePayload.getSrlnum());
 	}
 
 	@PostMapping("/checkOut")
 	public ResponseEntity<?> checkOut(@RequestBody UserMasterAttendanceMod attendancePayload) {
-		return handleAttendanceRecord(attendancePayload.getAttendanceid(), false, attendancePayload);
+		return handleAttendanceRecord(attendancePayload.getAttendanceid(), false, attendancePayload, attendancePayload.getSrlnum());
 	}
 
 	private ResponseEntity<?> handleAttendanceRecord(String employeeId, boolean isCheckIn,
-			UserMasterAttendanceMod attendancePayload) {
+			UserMasterAttendanceMod attendancePayload,Long srlNum) {
 		try {
 			System.out.println("attendancePayload: " + attendancePayload.toString());
 
@@ -365,10 +365,16 @@ public class AppController {
 				response.put("message", "Check-in success");
 				return ResponseEntity.ok(response);
 			} else {
+				//attendancePayload.getSrlnum();
+				
+				System.out.println("attendancePayload.getSrlnum();::::::::"+srlNum);
 				// Checkout logic
+//				Optional<UserMasterAttendanceMod> latestRecordOpt = usermasterattendancemodrepository
+//						.findLatestRecordBySrlNo(employeeId,new Date());
+				Date date1 = new Date();
 				Optional<UserMasterAttendanceMod> latestRecordOpt = usermasterattendancemodrepository
-						.findLatestRecordBySrlNo(employeeId);
-
+						.findByAttendanceidAndSrlnum(employeeId, srlNum);
+			
 				if (!latestRecordOpt.isPresent()) {
 					return ResponseEntity.status(HttpStatus.BAD_REQUEST)
 							.body("{\"error\": \"No check-in found. Cannot check out.\"}");
@@ -502,15 +508,24 @@ public class AppController {
 	public ResponseEntity<?> getCheckInStatus(@PathVariable String employeeId) {
 		try {
 			// Fetch the most recent attendance record for the employee based on SRL_NUM
+			Date date = new Date();
 			Optional<UserMasterAttendanceMod> latestRecord = usermasterattendancemodrepository
-					.findLatestRecordBySrlNo(employeeId);
-
+					.findLatestRecordBySrlNo(employeeId, date);
+			if(latestRecord.isEmpty()) {
+				Calendar cal = Calendar.getInstance();
+			    cal.setTime(date);
+			    cal.add(Calendar.DAY_OF_MONTH, -1); // subtract 1 day
+			    Date previousDate = cal.getTime();
+				latestRecord = usermasterattendancemodrepository
+						.findLatestRecordBySrlNo(employeeId, previousDate);
+			}
 			Map<String, Object> response = new HashMap<>();
 
 			if (latestRecord.isPresent()) {
 				UserMasterAttendanceMod attendance = latestRecord.get();
 
 				// Check if the employee is checked in but not checked out
+				System.out.println("Checkin status  -   "+attendance.getCheckinstatus()+"  Checkout status  -    "+attendance.getCheckoutstatus() );
 				if (attendance.getCheckinstatus() != null && attendance.getCheckoutstatus() == null) {
 					response.put("isCheckedIn", true);
 					// response.put("checkInTime", attendance.getCheckintime());
@@ -519,6 +534,7 @@ public class AppController {
 					System.out.println("INTIME>>>>" + attendance.getCheckintime());
 					response.put("checkInLocation", attendance.getCheckinlocation());
 					response.put("attendanceDate", attendance.getAttendancedate());
+					response.put("srlNum", attendance.getSrlnum());
 				} else {
 					response.put("isCheckedIn", false);
 					response.put("message", "Employee is not currently checked in.");
@@ -1830,10 +1846,16 @@ public class AppController {
 
 			// Combine results into a single list of maps
 			List<Map<String, Object>> combinedLeaveRequests = new ArrayList<>();
+			
+			Map<String, String> empIdToName = usermaintenanceRepository
+			        .findByEmpidIn(empIds)
+			        .stream()
+			        .collect(Collectors.toMap(usermaintenance::getEmpid, usermaintenance::getFirstname));
 
 			// Convert Master records to map format
 			masterLeaveRequests.forEach(request -> {
 				Map<String, Object> leaveData = new HashMap<>();
+				leaveData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
 				leaveData.put("srlnum", request.getSrlnum());
 				leaveData.put("empid", request.getEmpid());
 				leaveData.put("leavetype", request.getLeavetype());
@@ -1858,6 +1880,7 @@ public class AppController {
 			// Convert Mod records to map format
 			modLeaveRequests.forEach(request -> {
 				Map<String, Object> leaveData = new HashMap<>();
+				leaveData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
 				leaveData.put("srlnum", request.getSrlnum());
 				leaveData.put("empid", request.getEmpid());
 				leaveData.put("leavetype", request.getLeavetype());
@@ -2279,7 +2302,7 @@ public class AppController {
 							employeeLeaveMasterTbl.getNoofdays(), employeeLeaveMasterTbl.getLeavereason(),
 							existingEmployee.getFirstname(), role.getRolename(), role.getDescription());
 
-					//emailService.sendLeaveEmail(existingEmployee.getEmailid(), managerEmail, subject, body);
+					emailService.sendLeaveEmail(existingEmployee.getEmailid(), managerEmail, subject, body);
 					response.put("emailStatus", "Email sent to manager: " + managerEmail);
 				} else {
 					response.put("emailStatus", "Manager email not found");
