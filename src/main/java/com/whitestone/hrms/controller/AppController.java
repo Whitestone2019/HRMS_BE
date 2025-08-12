@@ -105,6 +105,7 @@ import com.whitestone.entity.SalaryComponent;
 import com.whitestone.entity.SalaryTemplate;
 import com.whitestone.entity.SalaryTemplateComponent;
 import com.whitestone.entity.StatutorySettings;
+import com.whitestone.entity.TraineeMaster;
 import com.whitestone.entity.TravelEntityMod;
 import com.whitestone.entity.UserMasterAttendanceMod;
 import com.whitestone.entity.UserRoleMaintenance;
@@ -138,6 +139,7 @@ import com.whitestone.hrms.repo.SalaryTemplateComponentRepository;
 import com.whitestone.hrms.repo.SalaryTemplatePayload;
 import com.whitestone.hrms.repo.SalaryTemplateRepository;
 import com.whitestone.hrms.repo.StatutorySettingsRepository;
+import com.whitestone.hrms.repo.TraineemasterRepository;
 import com.whitestone.hrms.repo.TravelModRepository;
 import com.whitestone.hrms.repo.UserMasterAttendanceModRepository;
 import com.whitestone.hrms.repo.UserMasterAttendanceRepository;
@@ -155,6 +157,7 @@ import com.whitestone.hrms.service.ResourceNotFoundException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+
 @EnableAutoConfiguration(exclude = ErrorMvcAutoConfiguration.class)
 @Controller
 
@@ -170,6 +173,9 @@ public class AppController {
 
 	@Autowired
 	private usermaintenanceRepository usermaintenanceRepository;
+
+	@Autowired
+	private TraineemasterRepository traineemasterRepository;
 
 	@Autowired
 	private usermaintenancemodRepository userMaintenanceRepository;
@@ -215,14 +221,22 @@ public class AppController {
 			String rawPassword = employeeDetails.getPassword();
 
 			// Find the employee by ID
-			Optional<usermaintenance> employeeOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeid);
-			Optional<usermaintenancemod> employeeOpt1 = Optional.empty();
-			System.out.println("dfghjk" + employeeOpt);
-			if (!employeeOpt.isPresent()) {
+			Optional<usermaintenance> employeeOpt = Optional.empty();
+			Optional<TraineeMaster> employeeOpt1 = Optional.empty();
+			if (employeeid.toUpperCase().startsWith("WS")) {
 
-				employeeOpt1 = userMaintenanceRepository.findByEmpId(employeeid);
-				System.out.println("dfghjkq1" + employeeOpt1);
+				employeeOpt1 = traineemasterRepository.findByTrngidOrUserId(employeeid.toUpperCase());
+				System.out.println("employeeid::::   " + employeeOpt1.get().getFirstname());
+			} else {
+				employeeOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeid);
 			}
+			// Optional<usermaintenancemod> employeeOpt1 = Optional.empty();
+//			System.out.println("dfghjk" + employeeOpt);
+//			if (!employeeOpt.isPresent()) {
+//
+//				employeeOpt1 = userMaintenanceRepository.findByEmpId(employeeid);
+//				System.out.println("dfghjkq1" + employeeOpt1);
+//			}
 
 			// Check if the employee exists and the password matches
 			if ((employeeOpt.isPresent() && passwordEncoder.matches(rawPassword, employeeOpt.get().getPassword()))
@@ -250,9 +264,11 @@ public class AppController {
 					// return ResponseEntity.ok(response);
 				}
 				if (employeeOpt1.isPresent()) {
-					usermaintenancemod employee = employeeOpt1.get();
-					String role = employee.getRoleid();
-					String employeeId = employee.getemp_id();
+					TraineeMaster employee = employeeOpt1.get();
+					String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
+							.map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
+					// String role = employee.getRoleid();
+					String employeeId = employee.getTrngid();
 					String employeeName = employee.getFirstname();
 					String employeeEmail = employee.getEmailid();
 
@@ -311,51 +327,70 @@ public class AppController {
 
 	@PostMapping("/checkIn")
 	public ResponseEntity<?> checkIn(@RequestBody UserMasterAttendanceMod attendancePayload) {
-		return handleAttendanceRecord(attendancePayload.getAttendanceid(), true, attendancePayload,attendancePayload.getSrlnum());
+		return handleAttendanceRecord(attendancePayload.getAttendanceid(), true, attendancePayload,
+				attendancePayload.getSrlnum());
 	}
 
 	@PostMapping("/checkOut")
 	public ResponseEntity<?> checkOut(@RequestBody UserMasterAttendanceMod attendancePayload) {
-		return handleAttendanceRecord(attendancePayload.getAttendanceid(), false, attendancePayload, attendancePayload.getSrlnum());
+		if (attendancePayload.getAttendanceid() == null || attendancePayload.getSrlnum() == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+					.body("{\"error\": \"Invalid attendance ID or serial number\"}");
+		}
+		return handleAttendanceRecord(attendancePayload.getAttendanceid(), false, attendancePayload,
+				attendancePayload.getSrlnum());
 	}
 
 	private ResponseEntity<?> handleAttendanceRecord(String employeeId, boolean isCheckIn,
-			UserMasterAttendanceMod attendancePayload,Long srlNum) {
+			UserMasterAttendanceMod attendancePayload, Long srlNum) {
 		try {
-			System.out.println("attendancePayload: " + attendancePayload.toString());
-
-			// Fetch employee details
-			Optional<usermaintenance> employeeOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeId);
-			if (!employeeOpt.isPresent()) {
-				return ResponseEntity.status(HttpStatus.NOT_FOUND).body("{\"error\": \"Employee not found\"}");
+			if (employeeId == null || employeeId.trim().isEmpty()) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("{\"error\": \"Invalid employee ID\"}");
 			}
 
-			usermaintenance employee = employeeOpt.get();
+			// Initialize employee and trainee optional objects
+			Optional<usermaintenance> employeeOpt = Optional.empty();
+			Optional<TraineeMaster> traineeOpt = Optional.empty();
+			String userIdForAttendance = null;
+
+			// Fetch employee or trainee based on ID prefix
+			if (employeeId.toUpperCase().startsWith("WS")) {
+				traineeOpt = traineemasterRepository.findByTrngidOrUserId(employeeId.toUpperCase());
+				if (!traineeOpt.isPresent()) {
+					return ResponseEntity.status(HttpStatus.NOT_FOUND).body("{\"error\": \"Trainee not found\"}");
+				}
+				userIdForAttendance = traineeOpt.get().getUserid();
+			} else {
+				employeeOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeId);
+				if (!employeeOpt.isPresent()) {
+					return ResponseEntity.status(HttpStatus.NOT_FOUND).body("{\"error\": \"Employee not found\"}");
+				}
+				userIdForAttendance = employeeOpt.get().getUserid();
+			}
 
 			if (isCheckIn) {
 				// Check-in logic
 				Optional<UserMasterAttendanceMod> existingAttendanceToday = usermasterattendancemodrepository
 						.findByAttendanceidAndAttendancedate(employeeId, java.sql.Date.valueOf(LocalDate.now()));
-				System.out.println("ATT_TDY" + existingAttendanceToday.toString());
+
 				if (existingAttendanceToday.isPresent()) {
-					System.out.println("sdfghjkl");
 					return ResponseEntity.status(HttpStatus.BAD_REQUEST)
 							.body("{\"error\": \"Already checked in for today\"}");
 				}
 
 				// Create new attendance record
 				UserMasterAttendanceMod attendance = new UserMasterAttendanceMod();
-				attendance.setUserid(employee.getUserid().toString());
+				attendance.setUserid(userIdForAttendance);
 				attendance.setAttendanceid(attendancePayload.getAttendanceid());
 				attendance.setStatus("Present");
 				attendance.setCheckinstatus(attendancePayload.getStatus());
 				attendance.setCheckinlocation(attendancePayload.getCheckinlocation());
 				attendance.setRcreuserid(attendancePayload.getAttendanceid());
-				attendance.setAttendancedate(new Date());
-				attendance.setCheckintime(new Date());
-				attendance.setRcretime(new Date());
+				attendance.setAttendancedate(new java.sql.Date(System.currentTimeMillis()));
+				attendance.setCheckintime(new java.sql.Timestamp(System.currentTimeMillis()));
+				attendance.setRcretime(new java.sql.Timestamp(System.currentTimeMillis()));
 				attendance.setRcreuserid(employeeId);
-				attendance.setRmodtime(new Date());
+				attendance.setRmodtime(new java.sql.Timestamp(System.currentTimeMillis()));
 				attendance.setRmoduserid(employeeId);
 
 				// Save the record
@@ -365,16 +400,10 @@ public class AppController {
 				response.put("message", "Check-in success");
 				return ResponseEntity.ok(response);
 			} else {
-				//attendancePayload.getSrlnum();
-				
-				System.out.println("attendancePayload.getSrlnum();::::::::"+srlNum);
 				// Checkout logic
-//				Optional<UserMasterAttendanceMod> latestRecordOpt = usermasterattendancemodrepository
-//						.findLatestRecordBySrlNo(employeeId,new Date());
-				Date date1 = new Date();
 				Optional<UserMasterAttendanceMod> latestRecordOpt = usermasterattendancemodrepository
 						.findByAttendanceidAndSrlnum(employeeId, srlNum);
-			
+
 				if (!latestRecordOpt.isPresent()) {
 					return ResponseEntity.status(HttpStatus.BAD_REQUEST)
 							.body("{\"error\": \"No check-in found. Cannot check out.\"}");
@@ -386,36 +415,31 @@ public class AppController {
 					return ResponseEntity.status(HttpStatus.BAD_REQUEST)
 							.body("{\"error\": \"Already checked out for this day\"}");
 				}
+
 				attendance.setCheckoutlocation(attendancePayload.getCheckinlocation());
 				Date checkinTime = attendance.getCheckintime();
 				Date checkoutTime = new Date();
+
 				long durationMillis = checkoutTime.getTime() - checkinTime.getTime();
-				long durationMinutes = durationMillis / 60000; // total duration in minutes
-				long durationHours = durationMinutes / 60; // total hours
+				long durationMinutes = durationMillis / 60000;
+				long durationHours = durationMinutes / 60;
 				long remainingMinutes = durationMinutes % 60;
 				String totalWorkedTime = String.format("%02d:%02d", durationHours, remainingMinutes);
 				attendance.setTotalhoursworked(totalWorkedTime);
-				if (durationHours >= 8) {
 
-					attendance.setStatus("Present");
-					long overtimeMinutes = durationMinutes - (8 * 60); // Overtime in minutes
+				// Calculate status using the provided method
+				attendance.setStatus(calculateStatus(durationHours));
+
+				// Calculate overtime for logging
+				String overtime = "None";
+				if (durationHours >= 8) {
+					long overtimeMinutes = durationMinutes - (8 * 60);
 					long overtimeHours = overtimeMinutes / 60;
 					long overtimeRemainingMinutes = overtimeMinutes % 60;
-				} else if (durationHours >= 4) {
-					LocalDate date = LocalDate.now(); // Current date
-					DayOfWeek dayOfWeek = date.getDayOfWeek();
-
-					if (dayOfWeek == DayOfWeek.SATURDAY) {
-						attendance.setStatus("Present");
-					} else {
-						attendance.setStatus("Half-Day");
-					}
-
-				} else {
-					attendance.setStatus("Absent");
+					overtime = String.format("%02d:%02d", overtimeHours, overtimeRemainingMinutes);
 				}
 
-				// Set the check-out time and status
+				// Set checkout details
 				attendance.setCheckouttime(checkoutTime);
 				attendance.setCheckoutstatus(attendancePayload.getStatus());
 				attendance.setRcretime(checkoutTime);
@@ -423,28 +447,28 @@ public class AppController {
 				attendance.setRmodtime(checkoutTime);
 				attendance.setRmoduserid(employeeId);
 
+				// Log details
 				System.out.println("Total Worked Time: " + totalWorkedTime);
-				System.out.println("Overtime Hours: "
-						+ (durationHours >= 9 ? String.format("%02d:%02d", durationHours - 9, remainingMinutes)
-								: "None"));
+				System.out.println("Overtime: " + overtime);
 
-				// Save the updated attendance record to the database
+				// Save updated record
 				usermasterattendancemodrepository.save(attendance);
 
 				Map<String, Object> response = new HashMap<>();
 				response.put("message", "Check-out success");
+				response.put("totalWorkedTime", totalWorkedTime);
+				response.put("overtime", overtime);
 				return ResponseEntity.ok(response);
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-					.body("{\"error\": \"Failed to process attendance\"}");
+					.body("{\"error\": \"Failed to process attendance: " + e.getMessage() + "\"}");
 		}
 	}
 
 	private String calculateStatus(long durationHours) {
 		DayOfWeek day = LocalDate.now().getDayOfWeek();
-
 		if (durationHours >= 8) {
 			return "Present";
 		} else if (durationHours >= 4) {
@@ -511,13 +535,12 @@ public class AppController {
 			Date date = new Date();
 			Optional<UserMasterAttendanceMod> latestRecord = usermasterattendancemodrepository
 					.findLatestRecordBySrlNo(employeeId, date);
-			if(latestRecord.isEmpty()) {
+			if (latestRecord.isEmpty()) {
 				Calendar cal = Calendar.getInstance();
-			    cal.setTime(date);
-			    cal.add(Calendar.DAY_OF_MONTH, -1); // subtract 1 day
-			    Date previousDate = cal.getTime();
-				latestRecord = usermasterattendancemodrepository
-						.findLatestRecordBySrlNo(employeeId, previousDate);
+				cal.setTime(date);
+				cal.add(Calendar.DAY_OF_MONTH, -1); // subtract 1 day
+				Date previousDate = cal.getTime();
+				latestRecord = usermasterattendancemodrepository.findLatestRecordBySrlNo(employeeId, previousDate);
 			}
 			Map<String, Object> response = new HashMap<>();
 
@@ -525,7 +548,8 @@ public class AppController {
 				UserMasterAttendanceMod attendance = latestRecord.get();
 
 				// Check if the employee is checked in but not checked out
-				System.out.println("Checkin status  -   "+attendance.getCheckinstatus()+"  Checkout status  -    "+attendance.getCheckoutstatus() );
+				System.out.println("Checkin status  -   " + attendance.getCheckinstatus() + "  Checkout status  -    "
+						+ attendance.getCheckoutstatus());
 				if (attendance.getCheckinstatus() != null && attendance.getCheckoutstatus() == null) {
 					response.put("isCheckedIn", true);
 					// response.put("checkInTime", attendance.getCheckintime());
@@ -1832,90 +1856,97 @@ public class AppController {
 	// leave
 	@GetMapping("/leaveRequests/get/{empId}")
 	public ResponseEntity<Map<String, Object>> getLeaveRequestsByEmpId(@PathVariable String empId) {
-		try {
-			// Step 1: Find all employees who report to this empId
-			List<String> empIds = getDirectReports(empId);
+	    try {
+	        // Step 1: Find all employees who report to this empId
+	        List<String> empIds = getDirectReports(empId); // <-- This should already include trainees if you update it
 
-			// Print the final list of employee IDs
-			System.out.println("Fetching leave records for Employee IDs: " + empIds);
+	        // Print the final list of employee IDs
+	        System.out.println("Fetching leave records for Employee IDs: " + empIds);
 
-			// Fetch records from both Master and Mod tables where entitycreflg = 'N' or 'Y'
-			List<EmployeeLeaveMasterTbl> masterLeaveRequests = employeeLeaveMasterRepository
-					.findByEmpidInAndEntitycreflgIn(empIds, Arrays.asList("N", "Y"));
-			List<EmployeeLeaveModTbl> modLeaveRequests = employeeLeaveModRepository.findByEmpidIn(empIds);
+	        // Step 2: Fetch records from both Master and Mod tables where entitycreflg = 'N' or 'Y'
+	        List<EmployeeLeaveMasterTbl> masterLeaveRequests = employeeLeaveMasterRepository
+	                .findByEmpidInAndEntitycreflgIn(empIds, Arrays.asList("N", "Y"));
+	        List<EmployeeLeaveModTbl> modLeaveRequests = employeeLeaveModRepository.findByEmpidIn(empIds);
 
-			// Combine results into a single list of maps
-			List<Map<String, Object>> combinedLeaveRequests = new ArrayList<>();
-			
-			Map<String, String> empIdToName = usermaintenanceRepository
-			        .findByEmpidIn(empIds)
-			        .stream()
-			        .collect(Collectors.toMap(usermaintenance::getEmpid, usermaintenance::getFirstname));
+	        // Step 3: Build empId → name mapping from BOTH tables
+	        Map<String, String> empIdToName = new HashMap<>();
 
-			// Convert Master records to map format
-			masterLeaveRequests.forEach(request -> {
-				Map<String, Object> leaveData = new HashMap<>();
-				leaveData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
-				leaveData.put("srlnum", request.getSrlnum());
-				leaveData.put("empid", request.getEmpid());
-				leaveData.put("leavetype", request.getLeavetype());
-				leaveData.put("startdate", request.getStartdate());
-				leaveData.put("enddate", request.getEnddate());
-				leaveData.put("teamemail", request.getTeamemail());
-				leaveData.put("leavereason", request.getLeavereason());
-				leaveData.put("status", request.getStatus());
-				leaveData.put("noofdays", request.getNoofdays());
-				leaveData.put("entitycreflg", request.getEntitycreflg());
-				leaveData.put("delflg", request.getDelflg());
-				leaveData.put("rcreuserid", request.getRcreuserid());
-				leaveData.put("rcretime", request.getRcretime());
-				leaveData.put("rmoduserid", request.getRmoduserid());
-				leaveData.put("rmodtime", request.getRmodtime());
-				leaveData.put("rvfyuserid", request.getRvfyuserid());
-				leaveData.put("rvfytime", request.getRvfytime());
-				leaveData.put("noofbooked", request.getNoofbooked());
-				combinedLeaveRequests.add(leaveData);
-			});
+	        // From usermaintenance
+	        usermaintenanceRepository.findByEmpidIn(empIds)
+	                .forEach(u -> empIdToName.put(u.getEmpid(), u.getFirstname()));
 
-			// Convert Mod records to map format
-			modLeaveRequests.forEach(request -> {
-				Map<String, Object> leaveData = new HashMap<>();
-				leaveData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
-				leaveData.put("srlnum", request.getSrlnum());
-				leaveData.put("empid", request.getEmpid());
-				leaveData.put("leavetype", request.getLeavetype());
-				leaveData.put("startdate", request.getStartdate());
-				leaveData.put("enddate", request.getEnddate());
-				leaveData.put("teamemail", request.getTeamEmail());
-				leaveData.put("leavereason", request.getLeavereason());
-				leaveData.put("status", request.getStatus());
-				leaveData.put("noofdays", request.getNoofdays());
-				leaveData.put("entitycreflg", request.getEntitycreflg());
-				leaveData.put("delflg", request.getDelflg());
-				leaveData.put("rcreuserid", request.getRcreuserid());
-				leaveData.put("rcretime", request.getRcretime());
-				leaveData.put("rmoduserid", request.getRmoduserid());
-				leaveData.put("rmodtime", request.getRmodtime());
-				leaveData.put("rvfyuserid", request.getRvfyuserid());
-				leaveData.put("rvfytime", request.getRvfytime());
-				leaveData.put("noofbooked", request.getNoofbooked());
-				combinedLeaveRequests.add(leaveData);
-			});
+	        // From traineemaster
+	        traineemasterRepository.findByTrngidIn(empIds)
+	                .forEach(t -> empIdToName.put(t.getTrngid(), t.getFirstname()));
 
-			// Prepare the response
-			Map<String, Object> response = new HashMap<>();
-			response.put("data", combinedLeaveRequests);
-			response.put("message", combinedLeaveRequests.isEmpty() ? "No data found" : "Data fetched successfully");
+	        // Step 4: Combine results into a single list
+	        List<Map<String, Object>> combinedLeaveRequests = new ArrayList<>();
 
-			return ResponseEntity.ok(response);
-		} catch (Exception e) {
-			Map<String, Object> errorResponse = new HashMap<>();
-			errorResponse.put("status", "error");
-			errorResponse.put("message", e.getMessage());
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-		}
+	        // Convert Master records
+	        masterLeaveRequests.forEach(request -> {
+	            Map<String, Object> leaveData = new HashMap<>();
+	            leaveData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
+	            leaveData.put("srlnum", request.getSrlnum());
+	            leaveData.put("empid", request.getEmpid());
+	            leaveData.put("leavetype", request.getLeavetype());
+	            leaveData.put("startdate", request.getStartdate());
+	            leaveData.put("enddate", request.getEnddate());
+	            leaveData.put("teamemail", request.getTeamemail());
+	            leaveData.put("leavereason", request.getLeavereason());
+	            leaveData.put("status", request.getStatus());
+	            leaveData.put("noofdays", request.getNoofdays());
+	            leaveData.put("entitycreflg", request.getEntitycreflg());
+	            leaveData.put("delflg", request.getDelflg());
+	            leaveData.put("rcreuserid", request.getRcreuserid());
+	            leaveData.put("rcretime", request.getRcretime());
+	            leaveData.put("rmoduserid", request.getRmoduserid());
+	            leaveData.put("rmodtime", request.getRmodtime());
+	            leaveData.put("rvfyuserid", request.getRvfyuserid());
+	            leaveData.put("rvfytime", request.getRvfytime());
+	            leaveData.put("noofbooked", request.getNoofbooked());
+	            combinedLeaveRequests.add(leaveData);
+	        });
 
+	        // Convert Mod records
+	        modLeaveRequests.forEach(request -> {
+	            Map<String, Object> leaveData = new HashMap<>();
+	            leaveData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
+	            leaveData.put("srlnum", request.getSrlnum());
+	            leaveData.put("empid", request.getEmpid());
+	            leaveData.put("leavetype", request.getLeavetype());
+	            leaveData.put("startdate", request.getStartdate());
+	            leaveData.put("enddate", request.getEnddate());
+	            leaveData.put("teamemail", request.getTeamEmail());
+	            leaveData.put("leavereason", request.getLeavereason());
+	            leaveData.put("status", request.getStatus());
+	            leaveData.put("noofdays", request.getNoofdays());
+	            leaveData.put("entitycreflg", request.getEntitycreflg());
+	            leaveData.put("delflg", request.getDelflg());
+	            leaveData.put("rcreuserid", request.getRcreuserid());
+	            leaveData.put("rcretime", request.getRcretime());
+	            leaveData.put("rmoduserid", request.getRmoduserid());
+	            leaveData.put("rmodtime", request.getRmodtime());
+	            leaveData.put("rvfyuserid", request.getRvfyuserid());
+	            leaveData.put("rvfytime", request.getRvfytime());
+	            leaveData.put("noofbooked", request.getNoofbooked());
+	            combinedLeaveRequests.add(leaveData);
+	        });
+
+	        // Step 5: Prepare the response
+	        Map<String, Object> response = new HashMap<>();
+	        response.put("data", combinedLeaveRequests);
+	        response.put("message", combinedLeaveRequests.isEmpty() ? "No data found" : "Data fetched successfully");
+
+	        return ResponseEntity.ok(response);
+
+	    } catch (Exception e) {
+	        Map<String, Object> errorResponse = new HashMap<>();
+	        errorResponse.put("status", "error");
+	        errorResponse.put("message", e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+	    }
 	}
+
 
 	@Autowired
 	private EmployeeLeaveModTblRepository employeeLeaveModRepository;
@@ -2235,82 +2266,114 @@ public class AppController {
 	// Controller
 	@PostMapping("/leaveRequest")
 	public ResponseEntity<?> leaveRequest(@RequestBody EmployeeLeaveMasterTbl employeeLeaveMasterTbl) {
-
 		try {
-			// Convert Timestamp to LocalDate (removes time)
+			// Step 1: Normalize start date to remove time part
 			LocalDate onlyDate = employeeLeaveMasterTbl.getStartdate().toLocalDateTime().toLocalDate();
-
-			// Convert LocalDate back to Timestamp (time set to 00:00:00)
 			Timestamp dateOnlyTimestamp = Timestamp.valueOf(onlyDate.atStartOfDay());
 
+			// Step 2: Check if leave already exists for that date
 			boolean existingLeave = employeeLeaveMasterRepository
 					.countByEmpidAndStartDate(employeeLeaveMasterTbl.getEmpid(), dateOnlyTimestamp) > 0;
-
-			System.out.println("existingLeave>>>>>>" + existingLeave + ">>>" + employeeLeaveMasterTbl.getEmpid()
-					+ ">>>>" + employeeLeaveMasterTbl.getStartdate());
 
 			if (existingLeave) {
 				return ResponseEntity.status(HttpStatus.BAD_REQUEST)
 						.body("{\"error\": \"Leave request already exists for the selected date.\"}");
 			}
-			// Save the leave request
+
+			// Step 3: Save the leave request
 			employeeLeaveMasterTbl.setNoofbooked(1.0f);
 			employeeLeaveMasterTbl.setDelflg("N");
 			employeeLeaveMasterTbl.setEntitycreflg("N");
 			employeeLeaveMasterTbl.setStatus("Pending");
 			EmployeeLeaveMasterTbl savedRequest = employeeLeaveMasterRepository.save(employeeLeaveMasterTbl);
-			System.out.println("employeeLeaveMasterTbl>>>>>>>>>>>>>>" + employeeLeaveMasterTbl.getEmpid());
-			// Prepare response
+
+			// Step 4: Update consolidated leave
+			updateConsolidatedLeave(employeeLeaveMasterTbl);
+
 			Map<String, Object> response = new HashMap<>();
 			response.put("message", "Leave Request sent successfully");
 			response.put("data", savedRequest);
-			updateConsolidatedLeave(employeeLeaveMasterTbl);
-			// Retrieve manager's email
-			try {
-				usermaintenance existingEmployee = usermaintenanceRepository
-						.findByEmpIdOrUserId(employeeLeaveMasterTbl.getEmpid())
-						.orElseThrow(() -> new RuntimeException("Employee not found"));
-				String managerId = existingEmployee.getRepoteTo();
-				System.out.println("managerId" + managerId);
-				if (managerId == null) {
-					throw new RuntimeException("Manager not assigned to this employee");
-				}
 
-				usermaintenance manager = usermaintenanceRepository.findByEmpIdOrUserId(managerId)
-						.orElseThrow(() -> new RuntimeException("Manager not found"));
+			// Step 5: Fetch employee details (from either table)
+			String empId = employeeLeaveMasterTbl.getEmpid();
+			Optional<usermaintenance> empOpt = usermaintenanceRepository.findByEmpIdOrUserId(empId);
+			Optional<TraineeMaster> traineeOpt = Optional.empty();
+			if (empOpt.isEmpty()) {
+				traineeOpt = traineemasterRepository.findByTrngidOrUserId(empId);
+			}
+			if (empOpt.isEmpty() && traineeOpt.isEmpty()) {
+				throw new RuntimeException("Employee not found in both employee and trainee tables");
+			}
 
-				String managerEmail = manager.getEmailid();
-				if (managerEmail != null && !managerEmail.isEmpty()) {
-					System.out.println("managerEmail" + managerEmail);
-					// Send email notification to manager
-					UserRoleMaintenance role = userRoleMaintenanceRepository.findByRoleid(existingEmployee.getRoleid())
-							.orElseThrow(() -> new RuntimeException("role not found"));
-					String subject = "Leave Request Approval Needed for " + existingEmployee.getFirstname();
-					SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+			String managerId;
+			String employeeFirstName;
+			String employeeEmail;
+			String roleId;
 
-					// Format the start and end dates
-					String startDateFormatted = sdf.format(employeeLeaveMasterTbl.getStartdate());
-					String endDateFormatted = sdf.format(employeeLeaveMasterTbl.getEnddate());
-					String body = String.format("Dear %s,\n\n"
-							+ "Employee %s (%s) has submitted a leave request. Please find the details below:\n\n"
-							+ "Leave Type: %s\n" + "From Date: %s\n" + "To Date: %s\n" + "No. of Days: %s\n"
-							+ "Reason: %s\n\n" + "Kindly review the request and take necessary action.\n\n"
-							+ "Regards,\n" + "%s,\n" + "%s - %s,\n" + "Whitestone Software Solution Pvt Ltd.\n",
+			if (empOpt.isPresent()) {
+				usermaintenance emp = empOpt.get();
+				managerId = emp.getRepoteTo();
+				employeeFirstName = emp.getFirstname();
+				employeeEmail = emp.getEmailid();
+				roleId = emp.getRoleid();
+			} else {
+				TraineeMaster emp = traineeOpt.get();
+				managerId = emp.getRepoteTo();
+				employeeFirstName = emp.getFirstname();
+				employeeEmail = emp.getEmailid();
+				roleId = emp.getRoleid();
+			}
 
-							manager.getFirstname(), existingEmployee.getFirstname(), existingEmployee.getEmpid(),
-							employeeLeaveMasterTbl.getLeavetype(), startDateFormatted, endDateFormatted,
-							employeeLeaveMasterTbl.getNoofdays(), employeeLeaveMasterTbl.getLeavereason(),
-							existingEmployee.getFirstname(), role.getRolename(), role.getDescription());
+			if (managerId == null) {
+				throw new RuntimeException("Manager not assigned to this employee");
+			}
 
-					emailService.sendLeaveEmail(existingEmployee.getEmailid(), managerEmail, subject, body);
-					response.put("emailStatus", "Email sent to manager: " + managerEmail);
-				} else {
-					response.put("emailStatus", "Manager email not found");
-				}
+			// Step 6: Fetch manager details (from either table)
+			Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpIdOrUserId(managerId);
+			Optional<TraineeMaster> managerTraineeOpt = Optional.empty();
+			if (managerOpt.isEmpty()) {
+				managerTraineeOpt = traineemasterRepository.findByTrngidOrUserId(managerId);
+			}
+			if (managerOpt.isEmpty() && managerTraineeOpt.isEmpty()) {
+				throw new RuntimeException("Manager not found in both tables");
+			}
 
-			} catch (Exception e) {
-				e.printStackTrace();
-				response.put("emailError", "Failed to send email: " + e.getMessage());
+			String managerFirstName;
+			String managerEmail;
+			if (managerOpt.isPresent()) {
+				managerFirstName = managerOpt.get().getFirstname();
+				managerEmail = managerOpt.get().getEmailid();
+			} else {
+				managerFirstName = managerTraineeOpt.get().getFirstname();
+				managerEmail = managerTraineeOpt.get().getEmailid();
+			}
+
+			// Step 7: Send email if manager email exists
+			if (managerEmail != null && !managerEmail.isEmpty()) {
+				UserRoleMaintenance role = userRoleMaintenanceRepository.findByRoleid(roleId)
+						.orElseThrow(() -> new RuntimeException("Role not found"));
+
+				String subject = "Leave Request Approval Needed for " + employeeFirstName;
+				SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+
+				String startDateFormatted = sdf.format(employeeLeaveMasterTbl.getStartdate());
+				String endDateFormatted = sdf.format(employeeLeaveMasterTbl.getEnddate());
+
+				String body = String.format(
+						"Dear %s,\n\n"
+								+ "Employee %s (%s) has submitted a leave request. Please find the details below:\n\n"
+								+ "Leave Type: %s\n" + "From Date: %s\n" + "To Date: %s\n" + "No. of Days: %s\n"
+								+ "Reason: %s\n\n" + "Kindly review the request and take necessary action.\n\n"
+								+ "Regards,\n" + "%s,\n" + "%s - %s,\n" + "Whitestone Software Solution Pvt Ltd.\n",
+						managerFirstName, employeeFirstName, empId, employeeLeaveMasterTbl.getLeavetype(),
+						startDateFormatted, endDateFormatted, employeeLeaveMasterTbl.getNoofdays(),
+						employeeLeaveMasterTbl.getLeavereason(), employeeFirstName, role.getRolename(),
+						role.getDescription());
+
+				emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, body);
+				response.put("emailStatus", "Email sent to manager: " + managerEmail);
+			} else {
+				response.put("emailStatus", "Manager email not found");
 			}
 
 			return ResponseEntity.ok(response);
@@ -4392,28 +4455,60 @@ public class AppController {
 
 	@GetMapping("/manager-email/{empId}")
 	public ResponseEntity<Map<String, String>> getManagerEmail(@PathVariable("empId") String empId) {
-		try {
-			usermaintenance existingEmployee = usermaintenanceRepository.findByEmpIdOrUserId(empId)
-					.orElseThrow(() -> new RuntimeException("Employee not found"));
+	    try {
+	        // Step 1: Find employee in either usermaintenance or traineemaster
+	        Optional<usermaintenance> empOpt = usermaintenanceRepository.findByEmpIdOrUserId(empId);
+	        Optional<TraineeMaster> traineeOpt = Optional.empty();
 
-			String managerId = existingEmployee.getRepoteTo();
-			System.out.println("Manager ID: " + managerId);
+	        if (empOpt.isEmpty()) {
+	            traineeOpt = traineemasterRepository.findByTrngidOrUserId(empId);
+	        }
 
-			if (managerId == null) {
-				throw new RuntimeException("Manager not assigned to this employee");
-			}
+	        if (empOpt.isEmpty() && traineeOpt.isEmpty()) {
+	            throw new RuntimeException("Employee not found in both employee and trainee tables");
+	        }
 
-			usermaintenance manager = usermaintenanceRepository.findByEmpIdOrUserId(managerId)
-					.orElseThrow(() -> new RuntimeException("Manager not found"));
+	        String managerId;
+	        if (empOpt.isPresent()) {
+	            managerId = empOpt.get().getRepoteTo();
+	        } else {
+	            managerId = traineeOpt.get().getRepoteTo();
+	        }
 
-			Map<String, String> response = new HashMap<>();
-			response.put("email", manager.getEmailid()); // Wrap response in JSON
+	        if (managerId == null) {
+	            throw new RuntimeException("Manager not assigned to this employee");
+	        }
 
-			return ResponseEntity.ok(response);
-		} catch (RuntimeException e) {
-			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Collections.singletonMap("error", e.getMessage()));
-		}
+	        // Step 2: Find manager in either usermaintenance or traineemaster
+	        Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpIdOrUserId(managerId);
+	        Optional<TraineeMaster> managerTraineeOpt = Optional.empty();
+
+	        if (managerOpt.isEmpty()) {
+	            managerTraineeOpt = traineemasterRepository.findByTrngidOrUserId(managerId);
+	        }
+
+	        if (managerOpt.isEmpty() && managerTraineeOpt.isEmpty()) {
+	            throw new RuntimeException("Manager not found in both tables");
+	        }
+
+	        String managerEmail;
+	        if (managerOpt.isPresent()) {
+	            managerEmail = managerOpt.get().getEmailid();
+	        } else {
+	            managerEmail = managerTraineeOpt.get().getEmailid();
+	        }
+
+	        // Step 3: Return manager email
+	        Map<String, String> response = new HashMap<>();
+	        response.put("email", managerEmail);
+	        return ResponseEntity.ok(response);
+
+	    } catch (RuntimeException e) {
+	        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+	                .body(Collections.singletonMap("error", e.getMessage()));
+	    }
 	}
+
 
 	@GetMapping("/expenses")
 	public ResponseEntity<List<Map<String, Object>>> getAllExpenses() {
@@ -5034,76 +5129,74 @@ public class AppController {
 		calendar.set(Calendar.MILLISECOND, 0);
 		return calendar.getTime();
 	}
-	
-	
+
 	@GetMapping("/attendance/pie")
 	public ResponseEntity<?> getAttendancePie(@RequestParam("empId") String empId) {
-	    try {
-	        // Step 1: Get all employees under the given manager (including indirect)
-	        Set<String> allEmpIds = new HashSet<>();
-	        Deque<String> queue = new ArrayDeque<>();
-	        queue.add(empId); // Always include the main empId
+		try {
+			// Step 1: Get all employees under the given manager (including indirect)
+			Set<String> allEmpIds = new HashSet<>();
+			Deque<String> queue = new ArrayDeque<>();
+			queue.add(empId); // Always include the main empId
 
-	        allEmpIds.add(empId); // Add self
+			allEmpIds.add(empId); // Add self
 
-	        while (!queue.isEmpty()) {
-	            String current = queue.poll();
-	            List<usermaintenance> reportees = usermaintenanceRepository.findByRepoteToCustom(current);
-	            for (usermaintenance emp : reportees) {
-	                String eid = emp.getEmpid();
-	                if (allEmpIds.add(eid)) {
-	                    queue.add(eid);
-	                }
-	            }
-	        }
+			while (!queue.isEmpty()) {
+				String current = queue.poll();
+				List<usermaintenance> reportees = usermaintenanceRepository.findByRepoteToCustom(current);
+				for (usermaintenance emp : reportees) {
+					String eid = emp.getEmpid();
+					if (allEmpIds.add(eid)) {
+						queue.add(eid);
+					}
+				}
+			}
 
-	        List<String> empIdList = new ArrayList<>(allEmpIds); // Even if only 1
+			List<String> empIdList = new ArrayList<>(allEmpIds); // Even if only 1
 
-	        // Step 2: Prepare date ranges
-	        LocalDate today = LocalDate.now();
-	        LocalDate yesterday = today.minusDays(1);
+			// Step 2: Prepare date ranges
+			LocalDate today = LocalDate.now();
+			LocalDate yesterday = today.minusDays(1);
 
-	        Date todayStart = Timestamp.valueOf(today.atStartOfDay());
-	        Date todayEnd = Timestamp.valueOf(today.plusDays(1).atStartOfDay());
+			Date todayStart = Timestamp.valueOf(today.atStartOfDay());
+			Date todayEnd = Timestamp.valueOf(today.plusDays(1).atStartOfDay());
 
-	        Date yesterdayStart = Timestamp.valueOf(yesterday.atStartOfDay());
-	        Date yesterdayEnd = Timestamp.valueOf(yesterday.plusDays(1).atStartOfDay());
+			Date yesterdayStart = Timestamp.valueOf(yesterday.atStartOfDay());
+			Date yesterdayEnd = Timestamp.valueOf(yesterday.plusDays(1).atStartOfDay());
 
-	        // Step 3: Fetch attendance records
-	        List<UserMasterAttendanceMod> todayRecords = usermasterattendancemodrepository
-	            .findAllByAttendancedateAndAttendanceidIn(todayStart, todayEnd, empIdList);
+			// Step 3: Fetch attendance records
+			List<UserMasterAttendanceMod> todayRecords = usermasterattendancemodrepository
+					.findAllByAttendancedateAndAttendanceidIn(todayStart, todayEnd, empIdList);
 
-	        List<UserMasterAttendanceMod> yesterdayRecords = usermasterattendancemodrepository
-	            .findAllByAttendancedateAndAttendanceidIn(yesterdayStart, yesterdayEnd, empIdList);
+			List<UserMasterAttendanceMod> yesterdayRecords = usermasterattendancemodrepository
+					.findAllByAttendancedateAndAttendanceidIn(yesterdayStart, yesterdayEnd, empIdList);
 
-	        long total = empIdList.size();
+			long total = empIdList.size();
 
-	        // Step 4: Build response
-	        Map<String, Object> result = new HashMap<>();
+			// Step 4: Build response
+			Map<String, Object> result = new HashMap<>();
 
-	        Map<String, Object> todayMap = new HashMap<>();
-	        long todayPresent = todayRecords.stream().filter(r -> r.getCheckintime() != null).count();
-	        todayMap.put("present", todayPresent);
-	        todayMap.put("absent", total - todayPresent);
-	        todayMap.put("day", today.getDayOfWeek().toString());
+			Map<String, Object> todayMap = new HashMap<>();
+			long todayPresent = todayRecords.stream().filter(r -> r.getCheckintime() != null).count();
+			todayMap.put("present", todayPresent);
+			todayMap.put("absent", total - todayPresent);
+			todayMap.put("day", today.getDayOfWeek().toString());
 
-	        Map<String, Object> yesterdayMap = new HashMap<>();
-	        long yesterdayPresent = yesterdayRecords.stream().filter(r -> r.getCheckintime() != null).count();
-	        yesterdayMap.put("present", yesterdayPresent);
-	        yesterdayMap.put("absent", total - yesterdayPresent);
-	        yesterdayMap.put("day", yesterday.getDayOfWeek().toString());
+			Map<String, Object> yesterdayMap = new HashMap<>();
+			long yesterdayPresent = yesterdayRecords.stream().filter(r -> r.getCheckintime() != null).count();
+			yesterdayMap.put("present", yesterdayPresent);
+			yesterdayMap.put("absent", total - yesterdayPresent);
+			yesterdayMap.put("day", yesterday.getDayOfWeek().toString());
 
-	        result.put("today", todayMap);
-	        result.put("yesterday", yesterdayMap);
+			result.put("today", todayMap);
+			result.put("yesterday", yesterdayMap);
 
-	        return ResponseEntity.ok(result);
+			return ResponseEntity.ok(result);
 
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-	                .body(Collections.singletonMap("error", "Unable to fetch hierarchical pie data"));
-	    }
+		} catch (Exception e) {
+			e.printStackTrace();
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body(Collections.singletonMap("error", "Unable to fetch hierarchical pie data"));
+		}
 	}
-
 
 }
