@@ -4795,6 +4795,26 @@ public class AppController {
 		usermaintenance savedUser = usermaintenanceRepository.save(user);
 		return ResponseEntity.ok(savedUser);
 	}
+	
+	@PostMapping("/trng-save")
+	public ResponseEntity<TraineeMaster> saveUser(@RequestBody TraineeMaster user) {
+		LocalDateTime now = LocalDateTime.now();
+		Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
+		String rawPassword = user.getPassword();
+
+		user.setPassword(passwordEncoder.encode(rawPassword));
+		user.setRcretime(nowDate);
+		user.setRmodtime(nowDate);
+		user.setRvfytime(nowDate);
+		user.setUserid("2019" + user.getTrngid());
+		user.setDisablefromdate(nowDate);
+		LocalDate disableTo = LocalDate.now().plusYears(2);
+		Date disableToDate = Date.from(disableTo.atStartOfDay(ZoneId.systemDefault()).toInstant());
+		user.setDisabletodate(disableToDate);
+		user.setLastlogin(nowDate);
+		TraineeMaster savedUser = traineemasterRepository.save(user);
+		return ResponseEntity.ok(savedUser);
+	}
 
 	@GetMapping("/data")
 	public ResponseEntity<?> getTimesheetData(@RequestParam int year, @RequestParam int month,
