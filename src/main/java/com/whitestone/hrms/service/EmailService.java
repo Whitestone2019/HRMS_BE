@@ -80,6 +80,23 @@ public class EmailService {
         }
     }
     
+    
+    public void sendAdvanceEmail(String From,String email, String subject, String body) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true);
+			helper.setFrom(From);
+			helper.setCc("accounts@whitestones.in");
+            helper.setTo(email);
+            helper.setSubject(subject);
+            helper.setText(body);
+
+            mailSender.send(message);
+        } catch (MessagingException e) {
+            throw new RuntimeException("Failed to send payslip email", e);
+        }
+    }
+    
     public void sendExpenseNotificationEmail(String empId, String action, String expenseId) {
         usermaintenance employee = usermaintenanceRepository.findByEmpid(empId);
         if (employee != null && employee.getRepoteTo() != null) {
@@ -94,7 +111,7 @@ public class EmailService {
                             "\nAmount: " + expense.getAmount() +
                             "\n\nPlease review it at your earliest convenience.\n\nRegards,\nHRMS System";
 
-                   this.sendLeaveEmail(employee.getEmailid(), manager.getEmailid(), subject, body);
+                   this.sendAdvanceEmail(employee.getEmailid(), manager.getEmailid(), subject, body);
                 }
             }
         }
@@ -113,7 +130,7 @@ public class EmailService {
                         "\nAmount: " + amount +
                         "\n\nPlease review it at your earliest convenience.\n\nRegards,\nHRMS System";
 
-               this.sendLeaveEmail(employee.getEmailid(), manager.getEmailid(), subject, body);
+               this.sendAdvanceEmail(employee.getEmailid(), manager.getEmailid(), subject, body);
             }
         }
     }
