@@ -5670,4 +5670,50 @@ public class AppController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
+    @GetMapping("/employeesdetails")
+    public ResponseEntity<List<usermaintenance>> getAllEmployeesDetails() {
+        List<usermaintenance> employees = usermaintenanceRepository.findAll();
+        return ResponseEntity.ok(employees);
+    }
+
+    @GetMapping("/trainees")
+    public ResponseEntity<List<TraineeMaster>> getAllTrainees() {
+        List<TraineeMaster> trainees = traineemasterRepository.findAll();
+        return ResponseEntity.ok(trainees);
+    }
+
+//    @GetMapping("/employee/empid/{empid}")
+//    public ResponseEntity<usermaintenance> getEmployeeByEmpid(@PathVariable String empid) {
+//        Optional<usermaintenance> employee = usermaintenanceRepository.findByEmpid(empid);
+//        return employee.map(ResponseEntity::ok)
+//                .orElseThrow(() -> new RuntimeException("Employee not found with empid: " + empid));
+//    }
+//
+//    @GetMapping("/trainee/trngid/{trngid}")
+//    public ResponseEntity<TraineeMaster> getTraineeByTrngid(@PathVariable String trngid) {
+//        Optional<TraineeMaster> trainee = traineemasterRepository.findByTrngid(trngid);
+//        return trainee.map(ResponseEntity::ok)
+//                .orElseThrow(() -> new RuntimeException("Trainee not found with trngid: " + trngid));
+//    }
+
+    @PutMapping("/employee/{userId}/status")
+    public ResponseEntity<Void> updateEmployeeStatus(@PathVariable String userId, @RequestBody Map<String, String> statusUpdate) {
+        usermaintenance user = usermaintenanceRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Employee not found"));
+        user.setStatus(statusUpdate.get("status"));
+        user.setRmodtime(new Date());
+        usermaintenanceRepository.save(user);
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/trainee/{userId}/status")
+    public ResponseEntity<Void> updateTraineeStatus(@PathVariable String userId, @RequestBody Map<String, String> statusUpdate) {
+        TraineeMaster user = traineemasterRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Trainee not found"));
+        user.setStatus(statusUpdate.get("status"));
+        user.setRmodtime(new Date());
+        traineemasterRepository.save(user);
+        return ResponseEntity.ok().build();
+    }
+    
 }
