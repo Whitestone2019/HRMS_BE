@@ -265,7 +265,7 @@ public class PayslipGenerator {
 
             // Gross Earnings & Total Deductions in Single Row
             PdfPCell grossEarningsCell = new PdfPCell(
-                    new Phrase("Gross Earnings: " + String.format("%.2f", totalEarnings), BODY_FONT));
+                    new Phrase("Gross Earnings: " + String.format("%.2f", totalEarnings + totalDeductions), BODY_FONT));
             grossEarningsCell.setHorizontalAlignment(Element.ALIGN_LEFT);
             grossEarningsCell.setBorder(Rectangle.BOX);
             grossEarningsCell.setPadding(5);
@@ -280,7 +280,7 @@ public class PayslipGenerator {
             summaryTable.addCell(totalDeductionsCell);
 
             // Net Pay Calculation
-            double netPay = totalEarnings - totalDeductions;
+            double netPay = totalEarnings;
             String netPayInWords = convertNumberToWords((int) netPay) + " Only";
 
             PdfPCell netPayLabelCell = new PdfPCell(new Phrase("Net Pay", BODY_FONT));

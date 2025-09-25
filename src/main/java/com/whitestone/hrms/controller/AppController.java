@@ -88,6 +88,7 @@ import com.whitestone.entity.EmployeeEducationDetailsMod;
 import com.whitestone.entity.EmployeeLeaveMasterTbl;
 import com.whitestone.entity.EmployeeLeaveModTbl;
 import com.whitestone.entity.EmployeeLeaveSummary;
+import com.whitestone.entity.EmployeePermissionMasterTbl;
 import com.whitestone.entity.EmployeeProfessionalDetailsMod;
 import com.whitestone.entity.EmployeeProfile;
 import com.whitestone.entity.EmployeeProfileMod;
@@ -121,6 +122,7 @@ import com.whitestone.hrms.repo.EmployeeEducationDetailsModRepository;
 import com.whitestone.hrms.repo.EmployeeLeaveMasterTblRepository;
 import com.whitestone.hrms.repo.EmployeeLeaveModTblRepository;
 import com.whitestone.hrms.repo.EmployeeLeaveSummaryRepository;
+import com.whitestone.hrms.repo.EmployeePermissionMasterRepository;
 import com.whitestone.hrms.repo.EmployeeProfessionalDetailsModRepository;
 import com.whitestone.hrms.repo.EmployeeProfileModRepository;
 import com.whitestone.hrms.repo.EmployeeProfileRepository;
@@ -209,6 +211,9 @@ public class AppController {
 
 	@Autowired
 	private AdvanceService advanceService;
+	
+	   @Autowired
+	    private EmployeePermissionMasterRepository employeePermissionMasterRepository;
 
 	// User login endpoint
 	@RequestMapping(value = { "/login" }, method = RequestMethod.POST)
@@ -4239,14 +4244,17 @@ public class AppController {
 						: 0.0;
 
 				// LOP deduction
-				double perDaySalary = totalEarnings / currentMonth.lengthOfMonth();
+				double perDaySalary = totalEarnings + totalDeductions / currentMonth.lengthOfMonth();
 				double lopDeduction = perDaySalary * lopDays;
 				System.out.println("Perdaysal::>>>  " + perDaySalary + "  totalEarnings::>>" + totalEarnings
 						+ "currentMonth.lengthOfMonth() ::>>" + currentMonth.lengthOfMonth() + "  lopDays::>>>"
 						+ lopDays);
 				// Final payable amount
-				double finalSalary = totalEarnings - totalDeductions - lopDeduction;
-
+				double finalSalary = totalEarnings - lopDeduction;
+				System.out.println("totalEarnings>>>>>>    "+totalEarnings);
+				System.out.println("totalDeductions>>>>>>    "+totalDeductions);
+				System.out.println("lopDeduction>>>>>>    "+lopDeduction);
+				System.out.println("finalSalary>>>>>>    "+finalSalary);
 				// Create Payroll record
 				Payroll payroll = new Payroll();
 				payroll.setEmpid(empId);
@@ -4261,7 +4269,7 @@ public class AppController {
 				payroll.setEmailId(employeeSalary.getEmailid());
 				payroll.setMobileNum(employeeSalary.getMobilenumber());
 				payroll.setMonth(currentMonth.toString());
-				payroll.setPymtMode(employeeSalary.getBankName().contains("ICIC") ? "FT" : "NEFT");
+				payroll.setPymtMode(employeeSalary.getBankName().toLowerCase().contains("icic".toLowerCase()) ? "FT" : "NEFT");
 				payroll.setPymtProdTypeCode("PAB_VENDOR");
 				payroll.setRefNo("");
 				payroll.setRemark(currentMonth.getMonth().name() + " " + currentMonth.getYear() + " Salary");
@@ -4332,8 +4340,7 @@ public class AppController {
 			row.createCell(3).setCellValue(nullToNA(payroll.getBnfName()));
 			row.createCell(4).setCellValue(nullToNA(payroll.getBeneAccNo()));
 			row.createCell(5).setCellValue(nullToNA(payroll.getBeneIfsc()));
-			row.createCell(6)
-					.setCellValue(payroll.getAmount() != null ? String.valueOf(Math.round(payroll.getAmount())) : "NA");
+			row.createCell(6).setCellValue(payroll.getAmount() != null ? String.valueOf(Math.round(payroll.getAmount())): "NA");
 			row.createCell(7).setCellValue(nullToNA(payroll.getDebitNarr()));
 			row.createCell(8).setCellValue(nullToNA(payroll.getCreditNarr()));
 			row.createCell(9).setCellValue(nullToNA(payroll.getMobileNum()));
@@ -5218,5 +5225,449 @@ public class AppController {
 					.body(Collections.singletonMap("error", "Unable to fetch hierarchical pie data"));
 		}
 	}
+	
+	 // ✅ GET all
+    @GetMapping("/location-allowances")
+    public ResponseEntity<List<LocationAllowance>> getAll() {
+        try {
+            List<LocationAllowance> allowances = locationrepository.findAll();
+            return ResponseEntity.ok(allowances);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
 
+    // ✅ POST create
+    @PostMapping("/location-allowances")
+    public ResponseEntity<?> create(@RequestBody LocationAllowance allowance) {
+        try {
+            if (allowance.getLocationName() == null || allowance.getLocationName().isEmpty()) {
+                return ResponseEntity.badRequest().body("Location name is required");
+            }
+            if (allowance.getAmount() == null || allowance.getAmount() <= 0) {
+                return ResponseEntity.badRequest().body("Amount must be greater than zero");
+            }
+            LocationAllowance saved = locationrepository.save(allowance);
+            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error saving allowance");
+        }
+    }
+
+    // ✅ DELETE by ID
+    @DeleteMapping("/location-allowances/{id}")
+    public ResponseEntity<?> delete(@PathVariable Long id) {
+        try {
+            Optional<LocationAllowance> existing = locationrepository.findById(id);
+            if (existing.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Allowance not found with id: " + id);
+            }
+            locationrepository.deleteById(id);
+            return ResponseEntity.ok("Deleted successfully");
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error deleting allowance");
+        }
+    }
+    
+    @PutMapping("/location-allowances/{id}")
+    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody LocationAllowance allowance) {
+        try {
+            Optional<LocationAllowance> existingOpt = locationrepository.findById(id);
+            if (existingOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Allowance not found with id: " + id);
+            }
+
+            LocationAllowance existing = existingOpt.get();
+            if (allowance.getLocationName() != null) existing.setLocationName(allowance.getLocationName());
+            if (allowance.getType() != null) existing.setType(allowance.getType());
+            if (allowance.getAmount() != null) existing.setAmount(allowance.getAmount());
+
+            return ResponseEntity.ok(locationrepository.save(existing));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error updating allowance");
+        }
+    }
+    
+    @PostMapping("/permissionRequest")
+    public ResponseEntity<?> permissionRequest(@RequestBody EmployeePermissionMasterTbl employeePermissionMasterTbl) {
+        try {
+            System.out.println("Received permission request: " + employeePermissionMasterTbl);
+          
+            String empId = employeePermissionMasterTbl.getEmpid();
+            System.out.println("EmpId: " + empId);
+            LocalDate startLocalDate = employeePermissionMasterTbl.getStartTime().toLocalDateTime().toLocalDate();
+            java.sql.Date startDate =   java.sql.Date.valueOf(startLocalDate); // Convert LocalDate to java.sql.Date
+            System.out.println("StartDate: " + startDate);
+         
+
+            // Check if permission exists for the same start time
+            System.out.println("Checking if permission exists for empId: " + empId + ", startTime: " + employeePermissionMasterTbl.getStartTime());
+            boolean existingPermission = employeePermissionMasterRepository
+                    .countByEmpidAndStartTime(empId, employeePermissionMasterTbl.getStartTime()) > 0;
+            System.out.println("Existing permission check result: " + existingPermission);
+
+            if (existingPermission) {
+                System.out.println("Permission request already exists for the selected time.");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("{\"error\": \"Permission request already exists for the selected time.\"}");
+            }
+
+            // Check daily limit
+            System.out.println("Checking daily hours for empId: " + empId + ", date: " + startDate);
+            
+            Float existingDayHours = employeePermissionMasterRepository.sumHoursByEmpidAndDate(empId, startDate);
+            System.out.println("Existing daily hours: " + existingDayHours);
+         
+            if (existingDayHours == null) existingDayHours = 0f;
+            float newHours = employeePermissionMasterTbl.getHours();
+            System.out.println("New hours: " + newHours);
+            if (existingDayHours + newHours > 2) {
+                System.out.println("Exceeded daily permission limit of 2 hours.");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("{\"error\": \"Exceeded daily permission limit of 2 hours.\"}");
+            }
+
+            // Check monthly limit
+            int year = startLocalDate.getYear();
+            int month = startLocalDate.getMonthValue();
+            System.out.println("Checking monthly hours for empId: " + empId + ", year: " + year + ", month: " + month);
+         
+            Float existingMonthHours = employeePermissionMasterRepository.sumHoursByEmpidAndMonth(empId, year, month);
+            System.out.println("Existing monthly hours: " + existingMonthHours);
+         
+            if (existingMonthHours == null) existingMonthHours = 0f;
+            if (existingMonthHours + newHours > 6) {
+                System.out.println("Exceeded monthly permission limit of 6 hours.");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("{\"error\": \"Exceeded monthly permission limit of 6 hours.\"}");
+            }
+
+            // Save the permission request
+            System.out.println("Saving permission request...");
+            employeePermissionMasterTbl.setDelflg("N");
+            employeePermissionMasterTbl.setEntitycreflg("N");
+            employeePermissionMasterTbl.setStatus("Pending");
+            EmployeePermissionMasterTbl savedRequest = employeePermissionMasterRepository.save(employeePermissionMasterTbl);
+            System.out.println("Saved permission request: " + savedRequest);
+          
+
+            // Fetch employee details (from either usermaintenance or TraineeMaster)
+            System.out.println("Fetching employee details for empId: " + empId);
+            Optional<usermaintenance> empOpt = usermaintenanceRepository.findByEmpIdOrUserId(empId);
+            Optional<TraineeMaster> traineeOpt = Optional.empty();
+            if (empOpt.isEmpty()) {
+                System.out.println("Employee not found in usermaintenance, checking TraineeMaster...");
+                traineeOpt = traineemasterRepository.findByTrngidOrUserId(empId);
+            }
+            if (empOpt.isEmpty() && traineeOpt.isEmpty()) {
+                System.out.println("Employee not found in both tables");
+                throw new RuntimeException("Employee not found in both employee and trainee tables");
+            }
+
+            String managerId;
+            String employeeFirstName;
+            String employeeEmail;
+            String roleId;
+
+            if (empOpt.isPresent()) {
+                usermaintenance emp = empOpt.get();
+                managerId = emp.getRepoteTo();
+                employeeFirstName = emp.getFirstname();
+                employeeEmail = emp.getEmailid();
+                roleId = emp.getRoleid();
+                System.out.println("Employee found in usermaintenance: managerId=" + managerId + ", firstName=" + employeeFirstName + ", email=" + employeeEmail + ", roleId=" + roleId);
+            } else {
+                TraineeMaster emp = traineeOpt.get();
+                managerId = emp.getRepoteTo();
+                employeeFirstName = emp.getFirstname();
+                employeeEmail = emp.getEmailid();
+                roleId = emp.getRoleid();
+                System.out.println("Employee found in TraineeMaster: managerId=" + managerId + ", firstName=" + employeeFirstName + ", email=" + employeeEmail + ", roleId=" + roleId);
+            }
+
+            if (managerId == null) {
+                System.out.println("Manager not assigned to this employee");
+                throw new RuntimeException("Manager not assigned to this employee");
+            }
+
+            // Fetch manager details (from either usermaintenance or TraineeMaster)
+            System.out.println("Fetching manager details for managerId: " + managerId);
+            Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpIdOrUserId(managerId);
+            Optional<TraineeMaster> managerTraineeOpt = Optional.empty();
+            if (managerOpt.isEmpty()) {
+                System.out.println("Manager not found in usermaintenance, checking TraineeMaster...");
+                managerTraineeOpt = traineemasterRepository.findByTrngidOrUserId(managerId);
+            }
+            if (managerOpt.isEmpty() && managerTraineeOpt.isEmpty()) {
+                System.out.println("Manager not found in both tables");
+                throw new RuntimeException("Manager not found in both tables");
+            }
+
+            String managerFirstName;
+            String managerEmail;
+            if (managerOpt.isPresent()) {
+                managerFirstName = managerOpt.get().getFirstname();
+                managerEmail = managerOpt.get().getEmailid();
+                System.out.println("Manager found in usermaintenance: firstName=" + managerFirstName + ", email=" + managerEmail);
+            } else {
+                managerFirstName = managerTraineeOpt.get().getFirstname();
+                managerEmail = managerTraineeOpt.get().getEmailid();
+                System.out.println("Manager found in TraineeMaster: firstName=" + managerFirstName + ", email=" + managerEmail);
+            }
+
+            // Prepare response
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Permission Request sent successfully");
+            response.put("data", savedRequest);
+
+            // Send email if manager email exists
+            if (managerEmail != null && !managerEmail.isEmpty()) {
+                System.out.println("Fetching role details for roleId: " + roleId);
+                UserRoleMaintenance role = userRoleMaintenanceRepository.findByRoleid(roleId)
+                        .orElseThrow(() -> new RuntimeException("Role not found"));
+                System.out.println("Role found: roleName=" + role.getRolename() + ", description=" + role.getDescription());
+
+                String subject = "Permission Request Approval Needed for " + employeeFirstName;
+                SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy HH:mm");
+
+                String startTimeFormatted = sdf.format(employeePermissionMasterTbl.getStartTime());
+                String endTimeFormatted = sdf.format(employeePermissionMasterTbl.getEndTime());
+                System.out.println("Email details: subject=" + subject + ", startTime=" + startTimeFormatted + ", endTime=" + endTimeFormatted + ", hours=" + employeePermissionMasterTbl.getHours() + ", reason=" + employeePermissionMasterTbl.getReason());
+
+                String body = String.format(
+                        "Dear %s,\n\n"
+                                + "Employee %s (%s) has submitted a permission request. Please find the details below:\n\n"
+                                + "Start Time: %s\n"
+                                + "End Time: %s\n"
+                                + "Hours: %s\n"
+                                + "Reason: %s\n\n"
+                                + "Kindly review the request and take necessary action.\n\n"
+                                + "Regards,\n"
+                                + "%s,\n"
+                                + "%s - %s,\n"
+                                + "Whitestone Software Solution Pvt Ltd.\n",
+                        managerFirstName, employeeFirstName, empId,
+                        startTimeFormatted, endTimeFormatted, employeePermissionMasterTbl.getHours(),
+                        employeePermissionMasterTbl.getReason(),
+                        employeeFirstName, role.getRolename(), role.getDescription());
+
+                System.out.println("Sending email to: " + managerEmail);
+                emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, body);
+                System.out.println("Email sent successfully to: " + managerEmail);
+                response.put("emailStatus", "Email sent to manager: " + managerEmail);
+            } else {
+                System.out.println("Manager email not found");
+                response.put("emailStatus", "Manager email not found");
+            }
+
+            System.out.println("Returning response: " + response);
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            System.out.println("Error processing permission request: " + e.getMessage());
+           
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("{\"error\": \"Failed to send permission request\"}");
+        }
+    }
+    
+    @PostMapping("/approvePermissionRequest")
+    public ResponseEntity<Map<String, String>> approvePermissionRequest(@RequestBody Map<String, String> requestData) {
+        String empid = requestData.get("empid");
+        String srlnum = requestData.get("srlnum");
+        System.out.println("Received empid: " + empid + ", srlnum: " + srlnum);
+        
+        Map<String, String> response = new HashMap<>();
+        try {
+            EmployeePermissionMasterTbl permissionRequest = employeePermissionMasterRepository
+                .findByEmpidAndId(empid, Long.valueOf(srlnum))
+                .orElseThrow(() -> new RuntimeException("Permission request not found"));
+
+            permissionRequest.setEntitycreflg("Y");
+            permissionRequest.setStatus("Approved");
+            employeePermissionMasterRepository.save(permissionRequest);
+            System.out.println("Permission request approved: " + permissionRequest);
+
+            Optional<usermaintenance> empOpt = usermaintenanceRepository.findByEmpIdOrUserId(empid);
+            Optional<TraineeMaster> traineeOpt = Optional.empty();
+            if (empOpt.isEmpty()) {
+                traineeOpt = traineemasterRepository.findByTrngidOrUserId(empid);
+            }
+            if (empOpt.isEmpty() && traineeOpt.isEmpty()) {
+                throw new RuntimeException("Employee not found in both employee and trainee tables");
+            }
+
+            String employeeEmail = empOpt.isPresent() ? empOpt.get().getEmailid() : traineeOpt.get().getEmailid();
+            String employeeFirstName = empOpt.isPresent() ? empOpt.get().getFirstname() : traineeOpt.get().getFirstname();
+            String managerId = empOpt.isPresent() ? empOpt.get().getRepoteTo() : traineeOpt.get().getRepoteTo();
+
+            Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpIdOrUserId(managerId);
+            Optional<TraineeMaster> managerTraineeOpt = Optional.empty();
+            if (managerOpt.isEmpty()) {
+                managerTraineeOpt = traineemasterRepository.findByTrngidOrUserId(managerId);
+            }
+            if (managerOpt.isEmpty() && managerTraineeOpt.isEmpty()) {
+                throw new RuntimeException("Manager not found in both tables");
+            }
+
+            String managerFirstName = managerOpt.isPresent() ? managerOpt.get().getFirstname() : managerTraineeOpt.get().getFirstname();
+            String managerEmail = managerOpt.isPresent() ? managerOpt.get().getEmailid() : managerTraineeOpt.get().getEmailid();
+
+            if (employeeEmail != null && !employeeEmail.isEmpty()) {
+                String subject = "Permission Request Approved";
+                SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy HH:mm");
+                String startTimeFormatted = sdf.format(permissionRequest.getStartTime());
+                String endTimeFormatted = sdf.format(permissionRequest.getEndTime());
+                String body = String.format(
+                    "Dear %s,\n\nYour permission request from %s to %s for %s hours has been approved.\n\nRegards,\n%s,\nWhitestone Software Solution Pvt Ltd.",
+                    employeeFirstName, startTimeFormatted, endTimeFormatted, permissionRequest.getHours(), managerFirstName);
+                emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
+                System.out.println("Email sent to: " + employeeEmail);
+            }
+
+            response.put("status", "success");
+            response.put("message", "Permission request approved successfully.");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.out.println("Error approving permission request: " + e.getMessage());
+            e.printStackTrace();
+            response.put("status", "failure");
+            response.put("message", "Failed to approve permission request: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    @PostMapping("/rejectPermissionRequest")
+    public ResponseEntity<Map<String, String>> rejectPermissionRequest(@RequestBody Map<String, String> requestData) {
+        String empid = requestData.get("empid");
+        String srlnum = requestData.get("srlnum");
+        System.out.println("Received empid: " + empid + ", srlnum: " + srlnum);
+        
+        Map<String, String> response = new HashMap<>();
+        try {
+            EmployeePermissionMasterTbl permissionRequest = employeePermissionMasterRepository
+                .findByEmpidAndId(empid,  Long.valueOf(srlnum))
+                .orElseThrow(() -> new RuntimeException("Permission request not found"));
+
+            permissionRequest.setDelflg("Y");
+            permissionRequest.setStatus("Rejected");
+            employeePermissionMasterRepository.save(permissionRequest);
+            System.out.println("Permission request rejected: " + permissionRequest);
+
+            Optional<usermaintenance> empOpt = usermaintenanceRepository.findByEmpIdOrUserId(empid);
+            Optional<TraineeMaster> traineeOpt = Optional.empty();
+            if (empOpt.isEmpty()) {
+                traineeOpt = traineemasterRepository.findByTrngidOrUserId(empid);
+            }
+            if (empOpt.isEmpty() && traineeOpt.isEmpty()) {
+                throw new RuntimeException("Employee not found in both employee and trainee tables");
+            }
+
+            String employeeEmail = empOpt.isPresent() ? empOpt.get().getEmailid() : traineeOpt.get().getEmailid();
+            String employeeFirstName = empOpt.isPresent() ? empOpt.get().getFirstname() : traineeOpt.get().getFirstname();
+            String managerId = empOpt.isPresent() ? empOpt.get().getRepoteTo() : traineeOpt.get().getRepoteTo();
+
+            Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpIdOrUserId(managerId);
+            Optional<TraineeMaster> managerTraineeOpt = Optional.empty();
+            if (managerOpt.isEmpty()) {
+                managerTraineeOpt = traineemasterRepository.findByTrngidOrUserId(managerId);
+            }
+            if (managerOpt.isEmpty() && managerTraineeOpt.isEmpty()) {
+                throw new RuntimeException("Manager not found in both tables");
+            }
+
+            String managerFirstName = managerOpt.isPresent() ? managerOpt.get().getFirstname() : managerTraineeOpt.get().getFirstname();
+            String managerEmail = managerOpt.isPresent() ? managerOpt.get().getEmailid() : managerTraineeOpt.get().getEmailid();
+
+            if (employeeEmail != null && !employeeEmail.isEmpty()) {
+                String subject = "Permission Request Rejected";
+                SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy HH:mm");
+                String startTimeFormatted = sdf.format(permissionRequest.getStartTime());
+                String endTimeFormatted = sdf.format(permissionRequest.getEndTime());
+                String body = String.format(
+                    "Dear %s,\n\nYour permission request from %s to %s for %s hours has been rejected. Please contact your manager, %s, for further details.\n\nRegards,\n%s,\nWhitestone Software Solution Pvt Ltd.",
+                    employeeFirstName, startTimeFormatted, endTimeFormatted, permissionRequest.getHours(), managerFirstName, managerFirstName);
+                emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
+                System.out.println("Email sent to: " + employeeEmail);
+            }
+
+            response.put("status", "success");
+            response.put("message", "Permission request rejected successfully.");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.out.println("Error rejecting permission request: " + e.getMessage());
+            e.printStackTrace();
+            response.put("status", "failure");
+            response.put("message", "Failed to reject permission request: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    @GetMapping("/permissionRequests/get/{empId}")
+    public ResponseEntity<Map<String, Object>> getPermissionRequestsByEmpId(@PathVariable String empId) {
+        try {
+            // Step 1: Find all employees who report to this empId
+            List<String> empIds = getDirectReports(empId); // Assumes this method includes trainees
+
+            // Print the final list of employee IDs
+            System.out.println("Fetching permission records for Employee IDs: " + empIds);
+
+            // Step 2: Fetch records from Master table where entitycreflg = 'N' or 'Y'
+            List<EmployeePermissionMasterTbl> masterPermissionRequests = employeePermissionMasterRepository
+                    .findByEmpidInAndEntitycreflgIn(empIds, Arrays.asList("N", "Y"));
+
+            // Step 3: Build empId → name mapping
+            Map<String, String> empIdToName = new HashMap<>();
+
+            // From usermaintenance
+            usermaintenanceRepository.findByEmpidIn(empIds)
+                    .forEach(u -> empIdToName.put(u.getEmpid(), u.getFirstname()));
+
+            // From traineemaster
+            traineemasterRepository.findByTrngidIn(empIds)
+                    .forEach(t -> empIdToName.put(t.getTrngid(), t.getFirstname()));
+
+            // Step 4: Convert Master records into response format
+            List<Map<String, Object>> combinedPermissionRequests = new ArrayList<>();
+
+            masterPermissionRequests.forEach(request -> {
+                Map<String, Object> permissionData = new HashMap<>();
+                permissionData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
+                permissionData.put("srlnum", request.getId()); // Map id to srlnum
+                permissionData.put("empid", request.getEmpid());
+                permissionData.put("permissiontype", "Permission"); // Static value for permissions
+                permissionData.put("startdate", request.getStartTime()); // Map startTime to startdate
+                permissionData.put("enddate", request.getEndTime()); // Map endTime to enddate
+                permissionData.put("teamemail", request.getTeamemail());
+                permissionData.put("permissionreason", request.getReason()); // Map reason to permissionreason
+                permissionData.put("status", request.getStatus() != null ? request.getStatus() : "Pending");
+                permissionData.put("noofdays", request.getHours()); // Map hours to noofdays
+                permissionData.put("entitycreflg", request.getEntitycreflg() != null ? request.getEntitycreflg() : "N");
+                permissionData.put("delflg", request.getDelflg() != null ? request.getDelflg() : "N");
+                // Optional fields (set to null for compatibility)
+                permissionData.put("rcreuserid", null);
+                permissionData.put("rcretime", null);
+                permissionData.put("rmoduserid", null);
+                permissionData.put("rmodtime", null);
+                permissionData.put("rvfyuserid", null);
+                permissionData.put("rvfytime", null);
+                permissionData.put("noofbooked", null);
+                combinedPermissionRequests.add(permissionData);
+            });
+
+            // Step 5: Prepare the response
+            Map<String, Object> response = new HashMap<>();
+            response.put("data", combinedPermissionRequests);
+            response.put("message", combinedPermissionRequests.isEmpty() ? "No data found" : "Data fetched successfully");
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
 }

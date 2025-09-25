@@ -15,18 +15,24 @@ import com.whitestone.entity.usermaintenance;
 @Repository
 public interface usermaintenanceRepository extends JpaRepository<usermaintenance, String> {
 	
-	@Query("SELECT u FROM usermaintenance u WHERE u.empid = :empid OR u.userid = :empid")
-	Optional<usermaintenance> findByEmpIdOrUserId(@Param("empid") String empid);
+	// Check both empid and userid with Active status
+    @Query("SELECT u FROM usermaintenance u WHERE (u.empid = :empid OR u.userid = :empid) AND u.status = 'Active'")
+    Optional<usermaintenance> findByEmpIdOrUserId(@Param("empid") String empid);
 
-	@Query("SELECT u FROM usermaintenance u WHERE u.repoteTo = :empId")
-	List<usermaintenance> findByRepoteToCustom(@Param("empId") String empId);
+    // Find all employees reporting to given manager, Active only
+    @Query("SELECT u FROM usermaintenance u WHERE u.repoteTo = :empId AND u.status = 'Active'")
+    List<usermaintenance> findByRepoteToCustom(@Param("empId") String empId);
 
-	@Query("SELECT u FROM usermaintenance u WHERE u.repoteTo = :repoteTo")
-    List<usermaintenance> findByRepoteTo(String repoteTo);
-    // You can define custom query methods here if needed.
-    
-    usermaintenance findByEmpid(String empid);
-    
-    List<usermaintenance> findByEmpidIn(List<String> empIds);
+    // Alternative method (you can remove one to avoid duplication)
+    @Query("SELECT u FROM usermaintenance u WHERE u.repoteTo = :repoteTo AND u.status = 'Active'")
+    List<usermaintenance> findByRepoteTo(@Param("repoteTo") String repoteTo);
+
+    // Find by empid and check Active
+    @Query("SELECT u FROM usermaintenance u WHERE u.empid = :empid AND u.status = 'Active'")
+    usermaintenance findByEmpid(@Param("empid") String empid);
+
+    // Find multiple empIds, Active only
+    @Query("SELECT u FROM usermaintenance u WHERE u.empid IN :empIds AND u.status = 'Active'")
+    List<usermaintenance> findByEmpidIn(@Param("empIds") List<String> empIds);
 
 }
