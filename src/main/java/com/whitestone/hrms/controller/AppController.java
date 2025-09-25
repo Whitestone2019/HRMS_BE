@@ -4788,7 +4788,7 @@ public class AppController {
 		LocalDateTime now = LocalDateTime.now();
 		Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
 		String rawPassword = user.getPassword();
-
+		user.setStatus("Active");
 		user.setPassword(passwordEncoder.encode(rawPassword));
 		user.setRcretime(nowDate);
 		user.setRmodtime(nowDate);
@@ -4808,7 +4808,7 @@ public class AppController {
 		LocalDateTime now = LocalDateTime.now();
 		Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
 		String rawPassword = user.getPassword();
-
+		user.setStatus("Active");
 		user.setPassword(passwordEncoder.encode(rawPassword));
 		user.setRcretime(nowDate);
 		user.setRmodtime(nowDate);
