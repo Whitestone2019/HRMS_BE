@@ -46,6 +46,9 @@ public class usermaintenance {
 
     @Column(name = "STATUS", length = 10)
     private String status;
+    
+    @Column(name = "EMP_TYPE", length = 30)
+    private String empType;
 
     @Column(name = "LAST_LOGIN")
     @JsonFormat(pattern = "YYYY-MM-DD")
@@ -83,7 +86,14 @@ public class usermaintenance {
 	public String getUserid() {
 		return userid;
 	}
-
+	
+	public String getEmpType() {
+	    return empType;
+	}
+	public void setEmpType(String empType) {
+	    this.empType = empType;
+	}
+	
 	public void setUserid(String userid) {
 		this.userid = userid;
 	}
