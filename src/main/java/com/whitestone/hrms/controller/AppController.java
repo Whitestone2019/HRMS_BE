@@ -5739,61 +5739,81 @@ public class AppController {
 
 	@GetMapping("/projects/{empId}")
 	public ResponseEntity<Map<String, Object>> getProjectHistoryByEmpId(@PathVariable String empId) {
-		try {
-			// Step 1: Find all employees who report to this empId
-			List<String> empIds = getDirectReports(empId);
-			System.out.println("Fetching project history for Employee IDs: " + empIds);
+	    try {
+	        // Step 1: BFS to get full hierarchy
+	        Set<String> allEmpIds = new HashSet<>();
+	        Deque<String> queue = new ArrayDeque<>();
+	        queue.add(empId); // start with manager
 
-			// Step 2: Fetch project history records where entity_cre_flg = 'N' or 'Y'
-			List<EmployeeProjectHistory> projectHistory = projectHistoryRepository
-					.findByEmpIdInAndEntityCreFlgIn(empIds, List.of("N", "Y"));
+	        while (!queue.isEmpty()) {
+	            String currentEmpId = queue.poll();
+	            allEmpIds.add(currentEmpId);
 
-			// Step 3: Build empId → name mapping
-			Map<String, String> empIdToName = new HashMap<>();
-			usermaintenanceRepository.findByEmpidIn(empIds)
-					.forEach(u -> empIdToName.put(u.getEmpid(), u.getFirstname()));
+	            // Get direct reports of current employee
+	            List<usermaintenance> reportingEmployees = usermaintenanceRepository.findByRepoteToCustom(currentEmpId);
+	            for (usermaintenance emp : reportingEmployees) {
+	                if (!allEmpIds.contains(emp.getEmpid())) {
+	                    queue.add(emp.getEmpid());
+	                }
+	            }
+	        }
 
-			// Step 4: Combine results
-			List<Map<String, Object>> combinedProjectHistory = new ArrayList<>();
-			projectHistory.forEach(project -> {
-				Map<String, Object> projectData = new HashMap<>();
-				projectData.put("name", empIdToName.getOrDefault(project.getEmpId(), "N/A"));
-				projectData.put("empId", project.getEmpId());
-				projectData.put("projectName", project.getProjectName());
-				projectData.put("projectDuration", project.getProjectDuration());
-				projectData.put("location", project.getLocation());
-				projectData.put("clientInfo", project.getClientInfo());
-				projectData.put("vendorDetails", project.getVendorDetails());
-				projectData.put("techParkName", project.getTechParkName());
-				projectData.put("vendorName", project.getVendorName());
-				projectData.put("modeOfWork", project.getModeOfWork());
-				projectData.put("entityCreFlg", project.getEntityCreFlg());
-				projectData.put("delFlg", project.getDelFlg());
-				projectData.put("rcreUserId", project.getRcreUserId());
-				projectData.put("rcreTime", project.getRcreTime());
-				projectData.put("rmodUserId", project.getRmodUserId());
-				projectData.put("rmodTime", project.getRmodTime());
-				combinedProjectHistory.add(projectData);
-			});
+	        // Step 2: Fetch project history for all employees in hierarchy
+	        List<EmployeeProjectHistory> projectHistory = projectHistoryRepository
+	                .findByEmpIdInAndEntityCreFlgIn(new ArrayList<>(allEmpIds), List.of("N", "Y"));
 
-			// Step 5: Prepare response
-			Map<String, Object> response = new HashMap<>();
-			response.put("data", combinedProjectHistory);
-			response.put("message", combinedProjectHistory.isEmpty() ? "No data found" : "Data fetched successfully");
+	        // Step 3: Fetch names
+	        Map<String, String> empIdToName = new HashMap<>();
+	        usermaintenanceRepository.findByEmpidIn(new ArrayList<>(allEmpIds))
+	                .forEach(u -> empIdToName.put(u.getEmpid(), u.getFirstname() + " " + u.getLastname()));
 
-			return ResponseEntity.ok(response);
+	        // Step 4: Combine results
+	        List<Map<String, Object>> combinedProjectHistory = new ArrayList<>();
+	        for (EmployeeProjectHistory project : projectHistory) {
+	            Map<String, Object> projectData = new HashMap<>();
+	            projectData.put("name", empIdToName.getOrDefault(project.getEmpId(), "N/A"));
+	            projectData.put("id", project.getId());
+	            projectData.put("empId", project.getEmpId());
+	            projectData.put("projectName", project.getProjectName());
+	            projectData.put("projectStartDate", project.getProjectStartDate());
+	            projectData.put("projectEndDate", project.getProjectEndDate());
+	            projectData.put("location", project.getLocation());
+	            projectData.put("clientInfo", project.getClientInfo());
+	            projectData.put("vendorDetails", project.getVendorDetails());
+	            projectData.put("techParkName", project.getTechParkName());
+	            projectData.put("vendorName", project.getVendorName());
+	            projectData.put("modeOfWork", project.getModeOfWork());
+	            projectData.put("entityCreFlg", project.getEntityCreFlg());
+	            projectData.put("delFlg", project.getDelFlg());
+	            projectData.put("rcreUserId", project.getRcreUserId());
+	            projectData.put("rcreTime", project.getRcreTime());
+	            projectData.put("rmodUserId", project.getRmodUserId());
+	            projectData.put("rmodTime", project.getRmodTime());
+	            combinedProjectHistory.add(projectData);
+	        }
 
-		} catch (Exception e) {
-			Map<String, Object> errorResponse = new HashMap<>();
-			errorResponse.put("status", "error");
-			errorResponse.put("message", e.getMessage());
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-		}
+	        // Step 5: Prepare response
+	        Map<String, Object> response = new HashMap<>();
+	        response.put("data", combinedProjectHistory);
+	        response.put("message", combinedProjectHistory.isEmpty() ? "No data found" : "Data fetched successfully");
+
+	        return ResponseEntity.ok(response);
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        Map<String, Object> errorResponse = new HashMap<>();
+	        errorResponse.put("status", "error");
+	        errorResponse.put("message", e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+	    }
 	}
+
+
 
 	@PostMapping("/projects")
 	public ResponseEntity<Map<String, Object>> addProject(@RequestBody EmployeeProjectHistory project) {
 		try {
+			System.out.println("print");
 			// Set default values for new project
 			project.setRcreTime(LocalDateTime.now());
 			project.setEntityCreFlg("N");
@@ -5811,20 +5831,63 @@ public class AppController {
 		}
 	}
 
-	// Fetch employees reporting to the manager
-    @GetMapping("/employees/reporting-to/{managerEmpId}")
-    public ResponseEntity<?> getReportingEmployees(@PathVariable String managerEmpId) {
-        try {
-            List<usermaintenance> employees = usermaintenanceRepository.findByRepoteTo(managerEmpId);
-            if (employees.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body("No employees found reporting to manager: " + managerEmpId);
-            }
-            return ResponseEntity.ok(employees);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("Error fetching reporting employees: " + e.getMessage());
-        }
+	@GetMapping("/employees/reporting-to/{managerEmpId}")
+	public ResponseEntity<?> getReportingEmployees(@PathVariable String managerEmpId) {
+	    try {
+	        Set<String> allEmpIds = new HashSet<>();
+	        Deque<String> queue = new ArrayDeque<>();
+	        queue.add(managerEmpId); // start with manager
+	        allEmpIds.add(managerEmpId); // include manager in results
+
+	        while (!queue.isEmpty()) {
+	            String currentEmpId = queue.poll();
+
+	            // Get direct reports of current employee
+	            List<usermaintenance> directReports = usermaintenanceRepository.findByRepoteTo(currentEmpId);
+
+	            for (usermaintenance emp : directReports) {
+	                if (allEmpIds.add(emp.getEmpid())) { // add if not already added
+	                    queue.add(emp.getEmpid()); // enqueue for further traversal
+	                }
+	            }
+	        }
+
+	        // Fetch user details for all employees in the hierarchy (including manager)
+	        List<usermaintenance> employees = usermaintenanceRepository.findByEmpidIn(new ArrayList<>(allEmpIds));
+
+	        return ResponseEntity.ok(employees);
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                .body("Error fetching reporting employees: " + e.getMessage());
+	    }
+	}
+
+    
+    
+    @PutMapping("/project/{id}")
+    public EmployeeProjectHistory updateProject(
+            @PathVariable Long id,
+            @RequestBody EmployeeProjectHistory project)
+          {
+
+        EmployeeProjectHistory existing = projectHistoryRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Project not found"));
+
+        existing.setProjectName(project.getProjectName());
+        existing.setProjectStartDate(project.getProjectStartDate());
+        existing.setProjectEndDate(project.getProjectEndDate());
+        existing.setLocation(project.getLocation());
+        existing.setClientInfo(project.getClientInfo());
+        existing.setVendorDetails(project.getVendorDetails());
+        existing.setTechParkName(project.getTechParkName());
+        existing.setVendorName(project.getVendorName());
+        existing.setModeOfWork(project.getModeOfWork());
+
+        existing.setRmodUserId(project.getEmpId());
+        existing.setRmodTime(LocalDateTime.now());
+
+        return projectHistoryRepository.save(existing);
     }
-	
 }

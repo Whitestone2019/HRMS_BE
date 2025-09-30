@@ -1,7 +1,14 @@
 package com.whitestone.entity;
 
-import javax.persistence.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import javax.persistence.Table;
 
 @Entity
 @Table(name = "employee_project_history")
@@ -17,8 +24,11 @@ public class EmployeeProjectHistory {
     @Column(name = "project_name")
     private String projectName;
 
-    @Column(name = "project_duration")
-    private String projectDuration;
+    @Column(name = "project_start_date")
+    private LocalDate projectStartDate;
+
+    @Column(name = "project_end_date")
+    private LocalDate projectEndDate; // null = Till Date
 
     @Column(name = "location")
     private String location;
@@ -56,52 +66,140 @@ public class EmployeeProjectHistory {
     @Column(name = "del_flg")
     private String delFlg;
 
-    // Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+	public Long getId() {
+		return id;
+	}
 
-    public String getEmpId() { return empId; }
-    public void setEmpId(String empId) { this.empId = empId; }
+	public void setId(Long id) {
+		this.id = id;
+	}
 
-    public String getProjectName() { return projectName; }
-    public void setProjectName(String projectName) { this.projectName = projectName; }
+	public String getEmpId() {
+		return empId;
+	}
 
-    public String getProjectDuration() { return projectDuration; }
-    public void setProjectDuration(String projectDuration) { this.projectDuration = projectDuration; }
+	public void setEmpId(String empId) {
+		this.empId = empId;
+	}
 
-    public String getLocation() { return location; }
-    public void setLocation(String location) { this.location = location; }
+	public String getProjectName() {
+		return projectName;
+	}
 
-    public String getClientInfo() { return clientInfo; }
-    public void setClientInfo(String clientInfo) { this.clientInfo = clientInfo; }
+	public void setProjectName(String projectName) {
+		this.projectName = projectName;
+	}
 
-    public String getVendorDetails() { return vendorDetails; }
-    public void setVendorDetails(String vendorDetails) { this.vendorDetails = vendorDetails; }
+	public LocalDate getProjectStartDate() {
+		return projectStartDate;
+	}
 
-    public String getTechParkName() { return techParkName; }
-    public void setTechParkName(String techParkName) { this.techParkName = techParkName; }
+	public void setProjectStartDate(LocalDate projectStartDate) {
+		this.projectStartDate = projectStartDate;
+	}
 
-    public String getVendorName() { return vendorName; }
-    public void setVendorName(String vendorName) { this.vendorName = vendorName; }
+	public LocalDate getProjectEndDate() {
+		return projectEndDate;
+	}
 
-    public String getModeOfWork() { return modeOfWork; }
-    public void setModeOfWork(String modeOfWork) { this.modeOfWork = modeOfWork; }
+	public void setProjectEndDate(LocalDate projectEndDate) {
+		this.projectEndDate = projectEndDate;
+	}
 
-    public String getRcreUserId() { return rcreUserId; }
-    public void setRcreUserId(String rcreUserId) { this.rcreUserId = rcreUserId; }
+	public String getLocation() {
+		return location;
+	}
 
-    public LocalDateTime getRcreTime() { return rcreTime; }
-    public void setRcreTime(LocalDateTime rcreTime) { this.rcreTime = rcreTime; }
+	public void setLocation(String location) {
+		this.location = location;
+	}
 
-    public String getRmodUserId() { return rmodUserId; }
-    public void setRmodUserId(String rmodUserId) { this.rmodUserId = rmodUserId; }
+	public String getClientInfo() {
+		return clientInfo;
+	}
 
-    public LocalDateTime getRmodTime() { return rmodTime; }
-    public void setRmodTime(LocalDateTime rmodTime) { this.rmodTime = rmodTime; }
+	public void setClientInfo(String clientInfo) {
+		this.clientInfo = clientInfo;
+	}
 
-    public String getEntityCreFlg() { return entityCreFlg; }
-    public void setEntityCreFlg(String entityCreFlg) { this.entityCreFlg = entityCreFlg; }
+	public String getVendorDetails() {
+		return vendorDetails;
+	}
 
-    public String getDelFlg() { return delFlg; }
-    public void setDelFlg(String delFlg) { this.delFlg = delFlg; }
+	public void setVendorDetails(String vendorDetails) {
+		this.vendorDetails = vendorDetails;
+	}
+
+	public String getTechParkName() {
+		return techParkName;
+	}
+
+	public void setTechParkName(String techParkName) {
+		this.techParkName = techParkName;
+	}
+
+	public String getVendorName() {
+		return vendorName;
+	}
+
+	public void setVendorName(String vendorName) {
+		this.vendorName = vendorName;
+	}
+
+	public String getModeOfWork() {
+		return modeOfWork;
+	}
+
+	public void setModeOfWork(String modeOfWork) {
+		this.modeOfWork = modeOfWork;
+	}
+
+	public String getRcreUserId() {
+		return rcreUserId;
+	}
+
+	public void setRcreUserId(String rcreUserId) {
+		this.rcreUserId = rcreUserId;
+	}
+
+	public LocalDateTime getRcreTime() {
+		return rcreTime;
+	}
+
+	public void setRcreTime(LocalDateTime rcreTime) {
+		this.rcreTime = rcreTime;
+	}
+
+	public String getRmodUserId() {
+		return rmodUserId;
+	}
+
+	public void setRmodUserId(String rmodUserId) {
+		this.rmodUserId = rmodUserId;
+	}
+
+	public LocalDateTime getRmodTime() {
+		return rmodTime;
+	}
+
+	public void setRmodTime(LocalDateTime rmodTime) {
+		this.rmodTime = rmodTime;
+	}
+
+	public String getEntityCreFlg() {
+		return entityCreFlg;
+	}
+
+	public void setEntityCreFlg(String entityCreFlg) {
+		this.entityCreFlg = entityCreFlg;
+	}
+
+	public String getDelFlg() {
+		return delFlg;
+	}
+
+	public void setDelFlg(String delFlg) {
+		this.delFlg = delFlg;
+	}
+
 }
