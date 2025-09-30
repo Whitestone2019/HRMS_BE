@@ -29,5 +29,7 @@ public interface TraineemasterRepository extends JpaRepository<TraineeMaster, St
     TraineeMaster findByTrngid(String Trngid);
     
 	List<TraineeMaster> findByTrngidIn(List<String> Trngids);
+	
+    boolean existsByTrngid(String trngid);
 
 }

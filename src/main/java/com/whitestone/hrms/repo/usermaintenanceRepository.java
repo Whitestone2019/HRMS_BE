@@ -34,5 +34,7 @@ public interface usermaintenanceRepository extends JpaRepository<usermaintenance
     // Find multiple empIds, Active only
     @Query("SELECT u FROM usermaintenance u WHERE u.empid IN :empIds AND u.status = 'Active'")
     List<usermaintenance> findByEmpidIn(@Param("empIds") List<String> empIds);
+    
+    boolean existsByEmpid(String empid);
 
 }
