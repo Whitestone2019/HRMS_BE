@@ -5876,7 +5876,7 @@ public class AppController {
 
         // update fields
         existingTrainee.setPassword(updatedTrainee.getPassword());
-        existingTrainee.setFirstname(updatedTrainee.getFirstname());
+        existingTrainee.setFirstname(updatedTrainee.getUsername());
         existingTrainee.setEmailid(updatedTrainee.getEmailid());
         existingTrainee.setPhonenumber(updatedTrainee.getPhonenumber());
         existingTrainee.setRoleid(updatedTrainee.getRoleid());
@@ -5929,7 +5929,7 @@ public class AppController {
         LocalDateTime now = LocalDateTime.now();
         Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
         String rawPassword = user.getPassword();
-
+        user.setRepoteTo(user.getRepoteTo());
         user.setStatus("Active");
         user.setPassword(passwordEncoder.encode(rawPassword));
         user.setRcretime(nowDate);
