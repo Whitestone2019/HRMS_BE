@@ -5843,7 +5843,7 @@ public class AppController {
                
 
         // update fields
-        existingUser.setPassword(updatedUser.getPassword());
+        existingUser.setPassword(passwordEncoder.encode(updatedUser.getPassword()));
         existingUser.setUsername(updatedUser.getUsername());
         existingUser.setFirstname(updatedUser.getFirstname());
         existingUser.setLastname(updatedUser.getLastname());
@@ -5875,7 +5875,7 @@ public class AppController {
                 .orElseThrow(() -> new RuntimeException("Trainee not found"));
 
         // update fields
-        existingTrainee.setPassword(updatedTrainee.getPassword());
+        existingTrainee.setPassword(passwordEncoder.encode(updatedTrainee.getPassword()));
         existingTrainee.setFirstname(updatedTrainee.getUsername());
         existingTrainee.setEmailid(updatedTrainee.getEmailid());
         existingTrainee.setPhonenumber(updatedTrainee.getPhonenumber());
