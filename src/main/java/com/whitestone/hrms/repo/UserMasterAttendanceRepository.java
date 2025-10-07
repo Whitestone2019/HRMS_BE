@@ -20,7 +20,7 @@ public interface UserMasterAttendanceRepository extends JpaRepository<UserMaster
 		    "COUNT(DISTINCT U.ATTENDANCE_DATE) AS distinctAttendanceCount, " +
 		    "COALESCE(" +
 		    "   (SELECT SUM(L.NO_OF_DAYS) " +
-		    "    FROM EMPLOYEE_LEAVE_MOD_TBL_TEST L " +
+		    "    FROM EMPLOYEE_LEAVE_MASTER_TBL L " +
 		    "    WHERE L.EMP_ID = U.ATTENDANCE_ID " +
 		    "    AND EXTRACT(YEAR FROM L.START_DATE) = EXTRACT(YEAR FROM (" +
 		    "        SELECT MIN(U2.ATTENDANCE_DATE) " +
