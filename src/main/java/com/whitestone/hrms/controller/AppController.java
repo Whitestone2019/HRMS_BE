@@ -221,101 +221,112 @@ public class AppController {
 	@RequestMapping(value = { "/login" }, method = RequestMethod.POST)
 	@ResponseBody
 	public ResponseEntity<?> login(@RequestBody usermaintenance employeeDetails) {
-		System.out.println("TEST");
-		System.out.println("sedfg" + employeeDetails);
-		try {
-			String employeeid = employeeDetails.getUsername();
-			String rawPassword = employeeDetails.getPassword();
+	    System.out.println("TEST");
+	    System.out.println("sedfg" + employeeDetails);
+	    try {
+	        String employeeid = employeeDetails.getUsername();
+	        String rawPassword = employeeDetails.getPassword();
 
-			// Find the employee by ID
-			Optional<usermaintenance> employeeOpt = Optional.empty();
-			Optional<TraineeMaster> employeeOpt1 = Optional.empty();
-			if (employeeid.toUpperCase().startsWith("WS")) {
+	        Optional<usermaintenance> employeeOpt = Optional.empty();
+	        Optional<TraineeMaster> employeeOpt1 = Optional.empty();
 
-				employeeOpt1 = traineemasterRepository.findByTrngidOrUserId(employeeid.toUpperCase());
-				System.out.println("employeeid::::   " + employeeOpt1.get().getFirstname());
-			} else {
-				employeeOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeid);
-			}
-			// Optional<usermaintenancemod> employeeOpt1 = Optional.empty();
-//			System.out.println("dfghjk" + employeeOpt);
-//			if (!employeeOpt.isPresent()) {
-//
-//				employeeOpt1 = userMaintenanceRepository.findByEmpId(employeeid);
-//				System.out.println("dfghjkq1" + employeeOpt1);
-//			}
+	        if (employeeid.toUpperCase().startsWith("WS")) {
+	            employeeOpt1 = traineemasterRepository.findByTrngidOrUserId(employeeid.toUpperCase());
+	            System.out.println("employeeid::::   " + employeeOpt1.get().getFirstname());
+	        } else {
+	            employeeOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeid);
+	        }
 
-			// Check if the employee exists and the password matches
-			if ((employeeOpt.isPresent() && passwordEncoder.matches(rawPassword, employeeOpt.get().getPassword()))
-					|| (employeeOpt1.isPresent()
-							&& passwordEncoder.matches(rawPassword, employeeOpt1.get().getPassword()))) {
-				// Extract employee details
-				Map<String, Object> response = new HashMap<>();
-				if (employeeOpt.isPresent()) {
-					usermaintenance employee = employeeOpt.get();
-					String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
-							.map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
+	        if ((employeeOpt.isPresent() && passwordEncoder.matches(rawPassword, employeeOpt.get().getPassword()))
+	                || (employeeOpt1.isPresent()
+	                        && passwordEncoder.matches(rawPassword, employeeOpt1.get().getPassword()))) {
 
-					String employeeId = employee.getEmpid();
-					String employeeName = employee.getFirstname();
-					String employeeEmail = employee.getEmailid();
-					String token = generateToken(employeeId, role);
-					String successMessage = errorMessageService.getErrorMessage("VALID_USR_CREDENTIALS", "en");
-					response.put("message", successMessage);
-					response.put("role", role);
-					response.put("employeeId", employeeId);
-					response.put("username", employeeName);
-					response.put("email", employeeEmail);
-					response.put("token", token); // Add token to the response
+	            Map<String, Object> response = new HashMap<>();
 
-					// return ResponseEntity.ok(response);
-				}
-				if (employeeOpt1.isPresent()) {
-					TraineeMaster employee = employeeOpt1.get();
-					String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
-							.map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
-					// String role = employee.getRoleid();
-					String employeeId = employee.getTrngid();
-					String employeeName = employee.getFirstname();
-					String employeeEmail = employee.getEmailid();
+	            if (employeeOpt.isPresent()) {
+	                usermaintenance employee = employeeOpt.get();
+	                String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
+	                        .map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
 
-					// Generate JWT Token
-					String token = generateToken(employeeId, role);
-					// Fetch success message using ErrorMessageService
-					String successMessage = errorMessageService.getErrorMessage("VALID_USR_CREDENTIALS", "en");
+	                String employeeId = employee.getEmpid();
+	                String employeeName = employee.getFirstname();
+	                String employeeEmail = employee.getEmailid();
+	                String reportTo = employee.getRepoteTo();
 
-					// Create response body using HashMap (Java 8 compatible)
+	                // 🔹 Fetch Manager Name from same table (usermaintenance)
+	                String managerName = null;
+	                if (reportTo != null && !reportTo.isEmpty()) {
+	                    usermaintenance manager = usermaintenanceRepository.findByEmpid(reportTo);
+	                    if (manager != null) {
+	                        managerName = manager.getFirstname() +
+	                            (manager.getLastname() != null ? " " + manager.getLastname() : "");
+	                    }
+	                }
 
-					response.put("message", successMessage);
-					response.put("role", role);
-					response.put("employeeId", employeeId);
-					response.put("username", employeeName);
-					response.put("email", employeeEmail);
-					response.put("token", token);
-				}
-				return ResponseEntity.ok(response);
-			} else {
-				// Fetch the error message for invalid credentials
-				String errorMessage = errorMessageService.getErrorMessage("INVALID_USR_CREDENTIALS", "en");
+	                String token = generateToken(employeeId, role);
+	                String successMessage = errorMessageService.getErrorMessage("VALID_USR_CREDENTIALS", "en");
 
-				// Create response body using HashMap (Java 8 compatible)
-				Map<String, Object> errorResponse = new HashMap<>();
-				errorResponse.put("error", errorMessage);
+	                response.put("message", successMessage);
+	                response.put("role", role);
+	                response.put("employeeId", employeeId);
+	                response.put("username", employeeName);
+	                response.put("email", employeeEmail);
+	                response.put("token", token);
+	                response.put("reportTo", reportTo);
+	                response.put("managerName", managerName); // ✅ Added Manager Name
+	            }
 
-				return ResponseEntity.badRequest().body(errorResponse);
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-			// Handle any internal errors
-			String errorMessage = errorMessageService.getErrorMessage("INTERNAL_SERVER_ERROR", "en");
+	            if (employeeOpt1.isPresent()) {
+	                TraineeMaster employee = employeeOpt1.get();
+	                String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
+	                        .map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
 
-			// Create response body using HashMap (Java 8 compatible)
-			Map<String, Object> errorResponse = new HashMap<>();
-			errorResponse.put("error", errorMessage);
+	                String employeeId = employee.getTrngid();
+	                String employeeName = employee.getFirstname();
+	                String employeeEmail = employee.getEmailid();
+	                String reportTo = employee.getRepoteTo();
 
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-		}
+	                // 🔹 Fetch Manager Name from same table (TraineeMaster)
+	                String managerName = null;
+	                if (reportTo != null && !reportTo.isEmpty()) {
+	                    usermaintenance manager = usermaintenanceRepository.findByEmpid(reportTo);
+	                    if (manager != null) {
+	                        managerName = manager.getFirstname() +
+	                            (manager.getLastname() != null ? " " + manager.getLastname() : "");
+	                    }
+	                }
+
+	                String token = generateToken(employeeId, role);
+	                String successMessage = errorMessageService.getErrorMessage("VALID_USR_CREDENTIALS", "en");
+
+	                response.put("message", successMessage);
+	                response.put("role", role);
+	                response.put("employeeId", employeeId);
+	                response.put("username", employeeName);
+	                response.put("email", employeeEmail);
+	                response.put("token", token);
+	                response.put("reportTo", reportTo);
+	                response.put("managerName", managerName); // ✅ Added Manager Name
+	            }
+
+	            return ResponseEntity.ok(response);
+
+	        } else {
+	            String errorMessage = errorMessageService.getErrorMessage("INVALID_USR_CREDENTIALS", "en");
+	            Map<String, Object> errorResponse = new HashMap<>();
+	            errorResponse.put("error", errorMessage);
+	            return ResponseEntity.badRequest().body(errorResponse);
+	        }
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        String errorMessage = errorMessageService.getErrorMessage("INTERNAL_SERVER_ERROR", "en");
+	        Map<String, Object> errorResponse = new HashMap<>();
+	        errorResponse.put("error", errorMessage);
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+	    }
 	}
+
 
 	public String generateToken(String employeeId, String role) {
 		// Set expiration date for token (1 hour from now)
@@ -5843,7 +5854,7 @@ public class AppController {
                
 
         // update fields
-        existingUser.setPassword(passwordEncoder.encode(updatedUser.getPassword()));
+      //  existingUser.setPassword(passwordEncoder.encode(updatedUser.getPassword()));
         existingUser.setUsername(updatedUser.getUsername());
         existingUser.setFirstname(updatedUser.getFirstname());
         existingUser.setLastname(updatedUser.getLastname());
@@ -5873,14 +5884,13 @@ public class AppController {
 
         TraineeMaster existingTrainee = traineemasterRepository.findByTrngidOrUserId(trngid)
                 .orElseThrow(() -> new RuntimeException("Trainee not found"));
-
         // update fields
-        existingTrainee.setPassword(passwordEncoder.encode(updatedTrainee.getPassword()));
+      //  existingTrainee.setPassword(passwordEncoder.encode(updatedTrainee.getPassword()));
         existingTrainee.setFirstname(updatedTrainee.getUsername());
         existingTrainee.setEmailid(updatedTrainee.getEmailid());
         existingTrainee.setPhonenumber(updatedTrainee.getPhonenumber());
         existingTrainee.setRoleid(updatedTrainee.getRoleid());
-       // existingTrainee.setEmpType(updatedTrainee.getEmpType());
+       existingTrainee.setEmpType(updatedTrainee.getEmpType());
         existingTrainee.setStatus(updatedTrainee.getStatus());
         existingTrainee.setRmodtime(new Date());
 
@@ -5898,7 +5908,7 @@ public class AppController {
 
         LocalDateTime now = LocalDateTime.now();
         Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
-        String rawPassword = user.getPassword();
+       String rawPassword = user.getPassword();
 
         user.setStatus("Active");
         user.setPassword(passwordEncoder.encode(rawPassword));
@@ -5937,6 +5947,7 @@ public class AppController {
         user.setRvfytime(nowDate);
         user.setUserid("2019" + user.getTrngid());
         user.setDisablefromdate(nowDate);
+        user.setEmpType(user.getEmpType());
 
         LocalDate disableTo = LocalDate.now().plusYears(2);
         Date disableToDate = Date.from(disableTo.atStartOfDay(ZoneId.systemDefault()).toInstant());

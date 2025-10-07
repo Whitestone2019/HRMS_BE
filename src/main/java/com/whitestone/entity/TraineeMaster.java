@@ -46,6 +46,9 @@ public class TraineeMaster {
 
     @Column(name = "STATUS", length = 10)
     private String status;
+    
+    @Column(name = "EMP_TYPE", length = 30)
+    private String empType;
 
     @Column(name = "LAST_LOGIN")
     @JsonFormat(pattern = "YYYY-MM-DD")
@@ -168,6 +171,14 @@ public class TraineeMaster {
 		this.status = status;
 	}
 
+	public String getEmpType() {
+		return empType;
+	}
+
+	public void setEmpType(String empType) {
+		this.empType = empType;
+	}
+
 	public Date getLastlogin() {
 		return lastlogin;
 	}
@@ -239,6 +250,8 @@ public class TraineeMaster {
 	public void setRvfytime(Date rvfytime) {
 		this.rvfytime = rvfytime;
 	}
+
+	
 
 	
 }
