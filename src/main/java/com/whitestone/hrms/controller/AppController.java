@@ -512,39 +512,57 @@ public class AppController {
 
 	@PostMapping("/resetPassword")
 	public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> resetData) {
-		try {
-			String employeeId = resetData.get("employeeId");
-			String oldPassword = resetData.get("oldPassword");
-			String newPassword = resetData.get("newPassword");
+	    try {
+	        String employeeId = resetData.get("employeeId");
+	        String oldPassword = resetData.get("oldPassword");
+	        String newPassword = resetData.get("newPassword");
 
-			if (employeeId == null || oldPassword == null || newPassword == null) {
-				return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-						.body("{\"error\": \"Employee ID, old password, and new password are required\"}");
-			}
+	        if (employeeId == null || oldPassword == null || newPassword == null) {
+	            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+	                    .body("{\"error\": \"Employee ID, old password, and new password are required\"}");
+	        }
 
-			Optional<usermaintenance> userOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeId);
-			if (!userOpt.isPresent()) {
-				return ResponseEntity.status(HttpStatus.NOT_FOUND).body("{\"error\": \"Employee not found\"}");
-			}
+	        // 1️⃣ Check in usermaintenance table first
+	        Optional<usermaintenance> userOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeId);
+	        if (userOpt.isPresent()) {
+	            usermaintenance user = userOpt.get();
 
-			usermaintenance user = userOpt.get();
+	            if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+	                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+	                        .body("{\"error\": \"Old password is incorrect\"}");
+	            }
 
-			// Validate old password
-			if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
-				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("{\"error\": \"Old password is incorrect\"}");
-			}
+	            user.setPassword(passwordEncoder.encode(newPassword));
+	            usermaintenanceRepository.save(user);
+	            return ResponseEntity.ok("{\"message\": \"Password reset successfully for employee\"}");
+	        }
 
-			// Update to new password
-			user.setPassword(passwordEncoder.encode(newPassword));
-			usermaintenanceRepository.save(user);
+	        // 2️⃣ Check in trainee master table
+	        TraineeMaster trainee = traineemasterRepository.findByTrngid(employeeId);
+	        if (trainee != null) {
+	            if (!passwordEncoder.matches(oldPassword, trainee.getPassword())) {
+	                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+	                        .body("{\"error\": \"Old password is incorrect\"}");
+	            }
 
-			return ResponseEntity.ok("{\"message\": \"Password reset successfully\"}");
-		} catch (Exception e) {
-			e.printStackTrace();
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-					.body("{\"error\": \"Failed to reset password\"}");
-		}
+	            trainee.setPassword(passwordEncoder.encode(newPassword));
+	            trainee.setRmodtime(new Date());
+	            traineemasterRepository.save(trainee);
+
+	            return ResponseEntity.ok("{\"message\": \"Password reset successfully for trainee\"}");
+	        }
+
+	        // 3️⃣ Not found in either table
+	        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+	                .body("{\"error\": \"Employee or Trainee not found\"}");
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                .body("{\"error\": \"Failed to reset password\"}");
+	    }
 	}
+
 
 	@GetMapping("/attendance/status/{employeeId}")
 	public ResponseEntity<?> getCheckInStatus(@PathVariable String employeeId) {
@@ -2066,18 +2084,18 @@ public class AppController {
 				usermaintenance manager = usermaintenanceRepository.findByEmpIdOrUserId(managerId)
 						.orElseThrow(() -> new RuntimeException("Manager not found"));
 
-				if (employeeEmail != null && !employeeEmail.isEmpty()) {
-					SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-					String subject = "Leave Request Approved";
-					String body = String.format(
-							"Dear %s,\n\nYour leave request for %s from %s to %s has been approved by your manager, %s.\n\nRegards,\n%s,\nWhitestone Software Solution Pvt Ltd",
-							existingEmployee.getFirstname(), entity.getLeavetype(), sdf.format(entity.getStartdate()),
-							sdf.format(entity.getEnddate()), manager.getFirstname(), manager.getFirstname());
-					emailService.sendLeaveEmail(manager.getEmailid(), employeeEmail, subject, body);
+					if (employeeEmail != null && !employeeEmail.isEmpty()) {
+						SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+						String subject = "Leave Request Approved";
+						String body = String.format(
+								"Dear %s,\n\nYour leave request for %s from %s to %s has been approved by your manager, %s.\n\nRegards,\n%s,\nWhitestone Software Solution Pvt Ltd",
+								existingEmployee.getFirstname(), entity.getLeavetype(), sdf.format(entity.getStartdate()),
+								sdf.format(entity.getEnddate()), manager.getFirstname(), manager.getFirstname());
+						emailService.sendLeaveEmail(manager.getEmailid(), employeeEmail, subject, body);
+					}
+				} catch (Exception e) {
+					e.printStackTrace(); // log error
 				}
-			} catch (Exception e) {
-				e.printStackTrace(); // log error
-			}
 
 			// Return success response
 			Map<String, Object> successResponse = new HashMap<>();
@@ -5906,9 +5924,10 @@ public class AppController {
             return ResponseEntity.badRequest().body("Employee ID already exists!");
         }
 
+        // current time setup
         LocalDateTime now = LocalDateTime.now();
         Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
-       String rawPassword = user.getPassword();
+        String rawPassword = user.getPassword(); // keep original for mail
 
         user.setStatus("Active");
         user.setPassword(passwordEncoder.encode(rawPassword));
@@ -5923,9 +5942,69 @@ public class AppController {
         user.setDisabletodate(disableToDate);
         user.setLastlogin(nowDate);
 
+        // Save user in DB
         usermaintenance savedUser = usermaintenanceRepository.save(user);
+
+        // ====================== Send Email ======================
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+
+            // ---------- Email to User ----------
+            String subjectUser = "Welcome to Whitestone Software Solutions - You Have Been Appointed";
+            String bodyUser = String.format(
+                "Dear %s,\n\n" +
+                "You have been appointed as an employee at Whitestone Software Solutions Pvt Ltd on %s.\n\n" +
+                "Here are your login details to access the system:\n\n" +
+                "User ID: %s\n" +
+                "Username: %s\n" +
+                "Password: %s\n\n" +
+                "Please log in and change your password upon first login.\n\n" +
+                "Best Regards,\nWhitestone Software Solutions Pvt Ltd",
+                user.getFirstname(),
+                sdf.format(nowDate),
+                user.getUserid(),
+                user.getEmpid(),
+                rawPassword
+            );
+            emailService.sendLeaveEmail("noreply@whitestonesoftware.in", user.getEmailid(), subjectUser, bodyUser);
+
+            // ---------- Email to Manager ----------
+            if (user.getRepoteTo() != null) {
+                Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpid1(user.getRepoteTo());
+                if (managerOpt.isPresent()) {
+                    usermaintenance manager = managerOpt.get();
+                    String managerEmail = manager.getEmailid(); // manager's email
+                    if (managerEmail != null && !managerEmail.isEmpty()) {
+                        String subjectManager = "New User Assigned to You";
+                        String bodyManager = String.format(
+                            "Dear %s,\n\n" +
+                            "A new associate has been assigned to you as their reporting manager.\n\n" +
+                            "User Details:\n" +
+                            "Name: %s\n" +
+                            "Employee ID: %s\n" +
+                            "User ID: %s\n\n" +
+                            "Please guide and assist them as needed.\n\n" +
+                            "Best Regards,\nWhitestone Software Solutions Pvt Ltd",
+                            manager.getFirstname(), // manager name
+                            user.getFirstname(),    // new user name
+                            user.getEmpid(),        // employee id
+                            user.getUserid()        // user id
+                        );
+
+                        emailService.sendLeaveEmail("noreply@whitestonesoftware.in", managerEmail, subjectManager, bodyManager);
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.ok("User created successfully, but email sending failed: " + e.getMessage());
+        }
+
         return ResponseEntity.ok(savedUser);
     }
+
+
 
     // ================= Trainee Save =================
     @PostMapping("/trng-save")
@@ -5957,6 +6036,43 @@ public class AppController {
         TraineeMaster savedUser = traineemasterRepository.save(user);
         return ResponseEntity.ok(savedUser);
     }
+    
+    @GetMapping("/employees/relation/{empId}")
+    public ResponseEntity<?> getReportingRelation(@PathVariable String empId) {
+        try {
+            // 1️⃣ Get the employee
+            Optional<usermaintenance> employeeOpt = usermaintenanceRepository.findByEmpid1(empId);
+            if (!employeeOpt.isPresent()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("Employee not found with ID: " + empId);
+            }
+
+            usermaintenance employee = employeeOpt.get();
+
+            // 2️⃣ Get the manager (the one this employee reports to)
+            usermaintenance manager = null;
+            if (employee.getRepoteTo() != null && !employee.getRepoteTo().isEmpty()) {
+                manager = usermaintenanceRepository.findByEmpid(employee.getRepoteTo());
+            }
+
+            // 3️⃣ Get all employees who report to this employee (direct reports)
+            List<usermaintenance> directReports = usermaintenanceRepository.findByRepoteTo(empId);
+
+            // 4️⃣ Prepare response map
+            Map<String, Object> response = new HashMap<>();
+            response.put("employee", employee);
+            response.put("manager", manager);
+            response.put("reportees", directReports);
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error fetching reporting relation: " + e.getMessage());
+        }
+    }
+
 
 
 }

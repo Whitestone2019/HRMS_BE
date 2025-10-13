@@ -37,4 +37,6 @@ public interface usermaintenanceRepository extends JpaRepository<usermaintenance
     
     boolean existsByEmpid(String empid);
 
+    @Query("SELECT u FROM usermaintenance u WHERE u.empid = :empid AND u.status = 'Active'")
+    Optional<usermaintenance> findByEmpid1(@Param("empid") String empid);
 }
