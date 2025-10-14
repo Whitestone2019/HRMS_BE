@@ -1,5 +1,6 @@
 package com.whitestone.hrms.repo;
  
+import java.util.Date;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -20,6 +21,10 @@ public interface WsslCalendarModRepository extends JpaRepository<WsslCalendarMod
 
     List<WsslCalendarMod> findByEventDateAfter(@Param("currentDate") java.sql.Date currentDate);
 
+    //List<WsslCalendarMod> findByEventDateBetween(java.sql.Date startDate, java.sql.Date endDate);
+
+    // Optional: Fetch all events for a given month
+    List<WsslCalendarMod> findByEventDateBetween(Date startDate, Date endDate);
 }
 
  

@@ -221,112 +221,111 @@ public class AppController {
 	@RequestMapping(value = { "/login" }, method = RequestMethod.POST)
 	@ResponseBody
 	public ResponseEntity<?> login(@RequestBody usermaintenance employeeDetails) {
-	    System.out.println("TEST");
-	    System.out.println("sedfg" + employeeDetails);
-	    try {
-	        String employeeid = employeeDetails.getUsername();
-	        String rawPassword = employeeDetails.getPassword();
+		System.out.println("TEST");
+		System.out.println("sedfg" + employeeDetails);
+		try {
+			String employeeid = employeeDetails.getUsername();
+			String rawPassword = employeeDetails.getPassword();
 
-	        Optional<usermaintenance> employeeOpt = Optional.empty();
-	        Optional<TraineeMaster> employeeOpt1 = Optional.empty();
+			Optional<usermaintenance> employeeOpt = Optional.empty();
+			Optional<TraineeMaster> employeeOpt1 = Optional.empty();
 
-	        if (employeeid.toUpperCase().startsWith("WS")) {
-	            employeeOpt1 = traineemasterRepository.findByTrngidOrUserId(employeeid.toUpperCase());
-	            System.out.println("employeeid::::   " + employeeOpt1.get().getFirstname());
-	        } else {
-	            employeeOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeid);
-	        }
+			if (employeeid.toUpperCase().startsWith("WS")) {
+				employeeOpt1 = traineemasterRepository.findByTrngidOrUserId(employeeid.toUpperCase());
+				System.out.println("employeeid::::   " + employeeOpt1.get().getFirstname());
+			} else {
+				employeeOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeid);
+			}
 
-	        if ((employeeOpt.isPresent() && passwordEncoder.matches(rawPassword, employeeOpt.get().getPassword()))
-	                || (employeeOpt1.isPresent()
-	                        && passwordEncoder.matches(rawPassword, employeeOpt1.get().getPassword()))) {
+			if ((employeeOpt.isPresent() && passwordEncoder.matches(rawPassword, employeeOpt.get().getPassword()))
+					|| (employeeOpt1.isPresent()
+							&& passwordEncoder.matches(rawPassword, employeeOpt1.get().getPassword()))) {
 
-	            Map<String, Object> response = new HashMap<>();
+				Map<String, Object> response = new HashMap<>();
 
-	            if (employeeOpt.isPresent()) {
-	                usermaintenance employee = employeeOpt.get();
-	                String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
-	                        .map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
+				if (employeeOpt.isPresent()) {
+					usermaintenance employee = employeeOpt.get();
+					String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
+							.map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
 
-	                String employeeId = employee.getEmpid();
-	                String employeeName = employee.getFirstname();
-	                String employeeEmail = employee.getEmailid();
-	                String reportTo = employee.getRepoteTo();
+					String employeeId = employee.getEmpid();
+					String employeeName = employee.getFirstname();
+					String employeeEmail = employee.getEmailid();
+					String reportTo = employee.getRepoteTo();
 
-	                // 🔹 Fetch Manager Name from same table (usermaintenance)
-	                String managerName = null;
-	                if (reportTo != null && !reportTo.isEmpty()) {
-	                    usermaintenance manager = usermaintenanceRepository.findByEmpid(reportTo);
-	                    if (manager != null) {
-	                        managerName = manager.getFirstname() +
-	                            (manager.getLastname() != null ? " " + manager.getLastname() : "");
-	                    }
-	                }
+					// 🔹 Fetch Manager Name from same table (usermaintenance)
+					String managerName = null;
+					if (reportTo != null && !reportTo.isEmpty()) {
+						usermaintenance manager = usermaintenanceRepository.findByEmpid(reportTo);
+						if (manager != null) {
+							managerName = manager.getFirstname()
+									+ (manager.getLastname() != null ? " " + manager.getLastname() : "");
+						}
+					}
 
-	                String token = generateToken(employeeId, role);
-	                String successMessage = errorMessageService.getErrorMessage("VALID_USR_CREDENTIALS", "en");
+					String token = generateToken(employeeId, role);
+					String successMessage = errorMessageService.getErrorMessage("VALID_USR_CREDENTIALS", "en");
 
-	                response.put("message", successMessage);
-	                response.put("role", role);
-	                response.put("employeeId", employeeId);
-	                response.put("username", employeeName);
-	                response.put("email", employeeEmail);
-	                response.put("token", token);
-	                response.put("reportTo", reportTo);
-	                response.put("managerName", managerName); // ✅ Added Manager Name
-	            }
+					response.put("message", successMessage);
+					response.put("role", role);
+					response.put("employeeId", employeeId);
+					response.put("username", employeeName);
+					response.put("email", employeeEmail);
+					response.put("token", token);
+					response.put("reportTo", reportTo);
+					response.put("managerName", managerName); // ✅ Added Manager Name
+				}
 
-	            if (employeeOpt1.isPresent()) {
-	                TraineeMaster employee = employeeOpt1.get();
-	                String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
-	                        .map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
+				if (employeeOpt1.isPresent()) {
+					TraineeMaster employee = employeeOpt1.get();
+					String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
+							.map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
 
-	                String employeeId = employee.getTrngid();
-	                String employeeName = employee.getFirstname();
-	                String employeeEmail = employee.getEmailid();
-	                String reportTo = employee.getRepoteTo();
+					String employeeId = employee.getTrngid();
+					String employeeName = employee.getFirstname();
+					String employeeEmail = employee.getEmailid();
+					String reportTo = employee.getRepoteTo();
 
-	                // 🔹 Fetch Manager Name from same table (TraineeMaster)
-	                String managerName = null;
-	                if (reportTo != null && !reportTo.isEmpty()) {
-	                    usermaintenance manager = usermaintenanceRepository.findByEmpid(reportTo);
-	                    if (manager != null) {
-	                        managerName = manager.getFirstname() +
-	                            (manager.getLastname() != null ? " " + manager.getLastname() : "");
-	                    }
-	                }
+					// 🔹 Fetch Manager Name from same table (TraineeMaster)
+					String managerName = null;
+					if (reportTo != null && !reportTo.isEmpty()) {
+						usermaintenance manager = usermaintenanceRepository.findByEmpid(reportTo);
+						if (manager != null) {
+							managerName = manager.getFirstname()
+									+ (manager.getLastname() != null ? " " + manager.getLastname() : "");
+						}
+					}
 
-	                String token = generateToken(employeeId, role);
-	                String successMessage = errorMessageService.getErrorMessage("VALID_USR_CREDENTIALS", "en");
+					String token = generateToken(employeeId, role);
+					String successMessage = errorMessageService.getErrorMessage("VALID_USR_CREDENTIALS", "en");
 
-	                response.put("message", successMessage);
-	                response.put("role", role);
-	                response.put("employeeId", employeeId);
-	                response.put("username", employeeName);
-	                response.put("email", employeeEmail);
-	                response.put("token", token);
-	                response.put("reportTo", reportTo);
-	                response.put("managerName", managerName); // ✅ Added Manager Name
-	            }
+					response.put("message", successMessage);
+					response.put("role", role);
+					response.put("employeeId", employeeId);
+					response.put("username", employeeName);
+					response.put("email", employeeEmail);
+					response.put("token", token);
+					response.put("reportTo", reportTo);
+					response.put("managerName", managerName); // ✅ Added Manager Name
+				}
 
-	            return ResponseEntity.ok(response);
+				return ResponseEntity.ok(response);
 
-	        } else {
-	            String errorMessage = errorMessageService.getErrorMessage("INVALID_USR_CREDENTIALS", "en");
-	            Map<String, Object> errorResponse = new HashMap<>();
-	            errorResponse.put("error", errorMessage);
-	            return ResponseEntity.badRequest().body(errorResponse);
-	        }
+			} else {
+				String errorMessage = errorMessageService.getErrorMessage("INVALID_USR_CREDENTIALS", "en");
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", errorMessage);
+				return ResponseEntity.badRequest().body(errorResponse);
+			}
 
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        String errorMessage = errorMessageService.getErrorMessage("INTERNAL_SERVER_ERROR", "en");
-	        Map<String, Object> errorResponse = new HashMap<>();
-	        errorResponse.put("error", errorMessage);
-	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-	    }
+		} catch (Exception e) {
+			e.printStackTrace();
+			String errorMessage = errorMessageService.getErrorMessage("INTERNAL_SERVER_ERROR", "en");
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", errorMessage);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+		}
 	}
-
 
 	public String generateToken(String employeeId, String role) {
 		// Set expiration date for token (1 hour from now)
@@ -512,57 +511,55 @@ public class AppController {
 
 	@PostMapping("/resetPassword")
 	public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> resetData) {
-	    try {
-	        String employeeId = resetData.get("employeeId");
-	        String oldPassword = resetData.get("oldPassword");
-	        String newPassword = resetData.get("newPassword");
+		try {
+			String employeeId = resetData.get("employeeId");
+			String oldPassword = resetData.get("oldPassword");
+			String newPassword = resetData.get("newPassword");
 
-	        if (employeeId == null || oldPassword == null || newPassword == null) {
-	            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-	                    .body("{\"error\": \"Employee ID, old password, and new password are required\"}");
-	        }
+			if (employeeId == null || oldPassword == null || newPassword == null) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+						.body("{\"error\": \"Employee ID, old password, and new password are required\"}");
+			}
 
-	        // 1️⃣ Check in usermaintenance table first
-	        Optional<usermaintenance> userOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeId);
-	        if (userOpt.isPresent()) {
-	            usermaintenance user = userOpt.get();
+			// 1️⃣ Check in usermaintenance table first
+			Optional<usermaintenance> userOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeId);
+			if (userOpt.isPresent()) {
+				usermaintenance user = userOpt.get();
 
-	            if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
-	                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-	                        .body("{\"error\": \"Old password is incorrect\"}");
-	            }
+				if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+					return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+							.body("{\"error\": \"Old password is incorrect\"}");
+				}
 
-	            user.setPassword(passwordEncoder.encode(newPassword));
-	            usermaintenanceRepository.save(user);
-	            return ResponseEntity.ok("{\"message\": \"Password reset successfully for employee\"}");
-	        }
+				user.setPassword(passwordEncoder.encode(newPassword));
+				usermaintenanceRepository.save(user);
+				return ResponseEntity.ok("{\"message\": \"Password reset successfully for employee\"}");
+			}
 
-	        // 2️⃣ Check in trainee master table
-	        TraineeMaster trainee = traineemasterRepository.findByTrngid(employeeId);
-	        if (trainee != null) {
-	            if (!passwordEncoder.matches(oldPassword, trainee.getPassword())) {
-	                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-	                        .body("{\"error\": \"Old password is incorrect\"}");
-	            }
+			// 2️⃣ Check in trainee master table
+			TraineeMaster trainee = traineemasterRepository.findByTrngid(employeeId);
+			if (trainee != null) {
+				if (!passwordEncoder.matches(oldPassword, trainee.getPassword())) {
+					return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+							.body("{\"error\": \"Old password is incorrect\"}");
+				}
 
-	            trainee.setPassword(passwordEncoder.encode(newPassword));
-	            trainee.setRmodtime(new Date());
-	            traineemasterRepository.save(trainee);
+				trainee.setPassword(passwordEncoder.encode(newPassword));
+				trainee.setRmodtime(new Date());
+				traineemasterRepository.save(trainee);
 
-	            return ResponseEntity.ok("{\"message\": \"Password reset successfully for trainee\"}");
-	        }
+				return ResponseEntity.ok("{\"message\": \"Password reset successfully for trainee\"}");
+			}
 
-	        // 3️⃣ Not found in either table
-	        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-	                .body("{\"error\": \"Employee or Trainee not found\"}");
+			// 3️⃣ Not found in either table
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).body("{\"error\": \"Employee or Trainee not found\"}");
 
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-	                .body("{\"error\": \"Failed to reset password\"}");
-	    }
+		} catch (Exception e) {
+			e.printStackTrace();
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body("{\"error\": \"Failed to reset password\"}");
+		}
 	}
-
 
 	@GetMapping("/attendance/status/{employeeId}")
 	public ResponseEntity<?> getCheckInStatus(@PathVariable String employeeId) {
@@ -2084,18 +2081,18 @@ public class AppController {
 				usermaintenance manager = usermaintenanceRepository.findByEmpIdOrUserId(managerId)
 						.orElseThrow(() -> new RuntimeException("Manager not found"));
 
-					if (employeeEmail != null && !employeeEmail.isEmpty()) {
-						SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-						String subject = "Leave Request Approved";
-						String body = String.format(
-								"Dear %s,\n\nYour leave request for %s from %s to %s has been approved by your manager, %s.\n\nRegards,\n%s,\nWhitestone Software Solution Pvt Ltd",
-								existingEmployee.getFirstname(), entity.getLeavetype(), sdf.format(entity.getStartdate()),
-								sdf.format(entity.getEnddate()), manager.getFirstname(), manager.getFirstname());
-						emailService.sendLeaveEmail(manager.getEmailid(), employeeEmail, subject, body);
-					}
-				} catch (Exception e) {
-					e.printStackTrace(); // log error
+				if (employeeEmail != null && !employeeEmail.isEmpty()) {
+					SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+					String subject = "Leave Request Approved";
+					String body = String.format(
+							"Dear %s,\n\nYour leave request for %s from %s to %s has been approved by your manager, %s.\n\nRegards,\n%s,\nWhitestone Software Solution Pvt Ltd",
+							existingEmployee.getFirstname(), entity.getLeavetype(), sdf.format(entity.getStartdate()),
+							sdf.format(entity.getEnddate()), manager.getFirstname(), manager.getFirstname());
+					emailService.sendLeaveEmail(manager.getEmailid(), employeeEmail, subject, body);
 				}
+			} catch (Exception e) {
+				e.printStackTrace(); // log error
+			}
 
 			// Return success response
 			Map<String, Object> successResponse = new HashMap<>();
@@ -4814,83 +4811,139 @@ public class AppController {
 		}
 	}
 
-
-
 	@GetMapping("/data")
 	public ResponseEntity<?> getTimesheetData(@RequestParam int year, @RequestParam int month,
-			@RequestParam String repoteTo) {
-		if (year < 2000 || month < 1 || month > 12 || repoteTo == null || repoteTo.isEmpty()) {
+			@RequestParam(required = false) String repoteTo) {
+
+		if (year < 2000 || month < 1 || month > 12) {
 			Map<String, String> error = new HashMap<>();
-			error.put("error", "Invalid year, month, or repoteTo");
+			error.put("error", "Invalid year or month");
 			return ResponseEntity.badRequest().body(error);
 		}
 
 		List<Map<String, Object>> timesheetData = new ArrayList<>();
-		List<usermaintenance> employees = usermaintenanceRepository.findByRepoteTo(repoteTo);
+		List<usermaintenance> employees = new ArrayList<>();
+
+		// 1️⃣ Determine employees
+		if (repoteTo == null || repoteTo.trim().isEmpty()) {
+			employees = usermaintenanceRepository.findAll(); // all employees
+		} else {
+			employees = usermaintenanceRepository.findByRepoteTo(repoteTo);
+			Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpid1(repoteTo);
+			managerOpt.ifPresent(employees::add);
+		}
+
 		if (employees.isEmpty()) {
 			Map<String, String> error = new HashMap<>();
-			error.put("error", "No employees found reporting to " + repoteTo);
+			error.put("error", "No employees found" + (repoteTo != null ? " for " + repoteTo : ""));
 			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
 		}
 
-		int sno = 1;
-		Calendar calendar = Calendar.getInstance();
-		calendar.set(year, month - 1, 27); // Start on 27th
-		Date startDate = calendar.getTime();
-		calendar.add(Calendar.MONTH, 1); // Next month
-		calendar.set(Calendar.DAY_OF_MONTH, 26); // End on 26th
-		Date endDate = calendar.getTime();
+		// 2️⃣ Define date range: 27th of previous month → 26th of current month
+		Calendar startCal = Calendar.getInstance();
+		startCal.set(year, month - 2, 27, 0, 0, 0); // previous month
+		startCal.set(Calendar.MILLISECOND, 0);
+		Date startDate = startCal.getTime();
+
+		Calendar endCal = Calendar.getInstance();
+		endCal.set(year, month - 1, 26, 0, 0, 0); // current month
+		endCal.set(Calendar.MILLISECOND, 0);
+		Date endDate = endCal.getTime();
+
+		// Limit end date to today
+		Calendar today = Calendar.getInstance();
+		today.set(Calendar.HOUR_OF_DAY, 0);
+		today.set(Calendar.MINUTE, 0);
+		today.set(Calendar.SECOND, 0);
+		today.set(Calendar.MILLISECOND, 0);
+		Date attendanceEndDate = endDate.after(today.getTime()) ? today.getTime() : endDate;
+
+		// 3️⃣ Week-off and holiday calculation
+		SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+		dateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
+
+		List<Date> weekOffDays = calculateWeekOffsForPreviousAndCurrentMonth(year, month);
+		Set<String> weekOffSet = weekOffDays.stream().map(d -> dateFormat.format(d)).collect(Collectors.toSet());
+
+		List<WsslCalendarMod> holidays = wsslCalendarModRepository.findByEventDateBetween(startDate, endDate);
+		Map<String, WsslCalendarMod> holidayMap = new HashMap<>();
+		for (WsslCalendarMod holiday : holidays) {
+			holidayMap.put(dateFormat.format(holiday.getEventDate()), holiday);
+		}
 
 		int effectiveWorkingDays = calculateEffectiveWorkingDays(year, month);
+		int sno = 1;
 
-		for (usermaintenance employee : employees) {
+		for (usermaintenance emp : employees) {
 			Map<String, Object> data = new HashMap<>();
 			data.put("sno", sno++);
-			data.put("employeeId", employee.getEmpid());
-			data.put("members", employee.getFirstname() + " " + employee.getLastname());
+			data.put("employeeId", emp.getEmpid());
+			data.put("members", emp.getFirstname() + " " + emp.getLastname());
 			data.put("effectiveWorkingDays", effectiveWorkingDays);
 
-			// Get all attendance records for employee in date range
-			List<UserMasterAttendanceMod> attendanceRecords = usermasterattendancemodrepository
-					.findByAttendanceidAndDateRange(employee.getEmpid(), startDate, endDate);
+			// Fetch attendance records
+			System.out.println("Fetching attendance for Employee: " + emp.getEmpid());
+			System.out.println("Query: findByAttendanceidAndDateRange(empId=" + emp.getEmpid() + ", startDate="
+					+ startDate + ", endDate=" + attendanceEndDate + ")");
 
-			// Map attendance by date for fast lookup
-			Map<LocalDate, String> attendanceMap = new HashMap<>();
+			List<UserMasterAttendanceMod> attendanceRecords = usermasterattendancemodrepository
+					.findByAttendanceidAndDateRange(emp.getEmpid(), startDate, attendanceEndDate);
+
+			// Map attendance by date
+			Map<String, String> attendanceMap = new HashMap<>();
 			for (UserMasterAttendanceMod record : attendanceRecords) {
-				attendanceMap.put(record.getAttendancedate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate(),
-						record.getStatus());
+				String dateStr = dateFormat.format(record.getAttendancedate());
+				attendanceMap.put(dateStr, record.getStatus());
 			}
 
 			int present = 0, absent = 0, missPunch = 0;
 
 			// Loop through each date in range
-			LocalDate start = startDate.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-			LocalDate end = endDate.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+			Calendar loopCal = (Calendar) startCal.clone();
+			while (!loopCal.getTime().after(attendanceEndDate)) {
+				Date currentDate = loopCal.getTime();
+				String dateStr = dateFormat.format(currentDate);
 
-			for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
-				if (attendanceMap.containsKey(date)) {
-					String status = attendanceMap.get(date);
-					if ("Present".equalsIgnoreCase(status)) {
-						present++;
-					} else if ("MissPunch".equalsIgnoreCase(status)) {
-						missPunch++;
-					} else {
-						absent++;
-					}
-				} else {
-					// No record — treat as absent
-					absent++;
+				// Skip holidays & week-offs
+				if (weekOffSet.contains(dateStr) || holidayMap.containsKey(dateStr)) {
+					loopCal.add(Calendar.DAY_OF_MONTH, 1);
+					continue;
 				}
+
+				String status = attendanceMap.get(dateStr);
+				String finalStatus;
+
+				if (status == null || status.trim().isEmpty()) {
+					finalStatus = "Miss Punch";
+					missPunch++;
+				} else {
+					status = status.trim().toLowerCase();
+					switch (status) {
+					case "present":
+						finalStatus = "Present";
+						present++;
+						break;
+					case "absent":
+						finalStatus = "Absent";
+						absent++;
+						break;
+					case "miss punch":
+						finalStatus = "Miss Punch";
+						missPunch++;
+						break;
+					default:
+						finalStatus = "Absent";
+						absent++;
+						break;
+					}
+				}
+
+				// Debug print
+				System.out.println("Employee: " + emp.getEmpid() + ", Date: " + dateStr + ", Status: " + finalStatus);
+
+				loopCal.add(Calendar.DAY_OF_MONTH, 1);
 			}
 
-			// Handle prorated LOP for July 27–31
-			/*
-			 * if (month == 7) { EmployeeLeaveSummary leaveSummary =
-			 * employeeLeaveSummaryRepository.findByEmpId_AndYear(employee.getEmpid(),
-			 * year); if (leaveSummary != null) { int lopDays = (int)
-			 * Math.round(leaveSummary.getLopJul().intValue() * (5.0 / 31.0)); absent +=
-			 * lopDays; } }
-			 */
 			data.put("present", present);
 			data.put("absent", absent);
 			data.put("missPunch", missPunch);
@@ -4903,12 +4956,13 @@ public class AppController {
 	@GetMapping("/events/{employeeId}")
 	public ResponseEntity<?> getAttendanceEvents(@PathVariable String employeeId,
 			@RequestParam(required = false) Integer year, @RequestParam(required = false) Integer month) {
+
 		// Use previous month if year/month not provided
-		Calendar today = Calendar.getInstance();
+		Calendar todayCal = Calendar.getInstance();
 		if (year == null || month == null) {
-			today.add(Calendar.MONTH, -1);
-			year = today.get(Calendar.YEAR);
-			month = today.get(Calendar.MONTH) + 1; // Calendar.MONTH is 0-based
+			todayCal.add(Calendar.MONTH, -1);
+			year = todayCal.get(Calendar.YEAR);
+			month = todayCal.get(Calendar.MONTH) + 1;
 		}
 
 		// Validate inputs
@@ -4925,39 +4979,52 @@ public class AppController {
 			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
 		}
 
-		// 27th of previous month
+		SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+		SimpleDateFormat dayFormat = new SimpleDateFormat("EEEE");
+
+		// Start date = 27th of previous month
 		Calendar startCal = Calendar.getInstance();
 		startCal.set(year, month - 1, 27);
 		Date startDate = startCal.getTime();
 
-		// 26th of current month
+		// End date = 26th of current month
 		Calendar endCal = (Calendar) startCal.clone();
 		endCal.add(Calendar.MONTH, 1);
 		endCal.set(Calendar.DAY_OF_MONTH, 26);
-		Date endDate = endCal.getTime();
+
+		// Limit attendance events end date to today
+		Calendar today = Calendar.getInstance();
+		Date attendanceEndDate;
+		if (endCal.getTime().after(today.getTime())) {
+			attendanceEndDate = today.getTime();
+		} else {
+			attendanceEndDate = endCal.getTime();
+		}
 
 		// Week off calculation
 		List<Date> weekOffDays = calculateWeekOffsForPreviousAndCurrentMonth(year, month);
-		System.out.println("weekOffDays::::" + weekOffDays);
-		SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-		SimpleDateFormat dayFormat = new SimpleDateFormat("EEEE");
+		Set<String> weekOffSet = weekOffDays.stream().map(d -> dateFormat.format(d)).collect(Collectors.toSet());
 
-		// Map for fast lookup
-		Set<String> weekOffSet = weekOffDays.stream().map(dateFormat::format).collect(Collectors.toSet());
+		// Fetch attendance records up to today
 
-		// Fetch existing attendance
+		System.out.println("Query: findByAttendanceidAndDateRange(empId=" + employeeId + ", startDate=" + startDate
+				+ ", endDate=" + attendanceEndDate + ")");
 		List<UserMasterAttendanceMod> attendanceRecords = usermasterattendancemodrepository
-				.findByAttendanceidAndDateRange(employeeId, startDate, endDate);
+				.findByAttendanceidAndDateRange(employeeId, startDate, attendanceEndDate);
 
-		// Map attendance by date string
 		Map<String, UserMasterAttendanceMod> attendanceMap = new HashMap<>();
 		for (UserMasterAttendanceMod record : attendanceRecords) {
 			attendanceMap.put(dateFormat.format(record.getAttendancedate()), record);
 		}
 
-		List<Map<String, Object>> events = new ArrayList<>();
+		// Fetch holidays for the whole range (including upcoming holidays)
+		List<WsslCalendarMod> holidays = wsslCalendarModRepository.findByEventDateBetween(startDate, endCal.getTime());
+		Map<String, WsslCalendarMod> holidayMap = new HashMap<>();
+		for (WsslCalendarMod holiday : holidays) {
+			holidayMap.put(dateFormat.format(holiday.getEventDate()), holiday);
+		}
 
-		// Loop through each date between 27th - 26th
+		List<Map<String, Object>> events = new ArrayList<>();
 		Calendar loopCal = (Calendar) startCal.clone();
 		while (!loopCal.after(endCal)) {
 			Date currentDate = loopCal.getTime();
@@ -4968,13 +5035,17 @@ public class AppController {
 			Map<String, String> extendedProps = new HashMap<>();
 			extendedProps.put("dayOfWeek", dayOfWeek);
 
-			if (weekOffSet.contains(dateStr)) {
+			if (holidayMap.containsKey(dateStr)) {
+				WsslCalendarMod holiday = holidayMap.get(dateStr);
+				event.put("title", holiday.getEventName());
+				event.put("backgroundColor", "#ffc107"); // Holiday color
+				extendedProps.put("status", "Holiday");
+			} else if (weekOffSet.contains(dateStr)) {
 				event.put("title", "Week Off");
 				event.put("backgroundColor", "#ffffff");
 				extendedProps.put("status", "Week Off");
 			} else if (attendanceMap.containsKey(dateStr)) {
-				UserMasterAttendanceMod record = attendanceMap.get(dateStr);
-				String status = record.getStatus();
+				String status = attendanceMap.get(dateStr).getStatus();
 				status = (status == null || status.trim().isEmpty()) ? "Absent" : status;
 				event.put("title", status);
 				extendedProps.put("status", status);
@@ -4983,10 +5054,17 @@ public class AppController {
 								: status.equalsIgnoreCase("Absent") ? "#dc3545"
 										: status.equalsIgnoreCase("Miss Punch") ? "#ffff84" : "#ffffff");
 			} else {
-				// No record and not week off = Absent
-				event.put("title", "Miss Punch");
-				extendedProps.put("status", "Miss Punch");
-				event.put("backgroundColor", "#ffff84");
+				// Only show "Miss Punch" up to today
+				if (!currentDate.after(today.getTime())) {
+					event.put("title", "Miss Punch");
+					extendedProps.put("status", "Miss Punch");
+					event.put("backgroundColor", "#ffff84");
+				} else {
+					// Future dates (except holidays) remain empty
+					event.put("title", "");
+					extendedProps.put("status", "");
+					event.put("backgroundColor", "#ffffff");
+				}
 			}
 
 			event.put("date", dateStr);
@@ -5689,7 +5767,6 @@ public class AppController {
 		return ResponseEntity.ok(trainees);
 	}
 
-
 	@PutMapping("/employee/{userId}/status")
 	public ResponseEntity<Void> updateEmployeeStatus(@PathVariable String userId,
 			@RequestBody Map<String, String> statusUpdate) {
@@ -5717,62 +5794,59 @@ public class AppController {
 
 	@GetMapping("/projects/{empId}")
 	public ResponseEntity<Map<String, Object>> getProjectHistoryByEmpId(@PathVariable String empId) {
-	    try {
-	        // Step 1: Only use the given empId (no BFS hierarchy expansion)
-	        List<String> empIds = List.of(empId);
+		try {
+			// Step 1: Only use the given empId (no BFS hierarchy expansion)
+			List<String> empIds = List.of(empId);
 
-	        // Step 2: Fetch project history for this employee
-	        List<EmployeeProjectHistory> projectHistory = projectHistoryRepository
-	                .findByEmpIdInAndEntityCreFlgIn(empIds, List.of("N", "Y"));
+			// Step 2: Fetch project history for this employee
+			List<EmployeeProjectHistory> projectHistory = projectHistoryRepository
+					.findByEmpIdInAndEntityCreFlgIn(empIds, List.of("N", "Y"));
 
-	        // Step 3: Fetch employee name
-	        Map<String, String> empIdToName = new HashMap<>();
-	        usermaintenanceRepository.findByEmpidIn(empIds)
-	                .forEach(u -> empIdToName.put(u.getEmpid(), u.getFirstname() + " " + u.getLastname()));
+			// Step 3: Fetch employee name
+			Map<String, String> empIdToName = new HashMap<>();
+			usermaintenanceRepository.findByEmpidIn(empIds)
+					.forEach(u -> empIdToName.put(u.getEmpid(), u.getFirstname() + " " + u.getLastname()));
 
-	        // Step 4: Combine results
-	        List<Map<String, Object>> combinedProjectHistory = new ArrayList<>();
-	        for (EmployeeProjectHistory project : projectHistory) {
-	            Map<String, Object> projectData = new HashMap<>();
-	            projectData.put("name", empIdToName.getOrDefault(project.getEmpId(), "N/A"));
-	            projectData.put("id", project.getId());
-	            projectData.put("empId", project.getEmpId());
-	            projectData.put("projectName", project.getProjectName());
-	            projectData.put("projectStartDate", project.getProjectStartDate());
-	            projectData.put("projectEndDate", project.getProjectEndDate());
-	            projectData.put("location", project.getLocation());
-	            projectData.put("clientInfo", project.getClientInfo());
-	            projectData.put("vendorDetails", project.getVendorDetails());
-	            projectData.put("techParkName", project.getTechParkName());
-	            projectData.put("vendorName", project.getVendorName());
-	            projectData.put("modeOfWork", project.getModeOfWork());
-	            projectData.put("entityCreFlg", project.getEntityCreFlg());
-	            projectData.put("delFlg", project.getDelFlg());
-	            projectData.put("rcreUserId", project.getRcreUserId());
-	            projectData.put("rcreTime", project.getRcreTime());
-	            projectData.put("rmodUserId", project.getRmodUserId());
-	            projectData.put("rmodTime", project.getRmodTime());
-	            combinedProjectHistory.add(projectData);
-	        }
+			// Step 4: Combine results
+			List<Map<String, Object>> combinedProjectHistory = new ArrayList<>();
+			for (EmployeeProjectHistory project : projectHistory) {
+				Map<String, Object> projectData = new HashMap<>();
+				projectData.put("name", empIdToName.getOrDefault(project.getEmpId(), "N/A"));
+				projectData.put("id", project.getId());
+				projectData.put("empId", project.getEmpId());
+				projectData.put("projectName", project.getProjectName());
+				projectData.put("projectStartDate", project.getProjectStartDate());
+				projectData.put("projectEndDate", project.getProjectEndDate());
+				projectData.put("location", project.getLocation());
+				projectData.put("clientInfo", project.getClientInfo());
+				projectData.put("vendorDetails", project.getVendorDetails());
+				projectData.put("techParkName", project.getTechParkName());
+				projectData.put("vendorName", project.getVendorName());
+				projectData.put("modeOfWork", project.getModeOfWork());
+				projectData.put("entityCreFlg", project.getEntityCreFlg());
+				projectData.put("delFlg", project.getDelFlg());
+				projectData.put("rcreUserId", project.getRcreUserId());
+				projectData.put("rcreTime", project.getRcreTime());
+				projectData.put("rmodUserId", project.getRmodUserId());
+				projectData.put("rmodTime", project.getRmodTime());
+				combinedProjectHistory.add(projectData);
+			}
 
-	        // Step 5: Prepare response
-	        Map<String, Object> response = new HashMap<>();
-	        response.put("data", combinedProjectHistory);
-	        response.put("message", combinedProjectHistory.isEmpty() ? "No data found" : "Data fetched successfully");
+			// Step 5: Prepare response
+			Map<String, Object> response = new HashMap<>();
+			response.put("data", combinedProjectHistory);
+			response.put("message", combinedProjectHistory.isEmpty() ? "No data found" : "Data fetched successfully");
 
-	        return ResponseEntity.ok(response);
+			return ResponseEntity.ok(response);
 
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        Map<String, Object> errorResponse = new HashMap<>();
-	        errorResponse.put("status", "error");
-	        errorResponse.put("message", e.getMessage());
-	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-	    }
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("status", "error");
+			errorResponse.put("message", e.getMessage());
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+		}
 	}
-
-
-
 
 	@PostMapping("/projects")
 	public ResponseEntity<Map<String, Object>> addProject(@RequestBody EmployeeProjectHistory project) {
@@ -5798,10 +5872,27 @@ public class AppController {
 	@GetMapping("/employees/reporting-to/{managerEmpId}")
 	public ResponseEntity<?> getReportingEmployees(@PathVariable String managerEmpId) {
 	    try {
+	        // Fetch the user's details to check their role and reportTo
+	        Optional<usermaintenance> userOptional = usermaintenanceRepository.findByEmpid1(managerEmpId);
+	        if (!userOptional.isPresent()) {
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+	                    .body("Employee with ID " + managerEmpId + " not found");
+	        }
+
+	        usermaintenance user = userOptional.get();
+	        // Fetch the user's role details
+	       Optional<UserRoleMaintenance> role = userRoleMaintenanceRepository.findByRoleid(user.getRoleid());
+	        if (role != null && "HR".equalsIgnoreCase(role.get().getRolename())) {
+	            // HR Manager with null reportTo: fetch all employees
+	            List<usermaintenance> allEmployees = usermaintenanceRepository.findAll();
+	            return ResponseEntity.ok(allEmployees);
+	        }
+
+	        // Non-HR Manager or HR Manager with non-null reportTo: use hierarchy logic
 	        Set<String> allEmpIds = new HashSet<>();
 	        Deque<String> queue = new ArrayDeque<>();
-	        queue.add(managerEmpId); // start with manager
-	        allEmpIds.add(managerEmpId); // include manager in results
+	        queue.add(managerEmpId); // Start with manager
+	        allEmpIds.add(managerEmpId); // Include manager in results
 
 	        while (!queue.isEmpty()) {
 	            String currentEmpId = queue.poll();
@@ -5810,15 +5901,14 @@ public class AppController {
 	            List<usermaintenance> directReports = usermaintenanceRepository.findByRepoteTo(currentEmpId);
 
 	            for (usermaintenance emp : directReports) {
-	                if (allEmpIds.add(emp.getEmpid())) { // add if not already added
-	                    queue.add(emp.getEmpid()); // enqueue for further traversal
+	                if (allEmpIds.add(emp.getEmpid())) { // Add if not already added
+	                    queue.add(emp.getEmpid()); // Enqueue for further traversal
 	                }
 	            }
 	        }
 
 	        // Fetch user details for all employees in the hierarchy (including manager)
 	        List<usermaintenance> employees = usermaintenanceRepository.findByEmpidIn(new ArrayList<>(allEmpIds));
-
 	        return ResponseEntity.ok(employees);
 
 	    } catch (Exception e) {
@@ -5827,252 +5917,227 @@ public class AppController {
 	                .body("Error fetching reporting employees: " + e.getMessage());
 	    }
 	}
+	@PutMapping("/project/{id}")
+	public EmployeeProjectHistory updateProject(@PathVariable Long id, @RequestBody EmployeeProjectHistory project) {
 
-    
-    
-    @PutMapping("/project/{id}")
-    public EmployeeProjectHistory updateProject(
-            @PathVariable Long id,
-            @RequestBody EmployeeProjectHistory project)
-          {
+		EmployeeProjectHistory existing = projectHistoryRepository.findById(id)
+				.orElseThrow(() -> new RuntimeException("Project not found"));
 
-        EmployeeProjectHistory existing = projectHistoryRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Project not found"));
+		existing.setProjectName(project.getProjectName());
+		existing.setProjectStartDate(project.getProjectStartDate());
+		existing.setProjectEndDate(project.getProjectEndDate());
+		existing.setLocation(project.getLocation());
+		existing.setClientInfo(project.getClientInfo());
+		existing.setVendorDetails(project.getVendorDetails());
+		existing.setTechParkName(project.getTechParkName());
+		existing.setVendorName(project.getVendorName());
+		existing.setModeOfWork(project.getModeOfWork());
 
-        existing.setProjectName(project.getProjectName());
-        existing.setProjectStartDate(project.getProjectStartDate());
-        existing.setProjectEndDate(project.getProjectEndDate());
-        existing.setLocation(project.getLocation());
-        existing.setClientInfo(project.getClientInfo());
-        existing.setVendorDetails(project.getVendorDetails());
-        existing.setTechParkName(project.getTechParkName());
-        existing.setVendorName(project.getVendorName());
-        existing.setModeOfWork(project.getModeOfWork());
+		existing.setRmodUserId(project.getEmpId());
+		existing.setRmodTime(LocalDateTime.now());
 
-        existing.setRmodUserId(project.getEmpId());
-        existing.setRmodTime(LocalDateTime.now());
+		return projectHistoryRepository.save(existing);
+	}
 
-        return projectHistoryRepository.save(existing);
-    }
-    
+	@GetMapping("/employeesforEdit/{empid}")
+	public ResponseEntity<usermaintenance> getEmployeeById(@PathVariable String empid) {
+		usermaintenance user = usermaintenanceRepository.findByEmpid(empid);
 
-    @GetMapping("/employeesforEdit/{empid}")
-    public ResponseEntity<usermaintenance> getEmployeeById(@PathVariable String empid) {
-        usermaintenance user = usermaintenanceRepository.findByEmpid(empid);
-                
-        return ResponseEntity.ok(user);
-    }
+		return ResponseEntity.ok(user);
+	}
 
-    @PutMapping("/employees/{empid}")
-    public ResponseEntity<usermaintenance> updateEmployee(
-            @PathVariable String empid,
-            @RequestBody usermaintenance updatedUser) {
+	@PutMapping("/employees/{empid}")
+	public ResponseEntity<usermaintenance> updateEmployee(@PathVariable String empid,
+			@RequestBody usermaintenance updatedUser) {
 
-        usermaintenance existingUser = usermaintenanceRepository.findByEmpid(empid);
-               
+		usermaintenance existingUser = usermaintenanceRepository.findByEmpid(empid);
 
-        // update fields
-      //  existingUser.setPassword(passwordEncoder.encode(updatedUser.getPassword()));
-        existingUser.setUsername(updatedUser.getUsername());
-        existingUser.setFirstname(updatedUser.getFirstname());
-        existingUser.setLastname(updatedUser.getLastname());
-        existingUser.setEmailid(updatedUser.getEmailid());
-        existingUser.setPhonenumber(updatedUser.getPhonenumber());
-        existingUser.setRoleid(updatedUser.getRoleid());
-        existingUser.setRepoteTo(updatedUser.getRepoteTo());
-        existingUser.setEmpType(updatedUser.getEmpType());
-        existingUser.setStatus(updatedUser.getStatus());
-        existingUser.setRmodtime(new Date());
+		// update fields
+		// existingUser.setPassword(passwordEncoder.encode(updatedUser.getPassword()));
+		existingUser.setUsername(updatedUser.getUsername());
+		existingUser.setFirstname(updatedUser.getFirstname());
+		existingUser.setLastname(updatedUser.getLastname());
+		existingUser.setEmailid(updatedUser.getEmailid());
+		existingUser.setPhonenumber(updatedUser.getPhonenumber());
+		existingUser.setRoleid(updatedUser.getRoleid());
+		existingUser.setRepoteTo(updatedUser.getRepoteTo());
+		existingUser.setEmpType(updatedUser.getEmpType());
+		existingUser.setStatus(updatedUser.getStatus());
+		existingUser.setRmodtime(new Date());
 
-        usermaintenance savedUser = usermaintenanceRepository.save(existingUser);
-        return ResponseEntity.ok(savedUser);
-    }
+		usermaintenance savedUser = usermaintenanceRepository.save(existingUser);
+		return ResponseEntity.ok(savedUser);
+	}
 
-    @GetMapping("/trainees/{trngid}")
-    public ResponseEntity<TraineeMaster> getTraineeById(@PathVariable String trngid) {
-        TraineeMaster trainee = traineemasterRepository.findByTrngidOrUserId(trngid)
-                .orElseThrow(() -> new RuntimeException("Trainee not found"));
-        return ResponseEntity.ok(trainee);
-    }
+	@GetMapping("/trainees/{trngid}")
+	public ResponseEntity<TraineeMaster> getTraineeById(@PathVariable String trngid) {
+		TraineeMaster trainee = traineemasterRepository.findByTrngidOrUserId(trngid)
+				.orElseThrow(() -> new RuntimeException("Trainee not found"));
+		return ResponseEntity.ok(trainee);
+	}
 
-    @PutMapping("/trainees/{trngid}")
-    public ResponseEntity<TraineeMaster> updateTrainee(
-            @PathVariable String trngid,
-            @RequestBody TraineeMaster updatedTrainee) {
+	@PutMapping("/trainees/{trngid}")
+	public ResponseEntity<TraineeMaster> updateTrainee(@PathVariable String trngid,
+			@RequestBody TraineeMaster updatedTrainee) {
 
-        TraineeMaster existingTrainee = traineemasterRepository.findByTrngidOrUserId(trngid)
-                .orElseThrow(() -> new RuntimeException("Trainee not found"));
-        // update fields
-      //  existingTrainee.setPassword(passwordEncoder.encode(updatedTrainee.getPassword()));
-        existingTrainee.setFirstname(updatedTrainee.getUsername());
-        existingTrainee.setEmailid(updatedTrainee.getEmailid());
-        existingTrainee.setPhonenumber(updatedTrainee.getPhonenumber());
-        existingTrainee.setRoleid(updatedTrainee.getRoleid());
-       existingTrainee.setEmpType(updatedTrainee.getEmpType());
-        existingTrainee.setStatus(updatedTrainee.getStatus());
-        existingTrainee.setRmodtime(new Date());
+		TraineeMaster existingTrainee = traineemasterRepository.findByTrngidOrUserId(trngid)
+				.orElseThrow(() -> new RuntimeException("Trainee not found"));
+		// update fields
+		// existingTrainee.setPassword(passwordEncoder.encode(updatedTrainee.getPassword()));
+		existingTrainee.setFirstname(updatedTrainee.getUsername());
+		existingTrainee.setEmailid(updatedTrainee.getEmailid());
+		existingTrainee.setPhonenumber(updatedTrainee.getPhonenumber());
+		existingTrainee.setRoleid(updatedTrainee.getRoleid());
+		existingTrainee.setEmpType(updatedTrainee.getEmpType());
+		existingTrainee.setStatus(updatedTrainee.getStatus());
+		existingTrainee.setRmodtime(new Date());
 
-        TraineeMaster savedTrainee = traineemasterRepository.save(existingTrainee);
-        return ResponseEntity.ok(savedTrainee);
-    }
- // ================= Employee Save =================
-    @PostMapping("/usermaintenance-save")
-    public ResponseEntity<?> saveUser(@RequestBody usermaintenance user) {
-        // check duplicate empid
-        boolean exists = usermaintenanceRepository.existsByEmpid(user.getEmpid());
-        if (exists) {
-            return ResponseEntity.badRequest().body("Employee ID already exists!");
-        }
+		TraineeMaster savedTrainee = traineemasterRepository.save(existingTrainee);
+		return ResponseEntity.ok(savedTrainee);
+	}
 
-        // current time setup
-        LocalDateTime now = LocalDateTime.now();
-        Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
-        String rawPassword = user.getPassword(); // keep original for mail
+	// ================= Employee Save =================
+	@PostMapping("/usermaintenance-save")
+	public ResponseEntity<?> saveUser(@RequestBody usermaintenance user) {
+		// check duplicate empid
+		boolean exists = usermaintenanceRepository.existsByEmpid(user.getEmpid());
+		if (exists) {
+			return ResponseEntity.badRequest().body("Employee ID already exists!");
+		}
 
-        user.setStatus("Active");
-        user.setPassword(passwordEncoder.encode(rawPassword));
-        user.setRcretime(nowDate);
-        user.setRmodtime(nowDate);
-        user.setRvfytime(nowDate);
-        user.setUserid("2019" + user.getEmpid());
-        user.setDisablefromdate(nowDate);
+		// current time setup
+		LocalDateTime now = LocalDateTime.now();
+		Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
+		String rawPassword = user.getPassword(); // keep original for mail
 
-        LocalDate disableTo = LocalDate.now().plusYears(2);
-        Date disableToDate = Date.from(disableTo.atStartOfDay(ZoneId.systemDefault()).toInstant());
-        user.setDisabletodate(disableToDate);
-        user.setLastlogin(nowDate);
+		user.setStatus("Active");
+		user.setPassword(passwordEncoder.encode(rawPassword));
+		user.setRcretime(nowDate);
+		user.setRmodtime(nowDate);
+		user.setRvfytime(nowDate);
+		user.setUserid("2019" + user.getEmpid());
+		user.setDisablefromdate(nowDate);
 
-        // Save user in DB
-        usermaintenance savedUser = usermaintenanceRepository.save(user);
+		LocalDate disableTo = LocalDate.now().plusYears(2);
+		Date disableToDate = Date.from(disableTo.atStartOfDay(ZoneId.systemDefault()).toInstant());
+		user.setDisabletodate(disableToDate);
+		user.setLastlogin(nowDate);
 
-        // ====================== Send Email ======================
-        try {
-            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+		// Save user in DB
+		usermaintenance savedUser = usermaintenanceRepository.save(user);
 
-            // ---------- Email to User ----------
-            String subjectUser = "Welcome to Whitestone Software Solutions - You Have Been Appointed";
-            String bodyUser = String.format(
-                "Dear %s,\n\n" +
-                "You have been appointed as an employee at Whitestone Software Solutions Pvt Ltd on %s.\n\n" +
-                "Here are your login details to access the system:\n\n" +
-                "User ID: %s\n" +
-                "Username: %s\n" +
-                "Password: %s\n\n" +
-                "Please log in and change your password upon first login.\n\n" +
-                "Best Regards,\nWhitestone Software Solutions Pvt Ltd",
-                user.getFirstname(),
-                sdf.format(nowDate),
-                user.getUserid(),
-                user.getEmpid(),
-                rawPassword
-            );
-            emailService.sendLeaveEmail("noreply@whitestonesoftware.in", user.getEmailid(), subjectUser, bodyUser);
+		// ====================== Send Email ======================
+		try {
+			SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
 
-            // ---------- Email to Manager ----------
-            if (user.getRepoteTo() != null) {
-                Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpid1(user.getRepoteTo());
-                if (managerOpt.isPresent()) {
-                    usermaintenance manager = managerOpt.get();
-                    String managerEmail = manager.getEmailid(); // manager's email
-                    if (managerEmail != null && !managerEmail.isEmpty()) {
-                        String subjectManager = "New User Assigned to You";
-                        String bodyManager = String.format(
-                            "Dear %s,\n\n" +
-                            "A new associate has been assigned to you as their reporting manager.\n\n" +
-                            "User Details:\n" +
-                            "Name: %s\n" +
-                            "Employee ID: %s\n" +
-                            "User ID: %s\n\n" +
-                            "Please guide and assist them as needed.\n\n" +
-                            "Best Regards,\nWhitestone Software Solutions Pvt Ltd",
-                            manager.getFirstname(), // manager name
-                            user.getFirstname(),    // new user name
-                            user.getEmpid(),        // employee id
-                            user.getUserid()        // user id
-                        );
+			// ---------- Email to User ----------
+			String subjectUser = "Welcome to Whitestone Software Solutions - You Have Been Appointed";
+			String bodyUser = String.format("Dear %s,\n\n"
+					+ "You have been appointed as an employee at Whitestone Software Solutions Pvt Ltd on %s.\n\n"
+					+ "Here are your login details to access the system:\n\n" + "User ID: %s\n" + "Username: %s\n"
+					+ "Password: %s\n\n" + "Please log in and change your password upon first login.\n\n"
+					+ "Best Regards,\nWhitestone Software Solutions Pvt Ltd", user.getFirstname(), sdf.format(nowDate),
+					user.getUserid(), user.getEmpid(), rawPassword);
+			emailService.sendLeaveEmail("noreply@whitestonesoftware.in", user.getEmailid(), subjectUser, bodyUser);
 
-                        emailService.sendLeaveEmail("noreply@whitestonesoftware.in", managerEmail, subjectManager, bodyManager);
-                    }
-                }
-            }
+			// ---------- Email to Manager ----------
+			if (user.getRepoteTo() != null) {
+				Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpid1(user.getRepoteTo());
+				if (managerOpt.isPresent()) {
+					usermaintenance manager = managerOpt.get();
+					String managerEmail = manager.getEmailid(); // manager's email
+					if (managerEmail != null && !managerEmail.isEmpty()) {
+						String subjectManager = "New User Assigned to You";
+						String bodyManager = String.format(
+								"Dear %s,\n\n"
+										+ "A new associate has been assigned to you as their reporting manager.\n\n"
+										+ "User Details:\n" + "Name: %s\n" + "Employee ID: %s\n" + "User ID: %s\n\n"
+										+ "Please guide and assist them as needed.\n\n"
+										+ "Best Regards,\nWhitestone Software Solutions Pvt Ltd",
+								manager.getFirstname(), // manager name
+								user.getFirstname(), // new user name
+								user.getEmpid(), // employee id
+								user.getUserid() // user id
+						);
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.ok("User created successfully, but email sending failed: " + e.getMessage());
-        }
+						emailService.sendLeaveEmail("noreply@whitestonesoftware.in", managerEmail, subjectManager,
+								bodyManager);
+					}
+				}
+			}
 
-        return ResponseEntity.ok(savedUser);
-    }
+		} catch (Exception e) {
+			e.printStackTrace();
+			return ResponseEntity.ok("User created successfully, but email sending failed: " + e.getMessage());
+		}
 
+		return ResponseEntity.ok(savedUser);
+	}
 
+	// ================= Trainee Save =================
+	@PostMapping("/trng-save")
+	public ResponseEntity<?> saveTrainee(@RequestBody TraineeMaster user) {
+		// check duplicate trngid
+		boolean exists = traineemasterRepository.existsByTrngid(user.getTrngid());
+		if (exists) {
+			return ResponseEntity.badRequest().body("Trainee ID already exists!");
+		}
 
-    // ================= Trainee Save =================
-    @PostMapping("/trng-save")
-    public ResponseEntity<?> saveTrainee(@RequestBody TraineeMaster user) {
-        // check duplicate trngid
-        boolean exists = traineemasterRepository.existsByTrngid(user.getTrngid());
-        if (exists) {
-            return ResponseEntity.badRequest().body("Trainee ID already exists!");
-        }
+		LocalDateTime now = LocalDateTime.now();
+		Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
+		String rawPassword = user.getPassword();
+		user.setRepoteTo(user.getRepoteTo());
+		user.setStatus("Active");
+		user.setPassword(passwordEncoder.encode(rawPassword));
+		user.setRcretime(nowDate);
+		user.setRmodtime(nowDate);
+		user.setRvfytime(nowDate);
+		user.setUserid("2019" + user.getTrngid());
+		user.setDisablefromdate(nowDate);
+		user.setEmpType(user.getEmpType());
 
-        LocalDateTime now = LocalDateTime.now();
-        Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
-        String rawPassword = user.getPassword();
-        user.setRepoteTo(user.getRepoteTo());
-        user.setStatus("Active");
-        user.setPassword(passwordEncoder.encode(rawPassword));
-        user.setRcretime(nowDate);
-        user.setRmodtime(nowDate);
-        user.setRvfytime(nowDate);
-        user.setUserid("2019" + user.getTrngid());
-        user.setDisablefromdate(nowDate);
-        user.setEmpType(user.getEmpType());
+		LocalDate disableTo = LocalDate.now().plusYears(2);
+		Date disableToDate = Date.from(disableTo.atStartOfDay(ZoneId.systemDefault()).toInstant());
+		user.setDisabletodate(disableToDate);
+		user.setLastlogin(nowDate);
 
-        LocalDate disableTo = LocalDate.now().plusYears(2);
-        Date disableToDate = Date.from(disableTo.atStartOfDay(ZoneId.systemDefault()).toInstant());
-        user.setDisabletodate(disableToDate);
-        user.setLastlogin(nowDate);
+		TraineeMaster savedUser = traineemasterRepository.save(user);
+		return ResponseEntity.ok(savedUser);
+	}
 
-        TraineeMaster savedUser = traineemasterRepository.save(user);
-        return ResponseEntity.ok(savedUser);
-    }
-    
-    @GetMapping("/employees/relation/{empId}")
-    public ResponseEntity<?> getReportingRelation(@PathVariable String empId) {
-        try {
-            // 1️⃣ Get the employee
-            Optional<usermaintenance> employeeOpt = usermaintenanceRepository.findByEmpid1(empId);
-            if (!employeeOpt.isPresent()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body("Employee not found with ID: " + empId);
-            }
+	@GetMapping("/employees/relation/{empId}")
+	public ResponseEntity<?> getReportingRelation(@PathVariable String empId) {
+		try {
+			// 1️⃣ Get the employee
+			Optional<usermaintenance> employeeOpt = usermaintenanceRepository.findByEmpid1(empId);
+			if (!employeeOpt.isPresent()) {
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Employee not found with ID: " + empId);
+			}
 
-            usermaintenance employee = employeeOpt.get();
+			usermaintenance employee = employeeOpt.get();
 
-            // 2️⃣ Get the manager (the one this employee reports to)
-            usermaintenance manager = null;
-            if (employee.getRepoteTo() != null && !employee.getRepoteTo().isEmpty()) {
-                manager = usermaintenanceRepository.findByEmpid(employee.getRepoteTo());
-            }
+			// 2️⃣ Get the manager (the one this employee reports to)
+			usermaintenance manager = null;
+			if (employee.getRepoteTo() != null && !employee.getRepoteTo().isEmpty()) {
+				manager = usermaintenanceRepository.findByEmpid(employee.getRepoteTo());
+			}
 
-            // 3️⃣ Get all employees who report to this employee (direct reports)
-            List<usermaintenance> directReports = usermaintenanceRepository.findByRepoteTo(empId);
+			// 3️⃣ Get all employees who report to this employee (direct reports)
+			List<usermaintenance> directReports = usermaintenanceRepository.findByRepoteTo(empId);
 
-            // 4️⃣ Prepare response map
-            Map<String, Object> response = new HashMap<>();
-            response.put("employee", employee);
-            response.put("manager", manager);
-            response.put("reportees", directReports);
+			// 4️⃣ Prepare response map
+			Map<String, Object> response = new HashMap<>();
+			response.put("employee", employee);
+			response.put("manager", manager);
+			response.put("reportees", directReports);
 
-            return ResponseEntity.ok(response);
+			return ResponseEntity.ok(response);
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error fetching reporting relation: " + e.getMessage());
-        }
-    }
-
-
+		} catch (Exception e) {
+			e.printStackTrace();
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body("Error fetching reporting relation: " + e.getMessage());
+		}
+	}
 
 }
