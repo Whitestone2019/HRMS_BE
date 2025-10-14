@@ -4812,146 +4812,148 @@ public class AppController {
 	}
 
 	@GetMapping("/data")
-	public ResponseEntity<?> getTimesheetData(@RequestParam int year, @RequestParam int month,
-			@RequestParam(required = false) String repoteTo) {
+	public ResponseEntity<?> getTimesheetData(@RequestParam int year,
+	                                          @RequestParam int month,
+	                                          @RequestParam(required = false) String repoteTo) {
 
-		if (year < 2000 || month < 1 || month > 12) {
-			Map<String, String> error = new HashMap<>();
-			error.put("error", "Invalid year or month");
-			return ResponseEntity.badRequest().body(error);
-		}
+	    if (year < 2000 || month < 1 || month > 12) {
+	        Map<String, String> error = new HashMap<>();
+	        error.put("error", "Invalid year or month");
+	        return ResponseEntity.badRequest().body(error);
+	    }
 
-		List<Map<String, Object>> timesheetData = new ArrayList<>();
-		List<usermaintenance> employees = new ArrayList<>();
+	    List<Map<String, Object>> timesheetData = new ArrayList<>();
+	    List<usermaintenance> employees;
 
-		// 1️⃣ Determine employees
-		if (repoteTo == null || repoteTo.trim().isEmpty()) {
-			employees = usermaintenanceRepository.findAll(); // all employees
-		} else {
-			employees = usermaintenanceRepository.findByRepoteTo(repoteTo);
-			Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpid1(repoteTo);
-			managerOpt.ifPresent(employees::add);
-		}
+	    // 1️⃣ Get employees based on report-to
+	    if (repoteTo == null || repoteTo.trim().isEmpty()) {
+	        employees = usermaintenanceRepository.findAll();
+	    } else {
+	        employees = usermaintenanceRepository.findByRepoteTo(repoteTo);
+	        Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpid1(repoteTo);
+	        managerOpt.ifPresent(employees::add);
+	    }
 
-		if (employees.isEmpty()) {
-			Map<String, String> error = new HashMap<>();
-			error.put("error", "No employees found" + (repoteTo != null ? " for " + repoteTo : ""));
-			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
-		}
+	    if (employees.isEmpty()) {
+	        Map<String, String> error = new HashMap<>();
+	        error.put("error", "No employees found" + (repoteTo != null ? " for " + repoteTo : ""));
+	        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+	    }
 
-		// 2️⃣ Define date range: 27th of previous month → 26th of current month
-		Calendar startCal = Calendar.getInstance();
-		startCal.set(year, month - 2, 27, 0, 0, 0); // previous month
-		startCal.set(Calendar.MILLISECOND, 0);
-		Date startDate = startCal.getTime();
+	    // 2️⃣ Date range: 27th of previous month → 26th of current month
+	    Calendar startCal = Calendar.getInstance();
+	    startCal.set(year, month - 2, 27, 0, 0, 0);
+	    startCal.set(Calendar.MILLISECOND, 0);
+	    Date startDate = startCal.getTime();
 
-		Calendar endCal = Calendar.getInstance();
-		endCal.set(year, month - 1, 26, 0, 0, 0); // current month
-		endCal.set(Calendar.MILLISECOND, 0);
-		Date endDate = endCal.getTime();
+	    Calendar endCal = Calendar.getInstance();
+	    endCal.set(year, month - 1, 26, 0, 0, 0);
+	    endCal.set(Calendar.MILLISECOND, 0);
+	    Date endDate = endCal.getTime();
 
-		// Limit end date to today
-		Calendar today = Calendar.getInstance();
-		today.set(Calendar.HOUR_OF_DAY, 0);
-		today.set(Calendar.MINUTE, 0);
-		today.set(Calendar.SECOND, 0);
-		today.set(Calendar.MILLISECOND, 0);
-		Date attendanceEndDate = endDate.after(today.getTime()) ? today.getTime() : endDate;
+	    Calendar today = Calendar.getInstance();
+	    today.set(Calendar.HOUR_OF_DAY, 0);
+	    today.set(Calendar.MINUTE, 0);
+	    today.set(Calendar.SECOND, 0);
+	    today.set(Calendar.MILLISECOND, 0);
+	    Date attendanceEndDate = endDate.after(today.getTime()) ? today.getTime() : endDate;
 
-		// 3️⃣ Week-off and holiday calculation
-		SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-		dateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
+	    // 3️⃣ Week-offs & Holidays setup
+	    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+	    dateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
 
-		List<Date> weekOffDays = calculateWeekOffsForPreviousAndCurrentMonth(year, month);
-		Set<String> weekOffSet = weekOffDays.stream().map(d -> dateFormat.format(d)).collect(Collectors.toSet());
+	    List<Date> weekOffDays = calculateWeekOffsForPreviousAndCurrentMonth(year, month);
+	    Set<String> weekOffSet = weekOffDays.stream().map(d -> dateFormat.format(d)).collect(Collectors.toSet());
 
-		List<WsslCalendarMod> holidays = wsslCalendarModRepository.findByEventDateBetween(startDate, endDate);
-		Map<String, WsslCalendarMod> holidayMap = new HashMap<>();
-		for (WsslCalendarMod holiday : holidays) {
-			holidayMap.put(dateFormat.format(holiday.getEventDate()), holiday);
-		}
+	    List<WsslCalendarMod> holidays = wsslCalendarModRepository.findByEventDateBetween(startDate, endDate);
+	    Map<String, WsslCalendarMod> holidayMap = new HashMap<>();
+	    for (WsslCalendarMod holiday : holidays) {
+	        holidayMap.put(dateFormat.format(holiday.getEventDate()), holiday);
+	    }
 
-		int effectiveWorkingDays = calculateEffectiveWorkingDays(year, month);
-		int sno = 1;
+	    int effectiveWorkingDays = calculateEffectiveWorkingDays(year, month);
+	    int sno = 1;
 
-		for (usermaintenance emp : employees) {
-			Map<String, Object> data = new HashMap<>();
-			data.put("sno", sno++);
-			data.put("employeeId", emp.getEmpid());
-			data.put("members", emp.getFirstname() + " " + emp.getLastname());
-			data.put("effectiveWorkingDays", effectiveWorkingDays);
+	    // 4️⃣ Loop through employees
+	    for (usermaintenance emp : employees) {
+	        Map<String, Object> data = new HashMap<>();
+	        data.put("sno", sno++);
+	        data.put("employeeId", emp.getEmpid());
+	        data.put("members", emp.getFirstname() + " " + emp.getLastname());
+	        data.put("effectiveWorkingDays", effectiveWorkingDays);
 
-			// Fetch attendance records
-			System.out.println("Fetching attendance for Employee: " + emp.getEmpid());
-			System.out.println("Query: findByAttendanceidAndDateRange(empId=" + emp.getEmpid() + ", startDate="
-					+ startDate + ", endDate=" + attendanceEndDate + ")");
+	        // Attendance records
+	        List<UserMasterAttendanceMod> attendanceRecords =
+	                usermasterattendancemodrepository.findByAttendanceidAndDateRange(
+	                        emp.getEmpid(), startDate, attendanceEndDate);
 
-			List<UserMasterAttendanceMod> attendanceRecords = usermasterattendancemodrepository
-					.findByAttendanceidAndDateRange(emp.getEmpid(), startDate, attendanceEndDate);
+	        Map<String, String> attendanceMap = new HashMap<>();
+	        for (UserMasterAttendanceMod record : attendanceRecords) {
+	            attendanceMap.put(dateFormat.format(record.getAttendancedate()), record.getStatus());
+	        }
 
-			// Map attendance by date
-			Map<String, String> attendanceMap = new HashMap<>();
-			for (UserMasterAttendanceMod record : attendanceRecords) {
-				String dateStr = dateFormat.format(record.getAttendancedate());
-				attendanceMap.put(dateStr, record.getStatus());
-			}
+	        int present = 0, absent = 0, missPunch = 0;
+	        List<Map<String, String>> holidaysList = new ArrayList<>();
 
-			int present = 0, absent = 0, missPunch = 0;
+	        Calendar loopCal = (Calendar) startCal.clone();
+	        while (!loopCal.getTime().after(attendanceEndDate)) {
+	            Date currentDate = loopCal.getTime();
+	            String dateStr = dateFormat.format(currentDate);
 
-			// Loop through each date in range
-			Calendar loopCal = (Calendar) startCal.clone();
-			while (!loopCal.getTime().after(attendanceEndDate)) {
-				Date currentDate = loopCal.getTime();
-				String dateStr = dateFormat.format(currentDate);
+	            // ✅ Skip holidays and week-offs
+	            if (holidayMap.containsKey(dateStr)) {
+	                WsslCalendarMod holiday = holidayMap.get(dateStr);
+	                if (holiday != null) {
+	                    Map<String, String> holidayInfo = new HashMap<>();
+	                    holidayInfo.put("date", dateStr);
+	                    holidayInfo.put("name", holiday.getEventName());
+	                    holidaysList.add(holidayInfo);
+	                }
+	                loopCal.add(Calendar.DAY_OF_MONTH, 1);
+	                continue;
+	            }
 
-				// Skip holidays & week-offs
-				if (weekOffSet.contains(dateStr) || holidayMap.containsKey(dateStr)) {
-					loopCal.add(Calendar.DAY_OF_MONTH, 1);
-					continue;
-				}
+	            if (weekOffSet.contains(dateStr)) {
+	                loopCal.add(Calendar.DAY_OF_MONTH, 1);
+	                continue;
+	            }
 
-				String status = attendanceMap.get(dateStr);
-				String finalStatus;
+	            String status = attendanceMap.get(dateStr);
+	            if (status == null || status.trim().isEmpty()) {
+	                missPunch++;
+	            } else {
+	                status = status.trim().toLowerCase();
+	                switch (status) {
+	                    case "present":
+	                        present++;
+	                        break;
+	                    case "absent":
+	                        absent++;
+	                        break;
+	                    case "miss punch":
+	                        missPunch++;
+	                        break;
+	                    default:
+	                        absent++;
+	                        break;
+	                }
+	            }
 
-				if (status == null || status.trim().isEmpty()) {
-					finalStatus = "Miss Punch";
-					missPunch++;
-				} else {
-					status = status.trim().toLowerCase();
-					switch (status) {
-					case "present":
-						finalStatus = "Present";
-						present++;
-						break;
-					case "absent":
-						finalStatus = "Absent";
-						absent++;
-						break;
-					case "miss punch":
-						finalStatus = "Miss Punch";
-						missPunch++;
-						break;
-					default:
-						finalStatus = "Absent";
-						absent++;
-						break;
-					}
-				}
+	            loopCal.add(Calendar.DAY_OF_MONTH, 1);
+	        }
 
-				// Debug print
-				System.out.println("Employee: " + emp.getEmpid() + ", Date: " + dateStr + ", Status: " + finalStatus);
+	        // Add results
+	        data.put("present", present);
+	        data.put("absent", absent);
+	        data.put("missPunch", missPunch);
+	        data.put("holidays", holidaysList);
+	        data.put("totalHolidays", holidaysList.size());
+	        timesheetData.add(data);
+	    }
 
-				loopCal.add(Calendar.DAY_OF_MONTH, 1);
-			}
-
-			data.put("present", present);
-			data.put("absent", absent);
-			data.put("missPunch", missPunch);
-			timesheetData.add(data);
-		}
-
-		return ResponseEntity.ok(timesheetData);
+	    return ResponseEntity.ok(timesheetData);
 	}
+
 
 	@GetMapping("/events/{employeeId}")
 	public ResponseEntity<?> getAttendanceEvents(@PathVariable String employeeId,
