@@ -74,7 +74,7 @@ public class EmailService {
             helper.setSubject(subject);
             helper.setText(body);
 
-          //  mailSender.send(message);
+            mailSender.send(message);
         } catch (MessagingException e) {
             throw new RuntimeException("Failed to send payslip email", e);
         }
