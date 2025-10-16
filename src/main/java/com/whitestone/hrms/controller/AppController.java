@@ -1877,7 +1877,14 @@ public class AppController {
 		empIds.add(empId); // Include the given empId
 
 		// Fetch direct reports
+
 		List<usermaintenance> reportingEmployees = usermaintenanceRepository.findByRepoteTo(empId);
+
+		List<TraineeMaster> reportingtrainees = traineemasterRepository.findByRepoteTo(empId);
+
+		for (TraineeMaster traineeMaster : reportingtrainees) {
+			empIds.add(traineeMaster.getTrngid());
+		}
 
 		for (usermaintenance emp : reportingEmployees) {
 			empIds.add(emp.getEmpid());
@@ -1888,98 +1895,106 @@ public class AppController {
 
 	// leave
 	@GetMapping("/leaveRequests/get/{empId}")
-	public ResponseEntity<Map<String, Object>> getLeaveRequestsByEmpId(@PathVariable String empId) {
-		try {
-			// Step 1: Find all employees who report to this empId
-			List<String> empIds = getDirectReports(empId); // <-- This should already include trainees if you update it
+	public ResponseEntity<Map<String, Object>> getLeaveRequestsByEmpId(
+	        @PathVariable(required = false) String empId) {
 
-			// Print the final list of employee IDs
-			System.out.println("Fetching leave records for Employee IDs: " + empIds);
+	    try {
+	        List<String> empIds = new ArrayList<>();
+	        boolean isHR = false;
 
-			// Step 2: Fetch records from both Master and Mod tables where entitycreflg =
-			// 'N' or 'Y'
-			List<EmployeeLeaveMasterTbl> masterLeaveRequests = employeeLeaveMasterRepository
-					.findByEmpidInAndEntitycreflgIn(empIds, Arrays.asList("N", "Y"));
-			List<EmployeeLeaveModTbl> modLeaveRequests = employeeLeaveModRepository.findByEmpidIn(empIds);
+	        // Determine if the user is HR
+	        if (empId != null && !empId.isEmpty()) {
+	            usermaintenance user = usermaintenanceRepository.findByEmpid(empId);
+	            TraineeMaster trng = traineemasterRepository.findByTrngid(empId);
+	            if (user != null) {
+	                Optional<UserRoleMaintenance> role = userRoleMaintenanceRepository.findByRoleid(user.getRoleid());
+	                if (role.isPresent() && "HR".equalsIgnoreCase(role.get().getRolename())) {
+	                    isHR = true;
+	                }
+	            }
+	        } else {
+	            // If empId is null, assume HR (frontend request from HR user)
+	            isHR = true;
+	        }
 
-			// Step 3: Build empId → name mapping from BOTH tables
-			Map<String, String> empIdToName = new HashMap<>();
+	        if (isHR) {
+	            // Fetch all employees + trainees
+	            empIds.addAll(
+	                usermaintenanceRepository.findAll()
+	                    .stream()
+	                    .map(usermaintenance::getEmpid)
+	                    .toList()
+	            );
+	            empIds.addAll(
+	                traineemasterRepository.findAll()
+	                    .stream()
+	                    .map(TraineeMaster::getTrngid)
+	                    .toList()
+	            );
+	        } else {
+	            // Non-HR, fetch only direct reports
+	            empIds = getDirectReports(empId);
+	        }
 
-			// From usermaintenance
-			usermaintenanceRepository.findByEmpidIn(empIds)
-					.forEach(u -> empIdToName.put(u.getEmpid(), u.getFirstname()));
+	        // Fetch Master and Mod leave requests
+	        List<EmployeeLeaveMasterTbl> masterLeaveRequests =
+	                employeeLeaveMasterRepository.findByEmpidInAndEntitycreflgIn(empIds, Arrays.asList("N", "Y"));
+	        List<EmployeeLeaveModTbl> modLeaveRequests = employeeLeaveModRepository.findByEmpidIn(empIds);
 
-			// From traineemaster
-			traineemasterRepository.findByTrngidIn(empIds)
-					.forEach(t -> empIdToName.put(t.getTrngid(), t.getFirstname()));
+	        // Build empId -> name mapping
+	        Map<String, String> empIdToName = new HashMap<>();
+	        usermaintenanceRepository.findByEmpidIn(empIds)
+	                .forEach(u -> empIdToName.put(u.getEmpid(), u.getFirstname()));
+	        traineemasterRepository.findByTrngidIn(empIds)
+	                .forEach(t -> empIdToName.put(t.getTrngid(), t.getFirstname()));
 
-			// Step 4: Combine results into a single list
-			List<Map<String, Object>> combinedLeaveRequests = new ArrayList<>();
+	        // Combine results
+	        List<Map<String, Object>> combinedLeaveRequests = new ArrayList<>();
 
-			// Convert Master records
-			masterLeaveRequests.forEach(request -> {
-				Map<String, Object> leaveData = new HashMap<>();
-				leaveData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
-				leaveData.put("srlnum", request.getSrlnum());
-				leaveData.put("empid", request.getEmpid());
-				leaveData.put("leavetype", request.getLeavetype());
-				leaveData.put("startdate", request.getStartdate());
-				leaveData.put("enddate", request.getEnddate());
-				leaveData.put("teamemail", request.getTeamemail());
-				leaveData.put("leavereason", request.getLeavereason());
-				leaveData.put("status", request.getStatus());
-				leaveData.put("noofdays", request.getNoofdays());
-				leaveData.put("entitycreflg", request.getEntitycreflg());
-				leaveData.put("delflg", request.getDelflg());
-				leaveData.put("rcreuserid", request.getRcreuserid());
-				leaveData.put("rcretime", request.getRcretime());
-				leaveData.put("rmoduserid", request.getRmoduserid());
-				leaveData.put("rmodtime", request.getRmodtime());
-				leaveData.put("rvfyuserid", request.getRvfyuserid());
-				leaveData.put("rvfytime", request.getRvfytime());
-				leaveData.put("noofbooked", request.getNoofbooked());
-				combinedLeaveRequests.add(leaveData);
-			});
+	        masterLeaveRequests.forEach(request -> {
+	            Map<String, Object> leaveData = new HashMap<>();
+	            leaveData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
+	            leaveData.put("srlnum", request.getSrlnum());
+	            leaveData.put("empid", request.getEmpid());
+	            leaveData.put("leavetype", request.getLeavetype());
+	            leaveData.put("startdate", request.getStartdate());
+	            leaveData.put("enddate", request.getEnddate());
+	            leaveData.put("leavereason", request.getLeavereason());
+	            leaveData.put("status", request.getStatus());
+	            leaveData.put("entitycreflg", request.getEntitycreflg());
+	            leaveData.put("noofdays", request.getNoofdays());
+	            combinedLeaveRequests.add(leaveData);
+	        });
 
-			// Convert Mod records
-			modLeaveRequests.forEach(request -> {
-				Map<String, Object> leaveData = new HashMap<>();
-				leaveData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
-				leaveData.put("srlnum", request.getSrlnum());
-				leaveData.put("empid", request.getEmpid());
-				leaveData.put("leavetype", request.getLeavetype());
-				leaveData.put("startdate", request.getStartdate());
-				leaveData.put("enddate", request.getEnddate());
-				leaveData.put("teamemail", request.getTeamEmail());
-				leaveData.put("leavereason", request.getLeavereason());
-				leaveData.put("status", request.getStatus());
-				leaveData.put("noofdays", request.getNoofdays());
-				leaveData.put("entitycreflg", request.getEntitycreflg());
-				leaveData.put("delflg", request.getDelflg());
-				leaveData.put("rcreuserid", request.getRcreuserid());
-				leaveData.put("rcretime", request.getRcretime());
-				leaveData.put("rmoduserid", request.getRmoduserid());
-				leaveData.put("rmodtime", request.getRmodtime());
-				leaveData.put("rvfyuserid", request.getRvfyuserid());
-				leaveData.put("rvfytime", request.getRvfytime());
-				leaveData.put("noofbooked", request.getNoofbooked());
-				combinedLeaveRequests.add(leaveData);
-			});
+	        modLeaveRequests.forEach(request -> {
+	            Map<String, Object> leaveData = new HashMap<>();
+	            leaveData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
+	            leaveData.put("srlnum", request.getSrlnum());
+	            leaveData.put("empid", request.getEmpid());
+	            leaveData.put("leavetype", request.getLeavetype());
+	            leaveData.put("startdate", request.getStartdate());
+	            leaveData.put("enddate", request.getEnddate());
+	            leaveData.put("leavereason", request.getLeavereason());
+	            leaveData.put("status", request.getStatus());
+	            leaveData.put("entitycreflg", request.getEntitycreflg());
+	            leaveData.put("noofdays", request.getNoofdays());
+	            combinedLeaveRequests.add(leaveData);
+	        });
 
-			// Step 5: Prepare the response
-			Map<String, Object> response = new HashMap<>();
-			response.put("data", combinedLeaveRequests);
-			response.put("message", combinedLeaveRequests.isEmpty() ? "No data found" : "Data fetched successfully");
+	        Map<String, Object> response = new HashMap<>();
+	        response.put("data", combinedLeaveRequests);
+	        response.put("message", combinedLeaveRequests.isEmpty() ? "No data found" : "Data fetched successfully");
 
-			return ResponseEntity.ok(response);
+	        return ResponseEntity.ok(response);
 
-		} catch (Exception e) {
-			Map<String, Object> errorResponse = new HashMap<>();
-			errorResponse.put("status", "error");
-			errorResponse.put("message", e.getMessage());
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-		}
+	    } catch (Exception e) {
+	        Map<String, Object> errorResponse = new HashMap<>();
+	        errorResponse.put("status", "error");
+	        errorResponse.put("message", e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+	    }
 	}
+
 
 	@Autowired
 	private EmployeeLeaveModTblRepository employeeLeaveModRepository;
@@ -4812,148 +4827,145 @@ public class AppController {
 	}
 
 	@GetMapping("/data")
-	public ResponseEntity<?> getTimesheetData(@RequestParam int year,
-	                                          @RequestParam int month,
-	                                          @RequestParam(required = false) String repoteTo) {
+	public ResponseEntity<?> getTimesheetData(@RequestParam int year, @RequestParam int month,
+			@RequestParam(required = false) String repoteTo) {
 
-	    if (year < 2000 || month < 1 || month > 12) {
-	        Map<String, String> error = new HashMap<>();
-	        error.put("error", "Invalid year or month");
-	        return ResponseEntity.badRequest().body(error);
-	    }
+		if (year < 2000 || month < 1 || month > 12) {
+			Map<String, String> error = new HashMap<>();
+			error.put("error", "Invalid year or month");
+			return ResponseEntity.badRequest().body(error);
+		}
 
-	    List<Map<String, Object>> timesheetData = new ArrayList<>();
-	    List<usermaintenance> employees;
+		List<Map<String, Object>> timesheetData = new ArrayList<>();
+		List<usermaintenance> employees;
 
-	    // 1️⃣ Get employees based on report-to
-	    if (repoteTo == null || repoteTo.trim().isEmpty()) {
-	        employees = usermaintenanceRepository.findAll();
-	    } else {
-	        employees = usermaintenanceRepository.findByRepoteTo(repoteTo);
-	        Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpid1(repoteTo);
-	        managerOpt.ifPresent(employees::add);
-	    }
+		// 1️⃣ Get employees based on report-to
+		if (repoteTo == null || repoteTo.trim().isEmpty()) {
+			employees = usermaintenanceRepository.findAll();
+		} else {
+			employees = usermaintenanceRepository.findByRepoteTo(repoteTo);
+			Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpid1(repoteTo);
+			managerOpt.ifPresent(employees::add);
+		}
 
-	    if (employees.isEmpty()) {
-	        Map<String, String> error = new HashMap<>();
-	        error.put("error", "No employees found" + (repoteTo != null ? " for " + repoteTo : ""));
-	        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
-	    }
+		if (employees.isEmpty()) {
+			Map<String, String> error = new HashMap<>();
+			error.put("error", "No employees found" + (repoteTo != null ? " for " + repoteTo : ""));
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+		}
 
-	    // 2️⃣ Date range: 27th of previous month → 26th of current month
-	    Calendar startCal = Calendar.getInstance();
-	    startCal.set(year, month - 2, 27, 0, 0, 0);
-	    startCal.set(Calendar.MILLISECOND, 0);
-	    Date startDate = startCal.getTime();
+		// 2️⃣ Date range: 27th of previous month → 26th of current month
+		Calendar startCal = Calendar.getInstance();
+		startCal.set(year, month - 2, 27, 0, 0, 0);
+		startCal.set(Calendar.MILLISECOND, 0);
+		Date startDate = startCal.getTime();
 
-	    Calendar endCal = Calendar.getInstance();
-	    endCal.set(year, month - 1, 26, 0, 0, 0);
-	    endCal.set(Calendar.MILLISECOND, 0);
-	    Date endDate = endCal.getTime();
+		Calendar endCal = Calendar.getInstance();
+		endCal.set(year, month - 1, 26, 0, 0, 0);
+		endCal.set(Calendar.MILLISECOND, 0);
+		Date endDate = endCal.getTime();
 
-	    Calendar today = Calendar.getInstance();
-	    today.set(Calendar.HOUR_OF_DAY, 0);
-	    today.set(Calendar.MINUTE, 0);
-	    today.set(Calendar.SECOND, 0);
-	    today.set(Calendar.MILLISECOND, 0);
-	    Date attendanceEndDate = endDate.after(today.getTime()) ? today.getTime() : endDate;
+		Calendar today = Calendar.getInstance();
+		today.set(Calendar.HOUR_OF_DAY, 0);
+		today.set(Calendar.MINUTE, 0);
+		today.set(Calendar.SECOND, 0);
+		today.set(Calendar.MILLISECOND, 0);
+		Date attendanceEndDate = endDate.after(today.getTime()) ? today.getTime() : endDate;
 
-	    // 3️⃣ Week-offs & Holidays setup
-	    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-	    dateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
+		// 3️⃣ Week-offs & Holidays setup
+		SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+		dateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
 
-	    List<Date> weekOffDays = calculateWeekOffsForPreviousAndCurrentMonth(year, month);
-	    Set<String> weekOffSet = weekOffDays.stream().map(d -> dateFormat.format(d)).collect(Collectors.toSet());
+		List<Date> weekOffDays = calculateWeekOffsForPreviousAndCurrentMonth(year, month);
+		Set<String> weekOffSet = weekOffDays.stream().map(d -> dateFormat.format(d)).collect(Collectors.toSet());
 
-	    List<WsslCalendarMod> holidays = wsslCalendarModRepository.findByEventDateBetween(startDate, endDate);
-	    Map<String, WsslCalendarMod> holidayMap = new HashMap<>();
-	    for (WsslCalendarMod holiday : holidays) {
-	        holidayMap.put(dateFormat.format(holiday.getEventDate()), holiday);
-	    }
+		List<WsslCalendarMod> holidays = wsslCalendarModRepository.findByEventDateBetween(startDate, endDate);
+		Map<String, WsslCalendarMod> holidayMap = new HashMap<>();
+		for (WsslCalendarMod holiday : holidays) {
+			holidayMap.put(dateFormat.format(holiday.getEventDate()), holiday);
+		}
 
-	    int effectiveWorkingDays = calculateEffectiveWorkingDays(year, month);
-	    int sno = 1;
+		int effectiveWorkingDays = calculateEffectiveWorkingDays(year, month);
+		int sno = 1;
 
-	    // 4️⃣ Loop through employees
-	    for (usermaintenance emp : employees) {
-	        Map<String, Object> data = new HashMap<>();
-	        data.put("sno", sno++);
-	        data.put("employeeId", emp.getEmpid());
-	        data.put("members", emp.getFirstname() + " " + emp.getLastname());
-	        data.put("effectiveWorkingDays", effectiveWorkingDays);
+		// 4️⃣ Loop through employees
+		for (usermaintenance emp : employees) {
+			Map<String, Object> data = new HashMap<>();
+			data.put("sno", sno++);
+			data.put("employeeId", emp.getEmpid());
+			data.put("members", emp.getFirstname() + " " + emp.getLastname());
+			data.put("effectiveWorkingDays", effectiveWorkingDays);
 
-	        // Attendance records
-	        List<UserMasterAttendanceMod> attendanceRecords =
-	                usermasterattendancemodrepository.findByAttendanceidAndDateRange(
-	                        emp.getEmpid(), startDate, attendanceEndDate);
+			// Attendance records
+			List<UserMasterAttendanceMod> attendanceRecords = usermasterattendancemodrepository
+					.findByAttendanceidAndDateRange(emp.getEmpid(), startDate, attendanceEndDate);
 
-	        Map<String, String> attendanceMap = new HashMap<>();
-	        for (UserMasterAttendanceMod record : attendanceRecords) {
-	            attendanceMap.put(dateFormat.format(record.getAttendancedate()), record.getStatus());
-	        }
+			Map<String, String> attendanceMap = new HashMap<>();
+			for (UserMasterAttendanceMod record : attendanceRecords) {
+				attendanceMap.put(dateFormat.format(record.getAttendancedate()), record.getStatus());
+			}
 
-	        int present = 0, absent = 0, missPunch = 0;
-	        List<Map<String, String>> holidaysList = new ArrayList<>();
+			int present = 0, absent = 0, missPunch = 0;
+			List<Map<String, String>> holidaysList = new ArrayList<>();
 
-	        Calendar loopCal = (Calendar) startCal.clone();
-	        while (!loopCal.getTime().after(attendanceEndDate)) {
-	            Date currentDate = loopCal.getTime();
-	            String dateStr = dateFormat.format(currentDate);
+			Calendar loopCal = (Calendar) startCal.clone();
+			while (!loopCal.getTime().after(attendanceEndDate)) {
+				Date currentDate = loopCal.getTime();
+				String dateStr = dateFormat.format(currentDate);
 
-	            // ✅ Skip holidays and week-offs
-	            if (holidayMap.containsKey(dateStr)) {
-	                WsslCalendarMod holiday = holidayMap.get(dateStr);
-	                if (holiday != null) {
-	                    Map<String, String> holidayInfo = new HashMap<>();
-	                    holidayInfo.put("date", dateStr);
-	                    holidayInfo.put("name", holiday.getEventName());
-	                    holidaysList.add(holidayInfo);
-	                }
-	                loopCal.add(Calendar.DAY_OF_MONTH, 1);
-	                continue;
-	            }
+				// ✅ Skip holidays and week-offs
+				if (holidayMap.containsKey(dateStr)) {
+					WsslCalendarMod holiday = holidayMap.get(dateStr);
+					if (holiday != null) {
+						Map<String, String> holidayInfo = new HashMap<>();
+						holidayInfo.put("date", dateStr);
+						holidayInfo.put("name", holiday.getEventName());
+						holidaysList.add(holidayInfo);
+					}
+					loopCal.add(Calendar.DAY_OF_MONTH, 1);
+					continue;
+				}
 
-	            if (weekOffSet.contains(dateStr)) {
-	                loopCal.add(Calendar.DAY_OF_MONTH, 1);
-	                continue;
-	            }
+				if (weekOffSet.contains(dateStr)) {
+					loopCal.add(Calendar.DAY_OF_MONTH, 1);
+					continue;
+				}
 
-	            String status = attendanceMap.get(dateStr);
-	            if (status == null || status.trim().isEmpty()) {
-	                missPunch++;
-	            } else {
-	                status = status.trim().toLowerCase();
-	                switch (status) {
-	                    case "present":
-	                        present++;
-	                        break;
-	                    case "absent":
-	                        absent++;
-	                        break;
-	                    case "miss punch":
-	                        missPunch++;
-	                        break;
-	                    default:
-	                        absent++;
-	                        break;
-	                }
-	            }
+				String status = attendanceMap.get(dateStr);
+				if (status == null || status.trim().isEmpty()) {
+					missPunch++;
+				} else {
+					status = status.trim().toLowerCase();
+					switch (status) {
+					case "present":
+						present++;
+						break;
+					case "absent":
+						absent++;
+						break;
+					case "miss punch":
+						missPunch++;
+						break;
+					default:
+						absent++;
+						break;
+					}
+				}
 
-	            loopCal.add(Calendar.DAY_OF_MONTH, 1);
-	        }
+				loopCal.add(Calendar.DAY_OF_MONTH, 1);
+			}
 
-	        // Add results
-	        data.put("present", present);
-	        data.put("absent", absent);
-	        data.put("missPunch", missPunch);
-	        data.put("holidays", holidaysList);
-	        data.put("totalHolidays", holidaysList.size());
-	        timesheetData.add(data);
-	    }
+			// Add results
+			data.put("present", present);
+			data.put("absent", absent);
+			data.put("missPunch", missPunch);
+			data.put("holidays", holidaysList);
+			data.put("totalHolidays", holidaysList.size());
+			timesheetData.add(data);
+		}
 
-	    return ResponseEntity.ok(timesheetData);
+		return ResponseEntity.ok(timesheetData);
 	}
-
 
 	@GetMapping("/events/{employeeId}")
 	public ResponseEntity<?> getAttendanceEvents(@PathVariable String employeeId,
@@ -5873,52 +5885,53 @@ public class AppController {
 
 	@GetMapping("/employees/reporting-to/{managerEmpId}")
 	public ResponseEntity<?> getReportingEmployees(@PathVariable String managerEmpId) {
-	    try {
-	        // Fetch the user's details to check their role and reportTo
-	        Optional<usermaintenance> userOptional = usermaintenanceRepository.findByEmpid1(managerEmpId);
-	        if (!userOptional.isPresent()) {
-	            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-	                    .body("Employee with ID " + managerEmpId + " not found");
-	        }
+		try {
+			// Fetch the user's details to check their role and reportTo
+			Optional<usermaintenance> userOptional = usermaintenanceRepository.findByEmpid1(managerEmpId);
+			if (!userOptional.isPresent()) {
+				return ResponseEntity.status(HttpStatus.NOT_FOUND)
+						.body("Employee with ID " + managerEmpId + " not found");
+			}
 
-	        usermaintenance user = userOptional.get();
-	        // Fetch the user's role details
-	       Optional<UserRoleMaintenance> role = userRoleMaintenanceRepository.findByRoleid(user.getRoleid());
-	        if (role != null && "HR".equalsIgnoreCase(role.get().getRolename())) {
-	            // HR Manager with null reportTo: fetch all employees
-	            List<usermaintenance> allEmployees = usermaintenanceRepository.findAll();
-	            return ResponseEntity.ok(allEmployees);
-	        }
+			usermaintenance user = userOptional.get();
+			// Fetch the user's role details
+			Optional<UserRoleMaintenance> role = userRoleMaintenanceRepository.findByRoleid(user.getRoleid());
+			if (role != null && "HR".equalsIgnoreCase(role.get().getRolename())) {
+				// HR Manager with null reportTo: fetch all employees
+				List<usermaintenance> allEmployees = usermaintenanceRepository.findAll();
+				return ResponseEntity.ok(allEmployees);
+			}
 
-	        // Non-HR Manager or HR Manager with non-null reportTo: use hierarchy logic
-	        Set<String> allEmpIds = new HashSet<>();
-	        Deque<String> queue = new ArrayDeque<>();
-	        queue.add(managerEmpId); // Start with manager
-	        allEmpIds.add(managerEmpId); // Include manager in results
+			// Non-HR Manager or HR Manager with non-null reportTo: use hierarchy logic
+			Set<String> allEmpIds = new HashSet<>();
+			Deque<String> queue = new ArrayDeque<>();
+			queue.add(managerEmpId); // Start with manager
+			allEmpIds.add(managerEmpId); // Include manager in results
 
-	        while (!queue.isEmpty()) {
-	            String currentEmpId = queue.poll();
+			while (!queue.isEmpty()) {
+				String currentEmpId = queue.poll();
 
-	            // Get direct reports of current employee
-	            List<usermaintenance> directReports = usermaintenanceRepository.findByRepoteTo(currentEmpId);
+				// Get direct reports of current employee
+				List<usermaintenance> directReports = usermaintenanceRepository.findByRepoteTo(currentEmpId);
 
-	            for (usermaintenance emp : directReports) {
-	                if (allEmpIds.add(emp.getEmpid())) { // Add if not already added
-	                    queue.add(emp.getEmpid()); // Enqueue for further traversal
-	                }
-	            }
-	        }
+				for (usermaintenance emp : directReports) {
+					if (allEmpIds.add(emp.getEmpid())) { // Add if not already added
+						queue.add(emp.getEmpid()); // Enqueue for further traversal
+					}
+				}
+			}
 
-	        // Fetch user details for all employees in the hierarchy (including manager)
-	        List<usermaintenance> employees = usermaintenanceRepository.findByEmpidIn(new ArrayList<>(allEmpIds));
-	        return ResponseEntity.ok(employees);
+			// Fetch user details for all employees in the hierarchy (including manager)
+			List<usermaintenance> employees = usermaintenanceRepository.findByEmpidIn(new ArrayList<>(allEmpIds));
+			return ResponseEntity.ok(employees);
 
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-	                .body("Error fetching reporting employees: " + e.getMessage());
-	    }
+		} catch (Exception e) {
+			e.printStackTrace();
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body("Error fetching reporting employees: " + e.getMessage());
+		}
 	}
+
 	@PutMapping("/project/{id}")
 	public EmployeeProjectHistory updateProject(@PathVariable Long id, @RequestBody EmployeeProjectHistory project) {
 
