@@ -2003,127 +2003,161 @@ public class AppController {
 
 	@PutMapping("/updateEntityFlag")
 	public ResponseEntity<?> updateEntityFlag(@RequestParam(name = "empid", required = false) String empid,
-			@RequestParam(name = "srlnum", required = false) Long srlnum) {
-		try {
-			System.out.println("Approved: " + srlnum);
+	                                          @RequestParam(name = "srlnum", required = false) Long srlnum) {
+	    try {
+	        System.out.println("Approved: " + srlnum);
 
-			// Retrieve entity by empid and leavereason
-			EmployeeLeaveMasterTbl entity = employeeLeaveMasterRepository.findByEmpidAndSrlnum(empid, srlnum);
-			if (entity == null) {
-				Map<String, String> errorResponse = new HashMap<>();
-				errorResponse.put("status", "failure");
-				errorResponse.put("message", "Employee not found");
-				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
-			}
+	        // Retrieve entity by empid and srlnum
+	        EmployeeLeaveMasterTbl entity = employeeLeaveMasterRepository.findByEmpidAndSrlnum(empid, srlnum);
+	        if (entity == null) {
+	            Map<String, String> errorResponse = new HashMap<>();
+	            errorResponse.put("status", "failure");
+	            errorResponse.put("message", "Employee not found");
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+	        }
 
-			updateConsolidatedLeave(entity);
+	        updateConsolidatedLeave(entity);
 
-			// Update flag and status
-			entity.setEntitycreflg("Y");
-			entity.setStatus("Approved");
-			employeeLeaveMasterRepository.save(entity);
+	        // Update flag and status
+	        entity.setEntitycreflg("Y");
+	        entity.setStatus("Approved");
+	        employeeLeaveMasterRepository.save(entity);
 
-			// ✅ Insert "Absent" attendance records during leave period
-			Date startDate = entity.getStartdate();
-			Date endDate = entity.getEnddate();
-			Calendar calendar = Calendar.getInstance();
-			calendar.setTime(startDate);
+	        // ✅ Insert "Absent" attendance records during leave period
+	        Date startDate = entity.getStartdate();
+	        Date endDate = entity.getEnddate();
+	        Calendar calendar = Calendar.getInstance();
+	        calendar.setTime(startDate);
 
-			while (!calendar.getTime().after(endDate)) {
-				Date currentDate = calendar.getTime();
+	        while (!calendar.getTime().after(endDate)) {
+	            Date currentDate = calendar.getTime();
 
-				Optional<UserMasterAttendanceMod> existingAttendance = usermasterattendancemodrepository
-						.findByAttendanceidAndAttendancedate(empid, currentDate);
+	            Optional<UserMasterAttendanceMod> existingAttendance = usermasterattendancemodrepository
+	                    .findByAttendanceidAndAttendancedate(empid, currentDate);
 
-				Date defaultCheckin = combineDateTime(currentDate, 0, 0);
-				Date defaultCheckout = combineDateTime(currentDate, 0, 0);
+	            Date defaultCheckin = combineDateTime(currentDate, 0, 0);
+	            Date defaultCheckout = combineDateTime(currentDate, 0, 0);
 
-				if (existingAttendance.isPresent()) {
-					UserMasterAttendanceMod attendance = existingAttendance.get();
-					attendance.setStatus("Absent");
-					attendance.setRmoduserid("System");
-					attendance.setRmodtime(new Date());
-					usermasterattendancemodrepository.save(attendance);
-				} else {
-					UserMasterAttendanceMod newAttendance = new UserMasterAttendanceMod();
-					newAttendance.setAttendanceid(empid);
-					newAttendance.setUserid("2019" + empid);
-					newAttendance.setAttendancedate(currentDate);
-					newAttendance.setCheckintime(defaultCheckin);
-					newAttendance.setCheckouttime(defaultCheckout);
-					newAttendance.setStatus("Absent");
-					newAttendance.setRcreuserid("System");
-					newAttendance.setRcretime(new Date());
-					usermasterattendancemodrepository.save(newAttendance);
-				}
+	            if (existingAttendance.isPresent()) {
+	                UserMasterAttendanceMod attendance = existingAttendance.get();
+	                attendance.setStatus("Absent");
+	                attendance.setRmoduserid("System");
+	                attendance.setRmodtime(new Date());
+	                usermasterattendancemodrepository.save(attendance);
+	            } else {
+	                UserMasterAttendanceMod newAttendance = new UserMasterAttendanceMod();
+	                newAttendance.setAttendanceid(empid);
+	                newAttendance.setUserid("2019" + empid);
+	                newAttendance.setAttendancedate(currentDate);
+	                newAttendance.setCheckintime(defaultCheckin);
+	                newAttendance.setCheckouttime(defaultCheckout);
+	                newAttendance.setStatus("Absent");
+	                newAttendance.setRcreuserid("System");
+	                newAttendance.setRcretime(new Date());
+	                usermasterattendancemodrepository.save(newAttendance);
+	            }
 
-				calendar.add(Calendar.DATE, 1); // next day
-			}
+	            calendar.add(Calendar.DATE, 1); // next day
+	        }
 
-			// Copy entity to mod table
-			EmployeeLeaveModTbl modEntity = new EmployeeLeaveModTbl();
-			modEntity.setSrlnum(entity.getSrlnum());
-			modEntity.setEmpid(entity.getEmpid());
-			modEntity.setLeavetype(entity.getLeavetype());
-			modEntity.setStartdate(entity.getStartdate());
-			modEntity.setEnddate(entity.getEnddate());
-			modEntity.setTeamEmail(entity.getTeamemail());
-			modEntity.setLeavereason(entity.getLeavereason());
-			modEntity.setStatus(entity.getStatus());
-			modEntity.setNoofdays(entity.getNoofdays());
-			modEntity.setEntitycreflg(entity.getEntitycreflg());
-			modEntity.setDelflg(entity.getDelflg());
-			modEntity.setRcreuserid(entity.getRcreuserid());
-			modEntity.setRcretime(entity.getRcretime());
-			modEntity.setRmoduserid(entity.getRmoduserid());
-			modEntity.setRmodtime(entity.getRmodtime());
-			modEntity.setRvfyuserid(entity.getRvfyuserid());
-			modEntity.setRvfytime(entity.getRvfytime());
-			modEntity.setNoofbooked(entity.getNoofdays());
+	        // Copy entity to mod table
+	        EmployeeLeaveModTbl modEntity = new EmployeeLeaveModTbl();
+	        modEntity.setSrlnum(entity.getSrlnum());
+	        modEntity.setEmpid(entity.getEmpid());
+	        modEntity.setLeavetype(entity.getLeavetype());
+	        modEntity.setStartdate(entity.getStartdate());
+	        modEntity.setEnddate(entity.getEnddate());
+	        modEntity.setTeamEmail(entity.getTeamemail());
+	        modEntity.setLeavereason(entity.getLeavereason());
+	        modEntity.setStatus(entity.getStatus());
+	        modEntity.setNoofdays(entity.getNoofdays());
+	        modEntity.setEntitycreflg(entity.getEntitycreflg());
+	        modEntity.setDelflg(entity.getDelflg());
+	        modEntity.setRcreuserid(entity.getRcreuserid());
+	        modEntity.setRcretime(entity.getRcretime());
+	        modEntity.setRmoduserid(entity.getRmoduserid());
+	        modEntity.setRmodtime(entity.getRmodtime());
+	        modEntity.setRvfyuserid(entity.getRvfyuserid());
+	        modEntity.setRvfytime(entity.getRvfytime());
+	        modEntity.setNoofbooked(entity.getNoofdays());
 
-			employeeLeaveModRepository.save(modEntity);
+	        employeeLeaveModRepository.save(modEntity);
 
-			// Delete record from master table
-			employeeLeaveMasterRepository.delete(entity);
+	        // Delete record from master table
+	        employeeLeaveMasterRepository.delete(entity);
 
-			// Send email
-			try {
-				usermaintenance existingEmployee = usermaintenanceRepository.findByEmpIdOrUserId(empid)
-						.orElseThrow(() -> new RuntimeException("Employee not found"));
-				String employeeEmail = existingEmployee.getEmailid();
+	        // Send email to employee (regular or trainee)
+	        try {
+	            boolean emailSent = false;
 
-				String managerId = existingEmployee.getRepoteTo();
-				usermaintenance manager = usermaintenanceRepository.findByEmpIdOrUserId(managerId)
-						.orElseThrow(() -> new RuntimeException("Manager not found"));
+	            // 1️⃣ Check usermaintenance
+	            Optional<usermaintenance> existingEmployeeOpt = usermaintenanceRepository.findByEmpIdOrUserId(empid);
+	            if (existingEmployeeOpt.isPresent()) {
+	                usermaintenance existingEmployee = existingEmployeeOpt.get();
+	                String employeeEmail = existingEmployee.getEmailid();
+	                String managerId = existingEmployee.getRepoteTo();
+	                usermaintenance manager = usermaintenanceRepository.findByEmpIdOrUserId(managerId)
+	                        .orElseThrow(() -> new RuntimeException("Manager not found"));
 
-				if (employeeEmail != null && !employeeEmail.isEmpty()) {
-					SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-					String subject = "Leave Request Approved";
-					String body = String.format(
-							"Dear %s,\n\nYour leave request for %s from %s to %s has been approved by your manager, %s.\n\nRegards,\n%s,\nWhitestone Software Solution Pvt Ltd",
-							existingEmployee.getFirstname(), entity.getLeavetype(), sdf.format(entity.getStartdate()),
-							sdf.format(entity.getEnddate()), manager.getFirstname(), manager.getFirstname());
-					emailService.sendLeaveEmail(manager.getEmailid(), employeeEmail, subject, body);
-				}
-			} catch (Exception e) {
-				e.printStackTrace(); // log error
-			}
+	                if (employeeEmail != null && !employeeEmail.isEmpty()) {
+	                    sendLeaveApprovalEmail(existingEmployee.getFirstname(), employeeEmail,
+	                            manager.getFirstname(), manager.getEmailid(),
+	                            entity.getLeavetype(), entity.getStartdate(), entity.getEnddate());
+	                    emailSent = true;
+	                }
+	            }
 
-			// Return success response
-			Map<String, Object> successResponse = new HashMap<>();
-			successResponse.put("status", "success");
-			successResponse.put("message",
-					"Entity flag updated, Absent marked in attendance, record copied to mod table, and deleted from master");
-			successResponse.put("empid", empid);
-			return ResponseEntity.ok(successResponse);
+	            // 2️⃣ If not found in usermaintenance, check TraineeMaster
+	            if (!emailSent) {
+	                Optional<TraineeMaster> traineeOpt = traineemasterRepository.findByTrngidOrUserId(empid);
+	                if (traineeOpt.isPresent()) {
+	                    TraineeMaster trainee = traineeOpt.get();
+	                    String traineeEmail = trainee.getEmailid();
+	                    String managerId = trainee.getRepoteTo();
+	                    TraineeMaster manager = traineemasterRepository.findByTrngidOrUserId(managerId)
+	                            .orElseThrow(() -> new RuntimeException("Manager not found"));
 
-		} catch (Exception e) {
-			Map<String, String> errorResponse = new HashMap<>();
-			errorResponse.put("status", "error");
-			errorResponse.put("message", e.getMessage());
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-		}
+	                    if (traineeEmail != null && !traineeEmail.isEmpty()) {
+	                        sendLeaveApprovalEmail(trainee.getFirstname(), traineeEmail,
+	                                manager.getFirstname(), manager.getEmailid(),
+	                                entity.getLeavetype(), entity.getStartdate(), entity.getEnddate());
+	                    }
+	                }
+	            }
+
+	        } catch (Exception e) {
+	            e.printStackTrace(); // log error
+	        }
+
+	        // Return success response
+	        Map<String, Object> successResponse = new HashMap<>();
+	        successResponse.put("status", "success");
+	        successResponse.put("message",
+	                "Entity flag updated, Absent marked in attendance, record copied to mod table, and deleted from master");
+	        successResponse.put("empid", empid);
+	        return ResponseEntity.ok(successResponse);
+
+	    } catch (Exception e) {
+	        Map<String, String> errorResponse = new HashMap<>();
+	        errorResponse.put("status", "error");
+	        errorResponse.put("message", e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+	    }
 	}
+
+	// Helper method to send email
+	private void sendLeaveApprovalEmail(String employeeName, String employeeEmail,
+	                                    String managerName, String managerEmail,
+	                                    String leaveType, Date startDate, Date endDate) {
+	    SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+	    String subject = "Leave Request Approved";
+	    String body = String.format(
+	        "Dear %s,\n\nYour leave request for %s from %s to %s has been approved by your manager, %s.\n\nRegards,\n%s,\nWhitestone Software Solution Pvt Ltd",
+	        employeeName, leaveType, sdf.format(startDate), sdf.format(endDate), managerName, managerName
+	    );
+	    emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
+	}
+
 
 //	@PutMapping("/updateEntityFlag")
 //	public ResponseEntity<?> updateEntityFlag(@RequestParam(name = "empid", required = false) String empid,
@@ -5963,25 +5997,121 @@ public class AppController {
 
 	@PutMapping("/employees/{empid}")
 	public ResponseEntity<usermaintenance> updateEmployee(@PathVariable String empid,
-			@RequestBody usermaintenance updatedUser) {
+	                                                      @RequestBody usermaintenance updatedUser) {
 
-		usermaintenance existingUser = usermaintenanceRepository.findByEmpid(empid);
+	    usermaintenance existingUser = usermaintenanceRepository.findByEmpid(empid);
+	    if (existingUser == null) {
+	        return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+	    }
 
-		// update fields
-		// existingUser.setPassword(passwordEncoder.encode(updatedUser.getPassword()));
-		existingUser.setUsername(updatedUser.getUsername());
-		existingUser.setFirstname(updatedUser.getFirstname());
-		existingUser.setLastname(updatedUser.getLastname());
-		existingUser.setEmailid(updatedUser.getEmailid());
-		existingUser.setPhonenumber(updatedUser.getPhonenumber());
-		existingUser.setRoleid(updatedUser.getRoleid());
-		existingUser.setRepoteTo(updatedUser.getRepoteTo());
-		existingUser.setEmpType(updatedUser.getEmpType());
-		existingUser.setStatus(updatedUser.getStatus());
-		existingUser.setRmodtime(new Date());
+	    // update fields
+	    existingUser.setUsername(updatedUser.getUsername());
+	    existingUser.setFirstname(updatedUser.getFirstname());
+	    existingUser.setLastname(updatedUser.getLastname());
+	    existingUser.setEmailid(updatedUser.getEmailid());
+	    existingUser.setPhonenumber(updatedUser.getPhonenumber());
+	    existingUser.setRoleid(updatedUser.getRoleid());
+	    existingUser.setRepoteTo(updatedUser.getRepoteTo());
+	    existingUser.setEmpType(updatedUser.getEmpType());
+	    existingUser.setStatus(updatedUser.getStatus());
+	    existingUser.setRmodtime(new Date());
 
-		usermaintenance savedUser = usermaintenanceRepository.save(existingUser);
-		return ResponseEntity.ok(savedUser);
+	    usermaintenance savedUser = usermaintenanceRepository.save(existingUser);
+
+	    // ====================== Send Email on Update ======================
+	    try {
+	        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+	        String subjectUser = "Your Profile Has Been Updated";
+	        String bodyUser = String.format("Dear %s,\n\nYour profile has been updated on %s.\n\n"
+	                        + "Updated Details:\n" 
+	                        + "Username: %s\nEmail: %s\nPhone: %s\nRole: %s\nStatus: %s\n\n"
+	                        + "Best Regards,\nWhitestone Software Solutions Pvt Ltd",
+	                savedUser.getFirstname(),
+	                sdf.format(new Date()),
+	                savedUser.getUsername(),
+	                savedUser.getEmailid(),
+	                savedUser.getPhonenumber(),
+	                savedUser.getRoleid(),
+	                savedUser.getStatus());
+	        emailService.sendLeaveEmail("noreply@whitestonesoftware.in", savedUser.getEmailid(), subjectUser, bodyUser);
+
+	        // Email to Manager if repoteTo is set
+	        if (savedUser.getRepoteTo() != null) {
+	            Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpid1(savedUser.getRepoteTo());
+	            if (managerOpt.isPresent()) {
+	                usermaintenance manager = managerOpt.get();
+	                String subjectManager = "Employee Profile Updated";
+	                String bodyManager = String.format("Dear %s,\n\nThe profile of your reporting employee %s (EmpID: %s) has been updated on %s.\n\n"
+	                                + "Please review and guide if needed.\n\nBest Regards,\nWhitestone Software Solutions Pvt Ltd",
+	                        manager.getFirstname(),
+	                        savedUser.getFirstname(),
+	                        savedUser.getEmpid(),
+	                        sdf.format(new Date()));
+	                emailService.sendLeaveEmail("noreply@whitestonesoftware.in", manager.getEmailid(), subjectManager, bodyManager);
+	            }
+	        }
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	    }
+
+	    return ResponseEntity.ok(savedUser);
+	}
+
+
+	@PutMapping("/trainees/{trngid}")
+	public ResponseEntity<TraineeMaster> updateTrainee(@PathVariable String trngid,
+	                                                   @RequestBody TraineeMaster updatedTrainee) {
+
+	    TraineeMaster existingTrainee = traineemasterRepository.findByTrngidOrUserId(trngid)
+	            .orElseThrow(() -> new RuntimeException("Trainee not found"));
+
+	    // update fields
+	    existingTrainee.setFirstname(updatedTrainee.getUsername());
+	    existingTrainee.setEmailid(updatedTrainee.getEmailid());
+	    existingTrainee.setPhonenumber(updatedTrainee.getPhonenumber());
+	    existingTrainee.setRoleid(updatedTrainee.getRoleid());
+	    existingTrainee.setEmpType(updatedTrainee.getEmpType());
+	    existingTrainee.setStatus(updatedTrainee.getStatus());
+	    existingTrainee.setRmodtime(new Date());
+
+	    TraineeMaster savedTrainee = traineemasterRepository.save(existingTrainee);
+
+	    // ====================== Send Email on Update ======================
+	    try {
+	        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+	        String subjectUser = "Your Trainee Profile Has Been Updated";
+	        String bodyUser = String.format("Dear %s,\n\nYour trainee profile has been updated on %s.\n\n"
+	                        + "Updated Details:\n"
+	                        + "Email: %s\nPhone: %s\nRole: %s\nStatus: %s\n\n"
+	                        + "Best Regards,\nWhitestone Software Solutions Pvt Ltd",
+	                savedTrainee.getFirstname(),
+	                sdf.format(new Date()),
+	                savedTrainee.getEmailid(),
+	                savedTrainee.getPhonenumber(),
+	                savedTrainee.getRoleid(),
+	                savedTrainee.getStatus());
+	        emailService.sendLeaveEmail("noreply@whitestonesoftware.in", savedTrainee.getEmailid(), subjectUser, bodyUser);
+
+	        // Email to Manager if repoteTo is set
+	        if (savedTrainee.getRepoteTo() != null) {
+	            TraineeMaster manager = traineemasterRepository.findByTrngidOrUserId(savedTrainee.getRepoteTo())
+	                    .orElseThrow(() -> new RuntimeException("Manager not found"));
+	            String subjectManager = "Trainee Profile Updated";
+	            String bodyManager = String.format("Dear %s,\n\nThe profile of your trainee %s (TraineeID: %s) has been updated on %s.\n\n"
+	                            + "Please review and guide if needed.\n\nBest Regards,\nWhitestone Software Solutions Pvt Ltd",
+	                    manager.getFirstname(),
+	                    savedTrainee.getFirstname(),
+	                    savedTrainee.getTrngid(),
+	                    sdf.format(new Date()));
+	            emailService.sendLeaveEmail("noreply@whitestonesoftware.in", manager.getEmailid(), subjectManager, bodyManager);
+	        }
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	    }
+
+	    return ResponseEntity.ok(savedTrainee);
 	}
 
 	@GetMapping("/trainees/{trngid}")
@@ -5991,25 +6121,25 @@ public class AppController {
 		return ResponseEntity.ok(trainee);
 	}
 
-	@PutMapping("/trainees/{trngid}")
-	public ResponseEntity<TraineeMaster> updateTrainee(@PathVariable String trngid,
-			@RequestBody TraineeMaster updatedTrainee) {
-
-		TraineeMaster existingTrainee = traineemasterRepository.findByTrngidOrUserId(trngid)
-				.orElseThrow(() -> new RuntimeException("Trainee not found"));
-		// update fields
-		// existingTrainee.setPassword(passwordEncoder.encode(updatedTrainee.getPassword()));
-		existingTrainee.setFirstname(updatedTrainee.getUsername());
-		existingTrainee.setEmailid(updatedTrainee.getEmailid());
-		existingTrainee.setPhonenumber(updatedTrainee.getPhonenumber());
-		existingTrainee.setRoleid(updatedTrainee.getRoleid());
-		existingTrainee.setEmpType(updatedTrainee.getEmpType());
-		existingTrainee.setStatus(updatedTrainee.getStatus());
-		existingTrainee.setRmodtime(new Date());
-
-		TraineeMaster savedTrainee = traineemasterRepository.save(existingTrainee);
-		return ResponseEntity.ok(savedTrainee);
-	}
+//	@PutMapping("/trainees/{trngid}")
+//	public ResponseEntity<TraineeMaster> updateTrainee(@PathVariable String trngid,
+//			@RequestBody TraineeMaster updatedTrainee) {
+//
+//		TraineeMaster existingTrainee = traineemasterRepository.findByTrngidOrUserId(trngid)
+//				.orElseThrow(() -> new RuntimeException("Trainee not found"));
+//		// update fields
+//		// existingTrainee.setPassword(passwordEncoder.encode(updatedTrainee.getPassword()));
+//		existingTrainee.setFirstname(updatedTrainee.getUsername());
+//		existingTrainee.setEmailid(updatedTrainee.getEmailid());
+//		existingTrainee.setPhonenumber(updatedTrainee.getPhonenumber());
+//		existingTrainee.setRoleid(updatedTrainee.getRoleid());
+//		existingTrainee.setEmpType(updatedTrainee.getEmpType());
+//		existingTrainee.setStatus(updatedTrainee.getStatus());
+//		existingTrainee.setRmodtime(new Date());
+//
+//		TraineeMaster savedTrainee = traineemasterRepository.save(existingTrainee);
+//		return ResponseEntity.ok(savedTrainee);
+//	}
 
 	// ================= Employee Save =================
 	@PostMapping("/usermaintenance-save")
@@ -6092,33 +6222,86 @@ public class AppController {
 	// ================= Trainee Save =================
 	@PostMapping("/trng-save")
 	public ResponseEntity<?> saveTrainee(@RequestBody TraineeMaster user) {
-		// check duplicate trngid
-		boolean exists = traineemasterRepository.existsByTrngid(user.getTrngid());
-		if (exists) {
-			return ResponseEntity.badRequest().body("Trainee ID already exists!");
-		}
+	    // check duplicate trngid
+	    boolean exists = traineemasterRepository.existsByTrngid(user.getTrngid());
+	    if (exists) {
+	        return ResponseEntity.badRequest().body("Trainee ID already exists!");
+	    }
 
-		LocalDateTime now = LocalDateTime.now();
-		Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
-		String rawPassword = user.getPassword();
-		user.setRepoteTo(user.getRepoteTo());
-		user.setStatus("Active");
-		user.setPassword(passwordEncoder.encode(rawPassword));
-		user.setRcretime(nowDate);
-		user.setRmodtime(nowDate);
-		user.setRvfytime(nowDate);
-		user.setUserid("2019" + user.getTrngid());
-		user.setDisablefromdate(nowDate);
-		user.setEmpType(user.getEmpType());
+	    LocalDateTime now = LocalDateTime.now();
+	    Date nowDate = Date.from(now.atZone(ZoneId.systemDefault()).toInstant());
+	    String rawPassword = user.getPassword();
 
-		LocalDate disableTo = LocalDate.now().plusYears(2);
-		Date disableToDate = Date.from(disableTo.atStartOfDay(ZoneId.systemDefault()).toInstant());
-		user.setDisabletodate(disableToDate);
-		user.setLastlogin(nowDate);
+	    // Set trainee fields
+	    user.setRepoteTo(user.getRepoteTo());
+	    user.setStatus("Active");
+	    user.setPassword(passwordEncoder.encode(rawPassword));
+	    user.setRcretime(nowDate);
+	    user.setRmodtime(nowDate);
+	    user.setRvfytime(nowDate);
+	    user.setUserid("2019" + user.getTrngid());
+	    user.setDisablefromdate(nowDate);
+	    user.setEmpType(user.getEmpType());
 
-		TraineeMaster savedUser = traineemasterRepository.save(user);
-		return ResponseEntity.ok(savedUser);
+	    LocalDate disableTo = LocalDate.now().plusYears(2);
+	    Date disableToDate = Date.from(disableTo.atStartOfDay(ZoneId.systemDefault()).toInstant());
+	    user.setDisabletodate(disableToDate);
+	    user.setLastlogin(nowDate);
+
+	    // Save trainee in DB
+	    TraineeMaster savedUser = traineemasterRepository.save(user);
+
+	    // ====================== Send Emails ======================
+	    try {
+	        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+
+	        // ---------- Email to Trainee ----------
+	        String subjectUser = "Welcome to Whitestone Software Solutions - You Have Been Appointed";
+	        String bodyUser = String.format(
+	                "Dear %s,\n\nYou have been appointed as a Junior Associate at Whitestone Software Solutions Pvt Ltd on %s.\n\n"
+	                        + "Here are your login details to access the system:\n\n"
+	                        + "User ID: %s\n"
+	                        + "Trainee ID: %s\n"
+	                        + "Password: %s\n\n"
+	                        + "Please log in and change your password upon first login.\n\n"
+	                        + "Best Regards,\nWhitestone Software Solutions Pvt Ltd",
+	                savedUser.getFirstname(),
+	                sdf.format(nowDate),
+	                savedUser.getUserid(),
+	                savedUser.getTrngid(),
+	                rawPassword
+	        );
+	        emailService.sendLeaveEmail("noreply@whitestonesoftware.in", savedUser.getEmailid(), subjectUser, bodyUser);
+
+	        // ---------- Email to Manager ----------
+	        if (savedUser.getRepoteTo() != null) {
+	            TraineeMaster manager = traineemasterRepository.findByTrngidOrUserId(savedUser.getRepoteTo())
+	                    .orElseThrow(() -> new RuntimeException("Manager not found"));
+	            String subjectManager = "New Junior Associate Assigned to You";
+	            String bodyManager = String.format(
+	                    "Dear %s,\n\nA new Junior Associate has been assigned to you as their reporting manager.\n\n"
+	                            + "Trainee Details:\n"
+	                            + "Name: %s\n"
+	                            + "Trainee ID: %s\n"
+	                            + "User ID: %s\n\n"
+	                            + "Please guide and assist them as needed.\n\n"
+	                            + "Best Regards,\nWhitestone Software Solutions Pvt Ltd",
+	                    manager.getFirstname(),
+	                    savedUser.getFirstname(),
+	                    savedUser.getTrngid(),
+	                    savedUser.getUserid()
+	            );
+	            emailService.sendLeaveEmail("noreply@whitestonesoftware.in", manager.getEmailid(), subjectManager, bodyManager);
+	        }
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return ResponseEntity.ok("Trainee created successfully, but email sending failed: " + e.getMessage());
+	    }
+
+	    return ResponseEntity.ok(savedUser);
 	}
+
 
 	@GetMapping("/employees/relation/{empId}")
 	public ResponseEntity<?> getReportingRelation(@PathVariable String empId) {
