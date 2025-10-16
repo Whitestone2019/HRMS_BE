@@ -5737,71 +5737,68 @@ public class AppController {
 
 	@GetMapping("/permissionRequests/get/{empId}")
 	public ResponseEntity<Map<String, Object>> getPermissionRequestsByEmpId(@PathVariable String empId) {
-		try {
-			// Step 1: Find all employees who report to this empId
-			List<String> empIds = getDirectReports(empId); // Assumes this method includes trainees
+	    try {
+	        List<String> empIds = new ArrayList<>();
+	        boolean isHR = false;
 
-			// Print the final list of employee IDs
-			System.out.println("Fetching permission records for Employee IDs: " + empIds);
+	        // Determine if the user is HR
+	        usermaintenance user = usermaintenanceRepository.findByEmpid(empId);
+	        if (user != null) {
+	            Optional<UserRoleMaintenance> role = userRoleMaintenanceRepository.findByRoleid(user.getRoleid());
+	            if (role.isPresent() && "HR".equalsIgnoreCase(role.get().getRolename())) {
+	                isHR = true;
+	            }
+	        }
 
-			// Step 2: Fetch records from Master table where entitycreflg = 'N' or 'Y'
-			List<EmployeePermissionMasterTbl> masterPermissionRequests = employeePermissionMasterRepository
-					.findByEmpidInAndEntitycreflgIn(empIds, Arrays.asList("N", "Y"));
+	        if (isHR) {
+	            empIds.addAll(usermaintenanceRepository.findAll().stream().map(usermaintenance::getEmpid).toList());
+	            empIds.addAll(traineemasterRepository.findAll().stream().map(TraineeMaster::getTrngid).toList());
+	        } else {
+	            empIds = getDirectReports(empId);
+	        }
 
-			// Step 3: Build empId → name mapping
-			Map<String, String> empIdToName = new HashMap<>();
+	        // Fetch Master permission requests
+	        List<EmployeePermissionMasterTbl> masterPermissionRequests =
+	                employeePermissionMasterRepository.findByEmpidInAndEntitycreflgIn(empIds, Arrays.asList("N", "Y"));
 
-			// From usermaintenance
-			usermaintenanceRepository.findByEmpidIn(empIds)
-					.forEach(u -> empIdToName.put(u.getEmpid(), u.getFirstname()));
+	        // Build empId → name mapping
+	        Map<String, String> empIdToName = new HashMap<>();
+	        usermaintenanceRepository.findByEmpidIn(empIds).forEach(u -> empIdToName.put(u.getEmpid(), u.getFirstname()));
+	        traineemasterRepository.findByTrngidIn(empIds).forEach(t -> empIdToName.put(t.getTrngid(), t.getFirstname()));
 
-			// From traineemaster
-			traineemasterRepository.findByTrngidIn(empIds)
-					.forEach(t -> empIdToName.put(t.getTrngid(), t.getFirstname()));
+	        // Convert to response
+	        List<Map<String, Object>> combinedPermissionRequests = new ArrayList<>();
+	        masterPermissionRequests.forEach(request -> {
+	            Map<String, Object> permissionData = new HashMap<>();
+	            permissionData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
+	            permissionData.put("srlnum", request.getId());
+	            permissionData.put("empid", request.getEmpid());
+	            permissionData.put("permissiontype", "Permission");
+	            permissionData.put("startdate", request.getStartTime());
+	            permissionData.put("enddate", request.getEndTime());
+	            permissionData.put("teamemail", request.getTeamemail());
+	            permissionData.put("permissionreason", request.getReason());
+	            permissionData.put("status", request.getStatus() != null ? request.getStatus() : "Pending");
+	            permissionData.put("noofdays", request.getHours());
+	            permissionData.put("entitycreflg", request.getEntitycreflg() != null ? request.getEntitycreflg() : "N");
+	            permissionData.put("delflg", request.getDelflg() != null ? request.getDelflg() : "N");
+	            combinedPermissionRequests.add(permissionData);
+	        });
 
-			// Step 4: Convert Master records into response format
-			List<Map<String, Object>> combinedPermissionRequests = new ArrayList<>();
+	        Map<String, Object> response = new HashMap<>();
+	        response.put("data", combinedPermissionRequests);
+	        response.put("message", combinedPermissionRequests.isEmpty() ? "No data found" : "Data fetched successfully");
 
-			masterPermissionRequests.forEach(request -> {
-				Map<String, Object> permissionData = new HashMap<>();
-				permissionData.put("name", empIdToName.getOrDefault(request.getEmpid(), "N/A"));
-				permissionData.put("srlnum", request.getId()); // Map id to srlnum
-				permissionData.put("empid", request.getEmpid());
-				permissionData.put("permissiontype", "Permission"); // Static value for permissions
-				permissionData.put("startdate", request.getStartTime()); // Map startTime to startdate
-				permissionData.put("enddate", request.getEndTime()); // Map endTime to enddate
-				permissionData.put("teamemail", request.getTeamemail());
-				permissionData.put("permissionreason", request.getReason()); // Map reason to permissionreason
-				permissionData.put("status", request.getStatus() != null ? request.getStatus() : "Pending");
-				permissionData.put("noofdays", request.getHours()); // Map hours to noofdays
-				permissionData.put("entitycreflg", request.getEntitycreflg() != null ? request.getEntitycreflg() : "N");
-				permissionData.put("delflg", request.getDelflg() != null ? request.getDelflg() : "N");
-				// Optional fields (set to null for compatibility)
-				permissionData.put("rcreuserid", null);
-				permissionData.put("rcretime", null);
-				permissionData.put("rmoduserid", null);
-				permissionData.put("rmodtime", null);
-				permissionData.put("rvfyuserid", null);
-				permissionData.put("rvfytime", null);
-				permissionData.put("noofbooked", null);
-				combinedPermissionRequests.add(permissionData);
-			});
+	        return ResponseEntity.ok(response);
 
-			// Step 5: Prepare the response
-			Map<String, Object> response = new HashMap<>();
-			response.put("data", combinedPermissionRequests);
-			response.put("message",
-					combinedPermissionRequests.isEmpty() ? "No data found" : "Data fetched successfully");
-
-			return ResponseEntity.ok(response);
-
-		} catch (Exception e) {
-			Map<String, Object> errorResponse = new HashMap<>();
-			errorResponse.put("status", "error");
-			errorResponse.put("message", e.getMessage());
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-		}
+	    } catch (Exception e) {
+	        Map<String, Object> errorResponse = new HashMap<>();
+	        errorResponse.put("status", "error");
+	        errorResponse.put("message", e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+	    }
 	}
+
 
 	@GetMapping("/employeesdetails")
 	public ResponseEntity<List<usermaintenance>> getAllEmployeesDetails() {
