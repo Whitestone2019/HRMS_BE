@@ -578,10 +578,11 @@ public class AppController {
             otpCache.put(employeeId, otp);
 
             String subject = "Whitestone HRMS - Password Reset OTP";
-            String body = "<p>Dear Employee,</p>"
-                    + "<p>Your OTP for password reset is: <b>" + otp + "</b></p>"
-                    + "<p>This OTP will expire soon. Please do not share it with anyone.</p>"
-                    + "<br><p>Regards,<br>Whitestone HRMS</p>";
+            String body = "Dear Employee,\n\n" +
+                          "Your OTP for password reset is: " + otp + "\n\n" +
+                          "This OTP will expire soon. Please do not share it with anyone.\n\n" +
+                          "Regards,\n" +
+                          "Whitestone HRMS";
 
             // Using MIME Message with CC
             emailService.sendEmail(email, subject, body);
@@ -720,7 +721,8 @@ public class AppController {
 						record.getCheckouttime() != null ? isoFormat.format(record.getCheckouttime()) : "N/A");
 				recordData.put("hoursWorked",
 						record.getTotalhoursworked() != null ? record.getTotalhoursworked() : "N/A");
-
+				recordData.put("checkinLocation", record.getCheckinlocation());
+				recordData.put("checkoutLocation", record.getCheckoutlocation());
 				attendanceData.add(recordData);
 			}
 			return ResponseEntity.ok(attendanceData);
