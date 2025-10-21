@@ -134,7 +134,18 @@ public class EmailService {
             }
         }
     }
-
-
+    public void sendEmail(String to, String subject, String text) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, false);
+            helper.setFrom("no-reply@whitestones.in");
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(text, false);
+            mailSender.send(message);
+        } catch (MessagingException e) {
+            throw new RuntimeException("Failed to send email", e);
+        }
+    }
 
 }

@@ -1,6 +1,7 @@
 package com.whitestone.hrms.repo;
 
 import java.sql.Timestamp;
+import java.util.Date;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -38,5 +39,12 @@ public interface EmployeeLeaveMasterTblRepository extends JpaRepository<Employee
 
 	@Query(value = "SELECT COUNT(*) FROM EMPLOYEE_LEAVE_MASTER_TBL WHERE EMP_ID = ?1 AND TRUNC(START_DATE) = TRUNC(?2)", nativeQuery = true)
 	int countByEmpidAndStartDate(String empid, Timestamp startdate);
+	
+	List<EmployeeLeaveMasterTbl> findByEmpidAndStartdateBetweenAndStatusIn(
+            String empid,
+            Date startdate,
+            Date enddate,
+            List<String> statuses
+    );
 
 }

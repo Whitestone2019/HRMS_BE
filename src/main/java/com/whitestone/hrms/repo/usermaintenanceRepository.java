@@ -3,7 +3,10 @@ package com.whitestone.hrms.repo;
 import java.util.List;
 import java.util.Optional;
 
+import javax.transaction.Transactional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.data.repository.query.Param;
@@ -39,4 +42,13 @@ public interface usermaintenanceRepository extends JpaRepository<usermaintenance
 
     @Query("SELECT u FROM usermaintenance u WHERE u.empid = :empid AND u.status = 'Active'")
     Optional<usermaintenance> findByEmpid1(@Param("empid") String empid);
+    
+    @Query("SELECT u.emailid FROM usermaintenance u WHERE u.empid = :empId OR u.userid = :empId")
+    String findEmailByEmpId(@Param("empId") String empId);
+    
+    
+    @Modifying
+    @Transactional
+    @Query("UPDATE usermaintenance u SET u.password = :password WHERE u.empid = :empId OR u.userid = :empId")
+    int updatePasswordByEmpId(@Param("password") String password, @Param("empId") String empId);
 }

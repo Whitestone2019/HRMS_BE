@@ -511,55 +511,123 @@ public class AppController {
 
 	@PostMapping("/resetPassword")
 	public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> resetData) {
-		try {
-			String employeeId = resetData.get("employeeId");
-			String oldPassword = resetData.get("oldPassword");
-			String newPassword = resetData.get("newPassword");
+	    try {
+	        String employeeId = resetData.get("employeeId");
+	        String oldPassword = resetData.get("oldPassword");
+	        String newPassword = resetData.get("newPassword");
 
-			if (employeeId == null || oldPassword == null || newPassword == null) {
-				return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-						.body("{\"error\": \"Employee ID, old password, and new password are required\"}");
-			}
+	        if (employeeId == null || oldPassword == null || newPassword == null) {
+	            return ResponseEntity.badRequest().body(Map.of("error", "All fields are required"));
+	        }
 
-			// 1️⃣ Check in usermaintenance table first
-			Optional<usermaintenance> userOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeId);
-			if (userOpt.isPresent()) {
-				usermaintenance user = userOpt.get();
+	        Optional<usermaintenance> userOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeId);
+	        if (userOpt.isPresent()) {
+	            usermaintenance user = userOpt.get();
+	            if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+	                return ResponseEntity.badRequest().body(Map.of("error", "Old password is incorrect"));
+	            }
 
-				if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
-					return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-							.body("{\"error\": \"Old password is incorrect\"}");
-				}
+	            user.setPassword(passwordEncoder.encode(newPassword));
+	            usermaintenanceRepository.save(user);
+	            return ResponseEntity.ok(Map.of("message", "Password reset successfully for employee"));
+	        }
 
-				user.setPassword(passwordEncoder.encode(newPassword));
-				usermaintenanceRepository.save(user);
-				return ResponseEntity.ok("{\"message\": \"Password reset successfully for employee\"}");
-			}
+	        TraineeMaster trainee = traineemasterRepository.findByTrngid(employeeId);
+	        if (trainee != null) {
+	            if (!passwordEncoder.matches(oldPassword, trainee.getPassword())) {
+	                return ResponseEntity.badRequest().body(Map.of("error", "Old password is incorrect"));
+	            }
 
-			// 2️⃣ Check in trainee master table
-			TraineeMaster trainee = traineemasterRepository.findByTrngid(employeeId);
-			if (trainee != null) {
-				if (!passwordEncoder.matches(oldPassword, trainee.getPassword())) {
-					return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-							.body("{\"error\": \"Old password is incorrect\"}");
-				}
+	            trainee.setPassword(passwordEncoder.encode(newPassword));
+	            trainee.setRmodtime(new Date());
+	            traineemasterRepository.save(trainee);
+	            return ResponseEntity.ok(Map.of("message", "Password reset successfully for trainee"));
+	        }
 
-				trainee.setPassword(passwordEncoder.encode(newPassword));
-				trainee.setRmodtime(new Date());
-				traineemasterRepository.save(trainee);
+	        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "User not found"));
 
-				return ResponseEntity.ok("{\"message\": \"Password reset successfully for trainee\"}");
-			}
-
-			// 3️⃣ Not found in either table
-			return ResponseEntity.status(HttpStatus.NOT_FOUND).body("{\"error\": \"Employee or Trainee not found\"}");
-
-		} catch (Exception e) {
-			e.printStackTrace();
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-					.body("{\"error\": \"Failed to reset password\"}");
-		}
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Failed to reset password"));
+	    }
 	}
+
+	
+	
+	private final Map<String, String> otpCache = new HashMap<>();
+
+	  /**
+     * Send OTP for password reset
+     */
+    @GetMapping("/sendOtp")
+    public ResponseEntity<?> sendOtp(@RequestParam String employeeId) {
+        try {
+            String otp = String.valueOf((int) (Math.random() * 900000) + 100000);
+
+            // Check both tables
+            String email = usermaintenanceRepository.findEmailByEmpId(employeeId);
+            if (email == null) {
+                email = traineemasterRepository.findEmailByTrngid(employeeId);
+            }
+
+            if (email == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "User not found for ID: " + employeeId));
+            }
+
+            otpCache.put(employeeId, otp);
+
+            String subject = "Whitestone HRMS - Password Reset OTP";
+            String body = "<p>Dear Employee,</p>"
+                    + "<p>Your OTP for password reset is: <b>" + otp + "</b></p>"
+                    + "<p>This OTP will expire soon. Please do not share it with anyone.</p>"
+                    + "<br><p>Regards,<br>Whitestone HRMS</p>";
+
+            // Using MIME Message with CC
+            emailService.sendEmail(email, subject, body);
+
+            return ResponseEntity.ok(Map.of("message", "OTP sent to registered email ID."));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to send OTP: " + e.getMessage()));
+        }
+    }
+
+    // ✅ 2. CHANGE PASSWORD WITH OTP
+    @PostMapping("/changePasswordWithOtp")
+    public ResponseEntity<?> changePasswordWithOtp(@RequestBody Map<String, String> payload) {
+        String employeeId = payload.get("employeeId");
+        String otp = payload.get("otp");
+        String newPassword = payload.get("newPassword");
+
+        if (employeeId == null || otp == null || newPassword == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "Missing required fields."));
+        }
+
+        String cachedOtp = otpCache.get(employeeId);
+        if (cachedOtp == null || !cachedOtp.equals(otp)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "Invalid or expired OTP."));
+        }
+
+        // Update password in usermaintenance or trainee master
+        int updatedRows = usermaintenanceRepository.updatePasswordByEmpId(
+                passwordEncoder.encode(newPassword), employeeId);
+
+        if (updatedRows == 0) {
+            updatedRows = traineemasterRepository.updatePasswordByTrngid(
+                    passwordEncoder.encode(newPassword), employeeId);
+        }
+
+        if (updatedRows > 0) {
+            otpCache.remove(employeeId);
+            return ResponseEntity.ok(Map.of("message", "Password updated successfully."));
+        }
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "User not found."));
+    }
 
 	@GetMapping("/attendance/status/{employeeId}")
 	public ResponseEntity<?> getCheckInStatus(@PathVariable String employeeId) {
@@ -2313,37 +2381,116 @@ public class AppController {
 	private EmployeeLeaveModTblRepository leaveRepository;
 
 	@GetMapping("/leave/count")
-	public ResponseEntity<Map<String, Long>> getLeaveCounts(@RequestParam("empId") String empId) {
-		System.out.println("casual::::" + empId);
+	public ResponseEntity<Map<String, Object>> getLeaveCounts(@RequestParam("empId") String empId) {
+	    try {
+	        int year = LocalDate.now().getYear();
+	        LocalDate yearStart = LocalDate.of(year, 1, 1);
+	        LocalDate yearEnd   = LocalDate.of(year, 12, 31);
 
-		// Fetching counts from employee_leave_summary for 2025
-		Optional<EmployeeLeaveSummary> summary = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, 2025);
-		System.out.println("casualLeaveCount11:::::" + summary);
+	        // statuses to consider (change if you only want Approved)
+	        List<String> statuses = Arrays.asList("Approved", "Pending");
 
-		// Throw exception if no record is found
-		EmployeeLeaveSummary leaveSummary = summary.orElseThrow(
-				() -> new RuntimeException("No leave summary found for employee ID " + empId + " and year 2025"));
+	        // fetch master + mod leaves (ensure these repository methods exist)
+	        List<EmployeeLeaveMasterTbl> masterLeaves =
+	            employeeLeaveMasterRepository.findByEmpidAndStartdateBetweenAndStatusIn(
+	                empId,
+	                Date.from(yearStart.atStartOfDay(ZoneId.systemDefault()).toInstant()),
+	                Date.from(yearEnd.atStartOfDay(ZoneId.systemDefault()).toInstant()),
+	                statuses);
 
-		// Extract leave counts
-		Long casualLeaveCount = leaveSummary.getCasualLeaveBalance().longValue();
-		Long leaveWithoutPayCount = leaveSummary.getLop().longValue();
+//	        List<EmployeeLeaveModTbl> modLeaves =
+//	            employeeLeaveModRepository.findByEmpidAndStartdateBetweenAndStatusIn(
+//	                empId,
+//	                Date.from(yearStart.atStartOfDay(ZoneId.systemDefault()).toInstant()),
+//	                Date.from(yearEnd.atStartOfDay(ZoneId.systemDefault()).toInstant()),
+//	                statuses);
 
-		// Other leave types (assumed zero if not in summary table, or fetch from other
-		// table)
-		Long sickLeaveCount = 0L; // Placeholder, as medical leave not in summary
-		Long earnedLeaveCount = 0L;
-		Long sabbaticalLeaveCount = 0L;
+	        // sum noOfDays from both lists
+	        float totalTaken = 0f;
+	        if (masterLeaves != null) {
+	            totalTaken += masterLeaves.stream()
+	                        .filter(l -> l.getNoofdays() != null)
+	                        .map(EmployeeLeaveMasterTbl::getNoofdays)
+	                        .reduce(0f, Float::sum);
+	        }
+//	        if (modLeaves != null) {
+//	            totalTaken += modLeaves.stream()
+//	                        .filter(l -> l.getNoofdays() != null)
+//	                        .map(EmployeeLeaveModTbl::getNoofdays)
+//	                        .reduce(0f, Float::sum);
+//	        }
 
-		// Preparing response as a Map
-		Map<String, Long> leaveCounts = new HashMap<>();
-		leaveCounts.put("medicalleave", sickLeaveCount);
-		leaveCounts.put("casualleave", casualLeaveCount);
-		leaveCounts.put("earnedleave", earnedLeaveCount);
-		leaveCounts.put("leavewithoutpay", leaveWithoutPayCount);
-		leaveCounts.put("sabbaticalleave", sabbaticalLeaveCount);
+	        // fetch summary (if exists) to read casual balance & monthly LOPs
+	        Optional<EmployeeLeaveSummary> summaryOpt = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, year);
 
-		return ResponseEntity.ok(leaveCounts);
+	        // default values if no summary
+	        float casualBalance = 0f;
+	        float summaryLopTotal = 0f; // total LOP recorded in summary (from months + lop field)
+
+	        if (summaryOpt.isPresent()) {
+	            EmployeeLeaveSummary summary = summaryOpt.get();
+	            // casual leave balance from summary
+	            casualBalance = (summary.getCasualLeaveBalance() != null) ? summary.getCasualLeaveBalance() : 0f;
+
+	            // sum monthly LOPs (ensure none null)
+	            float lopSumMonths =
+	                safe(summary.getLopJan()) + safe(summary.getLopFeb()) + safe(summary.getLopMar()) +
+	                safe(summary.getLopApr()) + safe(summary.getLopMay()) + safe(summary.getLopJun()) +
+	                safe(summary.getLopJul()) + safe(summary.getLopAug()) + safe(summary.getLopSep()) +
+	                safe(summary.getLopOct()) + safe(summary.getLopNov()) + safe(summary.getLopDec());
+
+	            // summary.getLop() may be used as an overall LOP field — include it as well
+	            summaryLopTotal = lopSumMonths + safe(summary.getLop());
+	        }
+
+	        // Calculate CL used and remaining:
+	        // CL used = totalTaken - totalLOP (can't be negative)
+	        float clUsed = Math.max(totalTaken - summaryLopTotal, 0f);
+
+	        // Remaining CL = casualBalance - clUsed (but not negative)
+	        float remainingCL = Math.max(casualBalance - clUsed, 0f);
+
+	        // If employee took NO leaves at all, return zeros (you requested this behavior)
+	        if ((masterLeaves == null || masterLeaves.isEmpty())) {
+
+	            Map<String, Object> zeroResp = new HashMap<>();
+	            zeroResp.put("empId", empId);
+	            zeroResp.put("year", year);
+	            zeroResp.put("totalTakenLeave", 0L);
+	            zeroResp.put("casualUsed", 0L);
+	            zeroResp.put("casualRemaining", 0L);
+	            zeroResp.put("leavewithoutpay", 0L);
+	            zeroResp.put("rawCasualBalance", (long) casualBalance); // optional: show stored balance
+	            return ResponseEntity.ok(zeroResp);
+	        }
+
+	        // Build response
+	        Map<String, Object> resp = new HashMap<>();
+	        resp.put("empId", empId);
+	        resp.put("year", year);
+	        resp.put("totalTakenLeave", (long) Math.ceil(totalTaken));          // total days taken
+	        resp.put("casualUsed", (long) Math.ceil(clUsed));                   // CL consumed from totalTaken
+	        resp.put("casualRemaining", (long) Math.floor(remainingCL));        // remaining casual balance
+	        resp.put("leavewithoutpay", (long) Math.ceil(summaryLopTotal + Math.max(totalTaken - (clUsed + summaryLopTotal), 0))); 
+	        // The above leavewithoutpay returns total LOP recorded in summary plus any extra beyond clUsed (keeps consistent)
+	        resp.put("rawCasualBalance", (long) Math.floor(casualBalance));     // optional: original summary balance
+
+	        return ResponseEntity.ok(resp);
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                .body(Map.of("error", "Failed to fetch leave counts", "message", e.getMessage()));
+	    }
 	}
+
+	// small helper to guard null Floats
+	private float safe(Float f) {
+	    return (f == null) ? 0f : f.floatValue();
+	}
+
+
+
 
 	// Controller
 	@PostMapping("/leaveRequest")

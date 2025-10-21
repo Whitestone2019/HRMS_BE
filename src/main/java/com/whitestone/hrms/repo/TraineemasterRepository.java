@@ -3,7 +3,10 @@ package com.whitestone.hrms.repo;
 import java.util.List;
 import java.util.Optional;
 
+import javax.transaction.Transactional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.data.repository.query.Param;
@@ -39,4 +42,12 @@ public interface TraineemasterRepository extends JpaRepository<TraineeMaster, St
     // 🔹 Check if an active trainee exists
     @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM TraineeMaster u WHERE u.trngid = :trngid AND u.status = 'Active'")
     boolean existsByTrngid(@Param("trngid") String trngid);
+    
+    @Query("SELECT t.emailid FROM TraineeMaster t WHERE t.trngid = :empId")
+    String findEmailByTrngid(@Param("empId") String empId);
+    
+    @Modifying
+    @Transactional
+    @Query("UPDATE TraineeMaster t SET t.password = :password WHERE t.trngid = :empId OR t.userid = :empId")
+    int updatePasswordByTrngid(@Param("password") String password, @Param("empId") String empId);
 }
