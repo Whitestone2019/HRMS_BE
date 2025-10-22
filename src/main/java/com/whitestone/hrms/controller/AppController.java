@@ -19,6 +19,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
@@ -89,6 +90,7 @@ import com.whitestone.entity.EmployeeLeaveMasterTbl;
 import com.whitestone.entity.EmployeeLeaveModTbl;
 import com.whitestone.entity.EmployeeLeaveSummary;
 import com.whitestone.entity.EmployeePermissionMasterTbl;
+import com.whitestone.entity.EmployeePhoto;
 import com.whitestone.entity.EmployeeProfessionalDetailsMod;
 import com.whitestone.entity.EmployeeProfile;
 import com.whitestone.entity.EmployeeProfileMod;
@@ -124,6 +126,7 @@ import com.whitestone.hrms.repo.EmployeeLeaveMasterTblRepository;
 import com.whitestone.hrms.repo.EmployeeLeaveModTblRepository;
 import com.whitestone.hrms.repo.EmployeeLeaveSummaryRepository;
 import com.whitestone.hrms.repo.EmployeePermissionMasterRepository;
+import com.whitestone.hrms.repo.EmployeePhotoRepository;
 import com.whitestone.hrms.repo.EmployeeProfessionalDetailsModRepository;
 import com.whitestone.hrms.repo.EmployeeProfileModRepository;
 import com.whitestone.hrms.repo.EmployeeProfileRepository;
@@ -6483,5 +6486,75 @@ public class AppController {
 					.body("Error fetching reporting relation: " + e.getMessage());
 		}
 	}
+	
+	 @Autowired
+	    private EmployeePhotoRepository employeerepository;
+
+	   @PostMapping("/upload")
+	    public ResponseEntity<?> uploadPhoto(@RequestParam("employeeId") String employeeId,
+	                                         @RequestParam("file") MultipartFile file) {
+	        try {
+	            // Restrict re-upload
+	            if (employeerepository.findByEmployeeId(employeeId).isPresent()) {
+	                return ResponseEntity.status(HttpStatus.CONFLICT)
+	                        .body(Map.of("message", "Photo already uploaded"));
+	            }
+
+	            // File size validation (10 MB)
+	            if (file.getSize() > 10 * 1024 * 1024) {
+	                return ResponseEntity.badRequest()
+	                        .body(Map.of("message", "File size exceeds 10 MB limit"));
+	            }
+
+	            EmployeePhoto photo = new EmployeePhoto();
+	            photo.setEmployeeId(employeeId);
+	            photo.setFileName(file.getOriginalFilename());
+	            photo.setFileType(file.getContentType());
+	            photo.setPhotoData(file.getBytes());
+
+	            employeerepository.save(photo);
+	            return ResponseEntity.ok(Map.of("message", "Photo uploaded successfully"));
+
+	        } catch (IOException e) {
+	            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                    .body(Map.of("message", "Upload failed"));
+	        }
+	    }
+
+	    @GetMapping("/photo/{employeeId}")
+	    public ResponseEntity<?> getPhotoByEmpId(@PathVariable String employeeId) {
+	        return employeerepository.findByEmployeeId(employeeId)
+	                .map(ResponseEntity::ok)
+	                .orElse(ResponseEntity.notFound().build());
+	    }
+
+	    @GetMapping("/list")
+	    public List<Map<String, Object>> getAllPhotos() {
+	        List<EmployeePhoto> photos = employeerepository.findAll();
+	        List<Map<String, Object>> response = new ArrayList<>();
+
+	        for (EmployeePhoto p : photos) {
+	            Map<String, Object> map = new HashMap<>();
+	            map.put("id", p.getId());
+	            map.put("employeeId", p.getEmployeeId());
+	            map.put("photoData", Base64.getEncoder().encodeToString(p.getPhotoData()));
+	            response.add(map);
+	        }
+	        return response;
+	    }
+
+	    @GetMapping("/download/{id}")
+	    public ResponseEntity<byte[]> downloadPhoto(@PathVariable Long id) {
+	        Optional<EmployeePhoto> photoOpt = employeerepository.findById(id);
+	        if (!photoOpt.isPresent()) {
+	            return ResponseEntity.notFound().build();
+	        }
+
+	        EmployeePhoto photo = photoOpt.get();
+	        return ResponseEntity.ok()
+	                .contentType(MediaType.parseMediaType(photo.getFileType()))
+	                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + photo.getFileName() + "\"")
+	                .body(photo.getPhotoData());
+	    }
 
 }
