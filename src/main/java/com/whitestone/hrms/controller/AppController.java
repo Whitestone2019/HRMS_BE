@@ -164,6 +164,7 @@ import com.whitestone.hrms.service.ExpenseDetailsService;
 import com.whitestone.hrms.service.PayslipService;
 import com.whitestone.hrms.service.ResourceNotFoundException;
 
+
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
@@ -181,6 +182,7 @@ public class AppController {
 
 	 @Value("${EXPENSE_UPLOAD_DIR}") // configure in application.properties
 	    private String expenseUploadDir;
+	 
 	private PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
 	@Autowired
@@ -6566,18 +6568,32 @@ public class AppController {
 	     }
 	 }
 	 
-	 
-	    @GetMapping("/photo/{employeeId}")
-	    public ResponseEntity<?> getPhotoByEmpId(@PathVariable String employeeId) {
-	        return employeerepository.findByEmployeeId(employeeId)
-	                .map(photo -> ResponseEntity.ok(Map.of(
-	                        "employeeId", photo.getEmployeeId(),
-	                        "fileUrl", photo.getFileUrl()
-	                )))
-	                .orElse(ResponseEntity.notFound().build());
-	    }
+	 @GetMapping("/photo/{employeeId}")
+	 public ResponseEntity<UrlResource> serveFile(@PathVariable String employeeId) {
+	     Optional<EmployeePhoto> optionalPhoto = employeerepository.findByEmployeeId(employeeId);
 
-	  
+	     if (optionalPhoto.isEmpty()) {
+	         return ResponseEntity.notFound().build();
+	     }
+
+	     EmployeePhoto photo = optionalPhoto.get();
+	     try {
+	         Path filePath = Paths.get(photo.getFileUrl());
+	         UrlResource resource = new UrlResource(filePath.toUri()); // No cast needed
+
+	         if (!resource.exists() || !resource.isReadable()) {
+	             return ResponseEntity.notFound().build();
+	         }
+
+	         return ResponseEntity.ok()
+	                 .header(HttpHeaders.CONTENT_DISPOSITION,
+	                         "inline; filename=\"" + filePath.getFileName() + "\"")
+	                 .body(resource);
+
+	     } catch (MalformedURLException e) {
+	         return ResponseEntity.badRequest().build();
+	     }
+	 }
 
 	    @GetMapping("/list")
 	    public List<Map<String, Object>> getAllPhotos() {
