@@ -1,4 +1,5 @@
 package com.whitestone.entity;
+
 import javax.persistence.*;
 
 @Entity
@@ -9,14 +10,17 @@ public class EmployeePhoto {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false, unique = true)
     private String employeeId;
 
-    @Lob
-    @Column(name = "photo_data", columnDefinition = "BLOB")
-    private byte[] photoData;
+    @Column(nullable = false)
+    private String fileName; // e.g., EMP001_photo.jpg
 
-    private String fileName;
-    private String fileType;
+    @Column(nullable = false)
+    private String fileType; // image/jpeg, image/png, etc.
+
+    @Column(nullable = false)
+    private String fileUrl; // URL to access the photo, e.g., /photos/EMP001_photo.jpg
 
     // Getters and Setters
     public Long getId() { return id; }
@@ -25,12 +29,12 @@ public class EmployeePhoto {
     public String getEmployeeId() { return employeeId; }
     public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
 
-    public byte[] getPhotoData() { return photoData; }
-    public void setPhotoData(byte[] photoData) { this.photoData = photoData; }
-
     public String getFileName() { return fileName; }
     public void setFileName(String fileName) { this.fileName = fileName; }
 
     public String getFileType() { return fileType; }
     public void setFileType(String fileType) { this.fileType = fileType; }
+
+    public String getFileUrl() { return fileUrl; }
+    public void setFileUrl(String fileUrl) { this.fileUrl = fileUrl; }
 }

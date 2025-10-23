@@ -3,6 +3,7 @@ package com.whitestone.hrms.controller;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -19,7 +20,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import javax.annotation.Resource;
 import javax.crypto.SecretKey;
 
 import org.apache.commons.text.StringEscapeUtils;
@@ -49,9 +50,11 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.hibernate.PropertyValueException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.web.servlet.error.ErrorMvcAutoConfiguration;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -172,6 +175,9 @@ import io.jsonwebtoken.security.Keys;
 @Service
 
 public class AppController {
+	
+	 @Value("${photo.upload.dir}") // configure in application.properties
+	    private String uploadDir;
 
 	private PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -6489,8 +6495,12 @@ public class AppController {
 	
 	 @Autowired
 	    private EmployeePhotoRepository employeerepository;
+	 
+	
 
-	   @PostMapping("/upload")
+
+
+	    @PostMapping("/upload")
 	    public ResponseEntity<?> uploadPhoto(@RequestParam("employeeId") String employeeId,
 	                                         @RequestParam("file") MultipartFile file) {
 	        try {
@@ -6506,14 +6516,26 @@ public class AppController {
 	                        .body(Map.of("message", "File size exceeds 10 MB limit"));
 	            }
 
+	            // Prepare file path: <uploadDir>/<employeeId>_<originalFileName>
+	            String fileName = employeeId + "_" + file.getOriginalFilename();
+	            Path filePath = Paths.get(uploadDir, fileName);
+
+	            // Create directories if not exist
+	            Files.createDirectories(filePath.getParent());
+
+	            // Save file to server
+	            Files.write(filePath, file.getBytes());
+
+	            // Save file URL/path in DB
 	            EmployeePhoto photo = new EmployeePhoto();
 	            photo.setEmployeeId(employeeId);
-	            photo.setFileName(file.getOriginalFilename());
+	            photo.setFileName(fileName);
+	            photo.setFileUrl(filePath.toString()); // store absolute or relative path
 	            photo.setFileType(file.getContentType());
-	            photo.setPhotoData(file.getBytes());
 
 	            employeerepository.save(photo);
-	            return ResponseEntity.ok(Map.of("message", "Photo uploaded successfully"));
+
+	            return ResponseEntity.ok(Map.of("message", "Photo uploaded successfully", "fileUrl", photo.getFileUrl()));
 
 	        } catch (IOException e) {
 	            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -6524,9 +6546,14 @@ public class AppController {
 	    @GetMapping("/photo/{employeeId}")
 	    public ResponseEntity<?> getPhotoByEmpId(@PathVariable String employeeId) {
 	        return employeerepository.findByEmployeeId(employeeId)
-	                .map(ResponseEntity::ok)
+	                .map(photo -> ResponseEntity.ok(Map.of(
+	                        "employeeId", photo.getEmployeeId(),
+	                        "fileUrl", photo.getFileUrl()
+	                )))
 	                .orElse(ResponseEntity.notFound().build());
 	    }
+
+	  
 
 	    @GetMapping("/list")
 	    public List<Map<String, Object>> getAllPhotos() {
@@ -6537,24 +6564,10 @@ public class AppController {
 	            Map<String, Object> map = new HashMap<>();
 	            map.put("id", p.getId());
 	            map.put("employeeId", p.getEmployeeId());
-	            map.put("photoData", Base64.getEncoder().encodeToString(p.getPhotoData()));
+	            map.put("fileUrl", p.getFileUrl());
 	            response.add(map);
 	        }
 	        return response;
-	    }
-
-	    @GetMapping("/download/{id}")
-	    public ResponseEntity<byte[]> downloadPhoto(@PathVariable Long id) {
-	        Optional<EmployeePhoto> photoOpt = employeerepository.findById(id);
-	        if (!photoOpt.isPresent()) {
-	            return ResponseEntity.notFound().build();
-	        }
-
-	        EmployeePhoto photo = photoOpt.get();
-	        return ResponseEntity.ok()
-	                .contentType(MediaType.parseMediaType(photo.getFileType()))
-	                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + photo.getFileName() + "\"")
-	                .body(photo.getPhotoData());
 	    }
 
 }
