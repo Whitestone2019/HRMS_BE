@@ -5206,15 +5206,7 @@ public class AppController {
 	            summary.setLeaveTaken(9.0f); // set to 10.5 directly, or add like: existingLeaveTaken + 10.5f
 
 	            employeeLeaveSummaryRepository.save(summary);
-	            System.out.println("✅ Updated leave taken to 9.0 for empid " + employeeId);
-	        } else {
-	            // Create a new record if not found
-	            EmployeeLeaveSummary newSummary = new EmployeeLeaveSummary();
-	            newSummary.setEmpId(employeeId);
-	            newSummary.setYear(year);
-	            newSummary.setLeaveTaken(10.5f);
-	            employeeLeaveSummaryRepository.save(newSummary);
-	            System.out.println("✅ Created new leave summary with leave taken 10.5 for empid " + employeeId);
+	            System.out.println("✅ Updated leave taken to 10.5 for empid " + employeeId);
 	        }
 	    }
 
