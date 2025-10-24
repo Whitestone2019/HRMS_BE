@@ -6576,5 +6576,23 @@ public class AppController {
 		}
 		return response;
 	}
+	
+	@PutMapping("/updateLeaveTaken")
+	public ResponseEntity<?> updateLeaveTaken(@RequestBody Map<String, Object> payload) {
+	    String empId = (String) payload.get("empId");
+	    Float leaveTaken = ((Number) payload.get("leaveTaken")).floatValue();
+
+	    Optional<EmployeeLeaveSummary> summaryOpt = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, LocalDate.now().getYear());
+	    if (summaryOpt.isPresent()) {
+	        EmployeeLeaveSummary summary = summaryOpt.get();
+	        summary.setLeaveTaken(leaveTaken);
+	        employeeLeaveSummaryRepository.save(summary);
+	        return ResponseEntity.ok(Collections.singletonMap("message", "Leave updated"));
+	    } else {
+	        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+	                .body(Collections.singletonMap("message", "Employee not found"));
+	    }
+	}
+
 
 }
