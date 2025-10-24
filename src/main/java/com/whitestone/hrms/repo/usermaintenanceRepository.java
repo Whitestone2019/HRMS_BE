@@ -43,12 +43,12 @@ public interface usermaintenanceRepository extends JpaRepository<usermaintenance
     @Query("SELECT u FROM usermaintenance u WHERE u.empid = :empid AND u.status = 'Active'")
     Optional<usermaintenance> findByEmpid1(@Param("empid") String empid);
     
-    @Query("SELECT u.emailid FROM usermaintenance u WHERE u.empid = :empId OR u.userid = :empId")
+    @Query("SELECT u.emailid FROM usermaintenance u WHERE u.empid = :empId OR u.userid = :empId AND u.status = 'Active'")
     String findEmailByEmpId(@Param("empId") String empId);
     
     
     @Modifying
     @Transactional
-    @Query("UPDATE usermaintenance u SET u.password = :password WHERE u.empid = :empId OR u.userid = :empId")
+    @Query("UPDATE usermaintenance u SET u.password = :password WHERE u.empid = :empId OR u.userid = :empId AND u.status = 'Active'")
     int updatePasswordByEmpId(@Param("password") String password, @Param("empId") String empId);
 }
