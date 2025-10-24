@@ -6585,14 +6585,29 @@ public class AppController {
 	    Optional<EmployeeLeaveSummary> summaryOpt = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, LocalDate.now().getYear());
 	    if (summaryOpt.isPresent()) {
 	        EmployeeLeaveSummary summary = summaryOpt.get();
+
+	        // Update leave taken
 	        summary.setLeaveTaken(leaveTaken);
+
+	        // Update casual leave balance
+	        float totalCL = 12.0f; // default total casual leave
+	        float updatedBalance = totalCL - leaveTaken;
+	        summary.setCasualLeaveBalance(updatedBalance >= 0 ? updatedBalance : 0);
+
 	        employeeLeaveSummaryRepository.save(summary);
-	        return ResponseEntity.ok(Collections.singletonMap("message", "Leave updated"));
+
+	        Map<String, Object> response = new HashMap<>();
+	        response.put("message", "Leave updated");
+	        response.put("leaveTaken", summary.getLeaveTaken());
+	        response.put("casualLeaveBalance", summary.getCasualLeaveBalance());
+
+	        return ResponseEntity.ok(response);
 	    } else {
 	        return ResponseEntity.status(HttpStatus.NOT_FOUND)
 	                .body(Collections.singletonMap("message", "Employee not found"));
 	    }
 	}
+
 
 
 }
