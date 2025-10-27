@@ -3,7 +3,6 @@ package com.whitestone.hrms.controller;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -37,7 +36,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-import javax.annotation.Resource;
 import javax.crypto.SecretKey;
 
 import org.apache.commons.text.StringEscapeUtils;
@@ -54,7 +52,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.web.servlet.error.ErrorMvcAutoConfiguration;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -84,6 +81,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whitestone.entity.AdvancesDetailsMod;
+import com.whitestone.entity.AttendanceChangeRequest;
 import com.whitestone.entity.CompanyLocation;
 import com.whitestone.entity.Department;
 import com.whitestone.entity.Designation;
@@ -120,6 +118,7 @@ import com.whitestone.entity.WsslCalendarMod;
 import com.whitestone.entity.usermaintenance;
 import com.whitestone.entity.usermaintenancemod;
 import com.whitestone.hrms.repo.AdvancesDetailsModRepository;
+import com.whitestone.hrms.repo.AttendanceChangeRequestRepository;
 import com.whitestone.hrms.repo.CompanyLocationRepository;
 import com.whitestone.hrms.repo.DepartmentRepository;
 import com.whitestone.hrms.repo.DesignationRepository;
@@ -5024,14 +5023,14 @@ public class AppController {
 
 		// 2️⃣ Date range: 27th of previous month → 26th of current month
 		Calendar startCal = Calendar.getInstance();
-		startCal.set(year, month - 2, 27, 0, 0, 0);
-		startCal.set(Calendar.MILLISECOND, 0);
+		startCal.set(year, month - 1, 27);
 		Date startDate = startCal.getTime();
 
-		Calendar endCal = Calendar.getInstance();
-		endCal.set(year, month - 1, 26, 0, 0, 0);
-		endCal.set(Calendar.MILLISECOND, 0);
+		Calendar endCal = (Calendar) startCal.clone();
+		endCal.add(Calendar.MONTH, 1);
+		endCal.set(Calendar.DAY_OF_MONTH, 26);
 		Date endDate = endCal.getTime();
+
 
 		Calendar today = Calendar.getInstance();
 		today.set(Calendar.HOUR_OF_DAY, 0);
@@ -5136,152 +5135,198 @@ public class AppController {
 	}
 
 	@GetMapping("/events/{employeeId}")
-	public ResponseEntity<?> getAttendanceEvents(
-	        @PathVariable String employeeId,
-	        @RequestParam(required = false) Integer year,
-	        @RequestParam(required = false) Integer month) {
+	public ResponseEntity<?> getAttendanceEvents(@PathVariable String employeeId,
+	                                             @RequestParam(required = false) Integer year,
+	                                             @RequestParam(required = false) Integer month) {
+	    try {
+	        Calendar todayCal = Calendar.getInstance();
 
-	    Calendar todayCal = Calendar.getInstance();
-	    if (year == null || month == null) {
-	        todayCal.add(Calendar.MONTH, -1);
-	        year = todayCal.get(Calendar.YEAR);
-	        month = todayCal.get(Calendar.MONTH) + 1;
-	    }
+	        // 🗓️ Default to current year and current month if not provided
+	        if (year == null) {
+	            year = todayCal.get(Calendar.YEAR);
+	        }
+	        if (month == null) {
+	            month = todayCal.get(Calendar.MONTH) + 1; // 1-based month
+	        }
 
-	    // Validate input
-	    if (year < 2000 || month < 1 || month > 12 || employeeId == null || employeeId.isEmpty()) {
-	        return ResponseEntity.badRequest().body(Collections.singletonMap("error", "Invalid year, month, or employeeId"));
-	    }
+	        // 🔒 Input validation
+	        if (year < 2000 || month < 1 || month > 12 || employeeId == null || employeeId.isEmpty()) {
+	            return ResponseEntity.badRequest()
+	                    .body(Collections.singletonMap("error", "Invalid year, month, or employeeId"));
+	        }
 
-	    usermaintenance employee = usermaintenanceRepository.findByEmpid(employeeId);
-	    if (employee == null) {
-	        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-	                .body(Collections.singletonMap("error", "Employee not found"));
-	    }
+	        // 🔍 Verify employee
+	        usermaintenance employee = usermaintenanceRepository.findByEmpid(employeeId);
+	        if (employee == null) {
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+	                    .body(Collections.singletonMap("error", "Employee not found"));
+	        }
 
-	    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-	    SimpleDateFormat dayFormat = new SimpleDateFormat("EEEE");
+	        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+	        SimpleDateFormat dayFormat = new SimpleDateFormat("EEEE");
 
-	    // ✅ From 27th of previous month to 26th of current month
-	    Calendar startCal = Calendar.getInstance();
-	    startCal.set(year, month - 1, 27);
-	    Date startDate = startCal.getTime();
+	        // ✅ From January 1st of the selected year to the end of the current month
+	        Calendar startCal = Calendar.getInstance();
+	        startCal.set(year, Calendar.JANUARY, 1);
+	        Date startDate = startCal.getTime();
 
-	    Calendar endCal = (Calendar) startCal.clone();
-	    endCal.add(Calendar.MONTH, 1);
-	    endCal.set(Calendar.DAY_OF_MONTH, 26);
-	    Date endDate = endCal.getTime();
+	        Calendar endCal = Calendar.getInstance();
+	        endCal.set(Calendar.DAY_OF_MONTH, endCal.getActualMaximum(Calendar.DAY_OF_MONTH));
+	        Date endDate = endCal.getTime();
 
-	    // Limit end date to today
-	    Calendar today = Calendar.getInstance();
-	    Date attendanceEndDate = endDate.after(today.getTime()) ? today.getTime() : endDate;
+	        // ⏳ Limit end date to today if in current month
+	        Calendar today = Calendar.getInstance();
+	        Date attendanceEndDate = endDate.after(today.getTime()) ? today.getTime() : endDate;
 
-	    // Week off calculation
-	    List<Date> weekOffDays = calculateWeekOffsForPreviousAndCurrentMonth(year, month);
-	    Set<String> weekOffSet = weekOffDays.stream()
-	            .map(d -> dateFormat.format(d))
-	            .collect(Collectors.toSet());
+	        // 📆 Calculate week-offs using your method
+	        List<Date> weekOffDays = getWeekOffsInRange(startDate, attendanceEndDate);
+	        Set<String> weekOffSet = weekOffDays.stream()
+	                .map(d -> dateFormat.format(d))
+	                .collect(Collectors.toSet());
 
-	    // Attendance records
-	    List<UserMasterAttendanceMod> attendanceRecords =
-	            usermasterattendancemodrepository.findByAttendanceidAndDateRange(employeeId, startDate, attendanceEndDate);
+	        // 📊 Attendance records from DB
+	        List<UserMasterAttendanceMod> attendanceRecords =
+	                usermasterattendancemodrepository.findByAttendanceidAndDateRange(employeeId, startDate, attendanceEndDate);
 
-	    Map<String, UserMasterAttendanceMod> attendanceMap = new HashMap<>();
-	    for (UserMasterAttendanceMod record : attendanceRecords) {
-	        attendanceMap.put(dateFormat.format(record.getAttendancedate()), record);
-	    }
+	        Map<String, UserMasterAttendanceMod> attendanceMap = new HashMap<>();
+	        for (UserMasterAttendanceMod record : attendanceRecords) {
+	            attendanceMap.put(dateFormat.format(record.getAttendancedate()), record);
+	        }
 
-	    // Holidays
-	    List<WsslCalendarMod> holidays = wsslCalendarModRepository.findByEventDateBetween(startDate, endDate);
-	    Map<String, WsslCalendarMod> holidayMap = new HashMap<>();
-	    for (WsslCalendarMod holiday : holidays) {
-	        holidayMap.put(dateFormat.format(holiday.getEventDate()), holiday);
-	    }
+	        // 🎉 Holidays
+	        List<WsslCalendarMod> holidays = wsslCalendarModRepository.findByEventDateBetween(startDate, endDate);
+	        Map<String, WsslCalendarMod> holidayMap = new HashMap<>();
+	        for (WsslCalendarMod holiday : holidays) {
+	            holidayMap.put(dateFormat.format(holiday.getEventDate()), holiday);
+	        }
 
-	    List<Map<String, Object>> events = new ArrayList<>();
-	    Calendar loopCal = (Calendar) startCal.clone();
+	        // 📅 Build event list
+	        List<Map<String, Object>> events = new ArrayList<>();
+	        Calendar loopCal = (Calendar) startCal.clone();
 
-	    while (!loopCal.after(endCal)) {
-	        Date currentDate = loopCal.getTime();
-	        String dateStr = dateFormat.format(currentDate);
-	        String dayOfWeek = dayFormat.format(currentDate);
+	        while (!loopCal.after(endCal)) {
+	            Date currentDate = loopCal.getTime();
+	            String dateStr = dateFormat.format(currentDate);
+	            String dayOfWeek = dayFormat.format(currentDate);
 
-	        Map<String, Object> event = new HashMap<>();
-	        Map<String, String> extendedProps = new HashMap<>();
-	        extendedProps.put("dayOfWeek", dayOfWeek);
+	            Map<String, Object> event = new HashMap<>();
+	            Map<String, String> extendedProps = new HashMap<>();
+	            extendedProps.put("dayOfWeek", dayOfWeek);
 
-	        // 🟨 Holiday
-	        if (holidayMap.containsKey(dateStr)) {
-	            WsslCalendarMod holiday = holidayMap.get(dateStr);
-	            event.put("title", holiday.getEventName());
-	            event.put("backgroundColor", "#ffc107");
-	            extendedProps.put("status", "Holiday");
+	            // 🟨 Holiday
+	            if (holidayMap.containsKey(dateStr)) {
+	                WsslCalendarMod holiday = holidayMap.get(dateStr);
+	                event.put("title", holiday.getEventName());
+	                event.put("backgroundColor", "#ffc107");
+	                extendedProps.put("status", "Holiday");
 
-	        // 🟦 Week off
-	        } else if (weekOffSet.contains(dateStr)) {
-	            event.put("title", "Week Off");
-	            event.put("backgroundColor", "#ffffff");
-	            extendedProps.put("status", "Week Off");
+	            // 🟦 Week Off
+	            } else if (weekOffSet.contains(dateStr)) {
+	                event.put("title", "Week Off");
+	                event.put("backgroundColor", "#e0e0e0");
+	                extendedProps.put("status", "Week Off");
 
-	        // 🟩 Attendance record
-	        } else if (attendanceMap.containsKey(dateStr)) {
-	            String status = attendanceMap.get(dateStr).getStatus();
-	            status = (status == null || status.trim().isEmpty()) ? "Absent" : status.trim();
+	            // 🟩 Attendance Record
+	            } else if (attendanceMap.containsKey(dateStr)) {
+	                String status = attendanceMap.get(dateStr).getStatus();
+	                status = (status == null || status.trim().isEmpty()) ? "Absent" : status.trim();
 
-	            if (status.equalsIgnoreCase("Absent")) {
-	                Optional<EmployeeLeaveSummary> summaryOpt =
-	                        employeeLeaveSummaryRepository.findByEmpIdAndYear(employeeId, year);
-
-	                if (summaryOpt.isPresent()) {
-	                    EmployeeLeaveSummary summary = summaryOpt.get();
-	                    Float clBalance = summary.getCasualLeaveBalance() != null
-	                            ? summary.getCasualLeaveBalance()
-	                            : 0f;
-
-	                    if (clBalance > 0) {
-	                        status = "Absent (CL Used)";
-	                        event.put("backgroundColor", "#ffa500"); // orange
-	                    } else {
-	                        status = "Absent (LOP)";
-	                        event.put("backgroundColor", "#ff4c4c"); // red
-	                    }
-	                } else {
-	                    status = "Absent (LOP)";
-	                    event.put("backgroundColor", "#ff4c4c");
+	                switch (status.toLowerCase()) {
+	                    case "present":
+	                        event.put("backgroundColor", "#28a745"); // green
+	                        break;
+	                    case "miss punch":
+	                        event.put("backgroundColor", "#ffff84"); // yellow
+	                        break;
+	                    case "absent":
+	                    default:
+	                        Optional<EmployeeLeaveSummary> summaryOpt =
+	                                employeeLeaveSummaryRepository.findByEmpIdAndYear(employeeId, year);
+	                        if (summaryOpt.isPresent() && summaryOpt.get().getCasualLeaveBalance() > 0) {
+	                            status = "Absent (CL Used)";
+	                            event.put("backgroundColor", "#ffa500"); // orange
+	                        } else {
+	                            status = "Absent (LOP)";
+	                            event.put("backgroundColor", "#ff4c4c"); // red
+	                        }
+	                        break;
 	                }
 
-	            } else if (status.equalsIgnoreCase("Present")) {
-	                event.put("backgroundColor", "#28a745"); // green
-	            } else if (status.equalsIgnoreCase("Miss Punch")) {
-	                event.put("backgroundColor", "#ffff84"); // yellow
+	                event.put("title", status);
+	                extendedProps.put("status", status);
+
+	            // 🟠 No record (Miss Punch or Future Date)
 	            } else {
-	                event.put("backgroundColor", "#ffffff");
+	                if (!currentDate.after(today.getTime())) {
+	                    event.put("title", "Miss Punch");
+	                    event.put("backgroundColor", "#ffff84");
+	                    extendedProps.put("status", "Miss Punch");
+	                } else {
+	                    event.put("title", "");
+	                    event.put("backgroundColor", "#ffffff");
+	                    extendedProps.put("status", "");
+	                }
 	            }
 
-	            event.put("title", status);
-	            extendedProps.put("status", status);
+	            event.put("date", dateStr);
+	            event.put("extendedProps", extendedProps);
+	            events.add(event);
+	            loopCal.add(Calendar.DAY_OF_MONTH, 1);
+	        }
 
-	        // 🟠 No record
-	        } else {
-	            if (!currentDate.after(today.getTime())) {
-	                event.put("title", "Miss Punch");
-	                extendedProps.put("status", "Miss Punch");
-	                event.put("backgroundColor", "#ffff84");
-	            } else {
-	                event.put("title", "");
-	                extendedProps.put("status", "");
-	                event.put("backgroundColor", "#ffffff");
+	        return ResponseEntity.ok(events);
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                .body(Collections.singletonMap("error", "Failed to fetch attendance events"));
+	    }
+	}
+
+	/**
+	 * ✅ Calculates Week-Offs (All Sundays + 2nd & 4th Saturdays)
+	 */
+	/**
+	 * ✅ Calculates Week-Offs (All Sundays + 2nd & 4th Saturdays)
+	 */
+	private List<Date> getWeekOffsInRange(Date startDate, Date endDate) {
+	    List<Date> weekOffDays = new ArrayList<>();
+	    Calendar cal = Calendar.getInstance();
+	    cal.setTime(startDate);
+
+	    int saturdayCount = 0;
+	    int currentMonth = cal.get(Calendar.MONTH); // Track month separately
+
+	    while (!cal.getTime().after(endDate)) {
+	        int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK);
+
+	        // Every Sunday is week off
+	        if (dayOfWeek == Calendar.SUNDAY) {
+	            weekOffDays.add(cal.getTime());
+	        }
+
+	        // Count Saturdays — add only 2nd and 4th
+	        if (dayOfWeek == Calendar.SATURDAY) {
+	            saturdayCount++;
+	            if (saturdayCount == 2 || saturdayCount == 4) {
+	                weekOffDays.add(cal.getTime());
 	            }
 	        }
 
-	        event.put("date", dateStr);
-	        event.put("extendedProps", extendedProps);
-	        events.add(event);
-	        loopCal.add(Calendar.DAY_OF_MONTH, 1);
+	        // Move to next day
+	        cal.add(Calendar.DAY_OF_MONTH, 1);
+
+	        // Reset Saturday count when month changes
+	        int nextMonth = cal.get(Calendar.MONTH);
+	        if (nextMonth != currentMonth) {
+	            saturdayCount = 0;
+	            currentMonth = nextMonth;
+	        }
 	    }
 
-	    return ResponseEntity.ok(events);
+	    return weekOffDays;
 	}
+
 
 
 	private int calculateEffectiveWorkingDays(int year, int month) {
@@ -5310,7 +5355,7 @@ public class AppController {
 		return totalDays - weekOffDays.size();
 	}
 
-	private List<Date> getWeekOffsInRange(Date startDate, Date endDate) {
+	private List<Date> getWeekOffsInRange1(Date startDate, Date endDate) {
 		List<Date> weekOffDays = new ArrayList<>();
 		Calendar cal = Calendar.getInstance();
 		cal.setTime(startDate);
@@ -6576,36 +6621,448 @@ public class AppController {
 		}
 		return response;
 	}
-	
+
 	@PutMapping("/updateLeaveTaken")
 	public ResponseEntity<?> updateLeaveTaken(@RequestBody Map<String, Object> payload) {
-	    String empId = (String) payload.get("empId");
-	    Float leaveTaken = ((Number) payload.get("leaveTaken")).floatValue();
+		String empId = (String) payload.get("empId");
+		Float leaveTaken = ((Number) payload.get("leaveTaken")).floatValue();
 
-	    Optional<EmployeeLeaveSummary> summaryOpt = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, LocalDate.now().getYear());
-	    if (summaryOpt.isPresent()) {
-	        EmployeeLeaveSummary summary = summaryOpt.get();
+		Optional<EmployeeLeaveSummary> summaryOpt = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId,
+				LocalDate.now().getYear());
+		if (summaryOpt.isPresent()) {
+			EmployeeLeaveSummary summary = summaryOpt.get();
 
-	        // Update leave taken
-	        summary.setLeaveTaken(leaveTaken);
+			// Update leave taken
+			summary.setLeaveTaken(leaveTaken);
 
-	        // Update casual leave balance
-	        float totalCL = 12.0f; // default total casual leave
-	        float updatedBalance = totalCL - leaveTaken;
-	        summary.setCasualLeaveBalance(updatedBalance >= 0 ? updatedBalance : 0);
+			// Update casual leave balance
+			float totalCL = 12.0f; // default total casual leave
+			float updatedBalance = totalCL - leaveTaken;
+			summary.setCasualLeaveBalance(updatedBalance >= 0 ? updatedBalance : 0);
 
-	        employeeLeaveSummaryRepository.save(summary);
+			employeeLeaveSummaryRepository.save(summary);
 
-	        Map<String, Object> response = new HashMap<>();
-	        response.put("message", "Leave updated");
-	        response.put("leaveTaken", summary.getLeaveTaken());
-	        response.put("casualLeaveBalance", summary.getCasualLeaveBalance());
+			Map<String, Object> response = new HashMap<>();
+			response.put("message", "Leave updated");
+			response.put("leaveTaken", summary.getLeaveTaken());
+			response.put("casualLeaveBalance", summary.getCasualLeaveBalance());
 
-	        return ResponseEntity.ok(response);
-	    } else {
-	        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-	                .body(Collections.singletonMap("message", "Employee not found"));
+			return ResponseEntity.ok(response);
+		} else {
+			return ResponseEntity.status(HttpStatus.NOT_FOUND)
+					.body(Collections.singletonMap("message", "Employee not found"));
+		}
+	}
+
+	@Autowired
+	private AttendanceChangeRequestRepository attendanceChangeRequestRepository;
+
+	@GetMapping("/requests/pending/{managerId}")
+	public Map<String, Object> getPendingRequests(@PathVariable String managerId) {
+
+	    // 1️⃣ Get employee IDs who report to this manager
+	    List<String> empIds = usermaintenanceRepository.findAll().stream()
+	            .filter(u -> managerId.equals(u.getRepoteTo()))
+	            .map(u -> u.getEmpid())
+	            .collect(Collectors.toList());
+
+	    // 2️⃣ Get trainee IDs who report to this manager
+	    List<String> traineeIds = traineemasterRepository.findAll().stream()
+	            .filter(t -> managerId.equals(t.getRepoteTo()))
+	            .map(t -> t.getTrngid())
+	            .collect(Collectors.toList());
+
+	    // 3️⃣ Combine employees + trainees + manager himself
+	    Set<String> allIds = new HashSet<>();
+	    allIds.addAll(empIds);
+	    allIds.addAll(traineeIds);
+	    allIds.add(managerId);
+
+	    // 4️⃣ Get all pending requests for these employees/trainees
+	    List<AttendanceChangeRequest> requests = attendanceChangeRequestRepository
+	            .findByStatusAndEmployeeIdIn("Pending", new ArrayList<>(allIds));
+
+	    // 5️⃣ Build name lookup from both repositories
+	    Map<String, String> empIdToName = new HashMap<>();
+
+	    // From employee table
+	    usermaintenanceRepository.findByEmpidIn(new ArrayList<>(allIds))
+	            .forEach(u -> empIdToName.put(u.getEmpid(), u.getUsername()));
+
+	    // From trainee table
+	    traineemasterRepository.findByTrngidIn(new ArrayList<>(allIds))
+	            .forEach(t -> empIdToName.put(t.getTrngid(), t.getUsername()));
+
+	    // 6️⃣ Map requests to structured response
+	    List<Map<String, Object>> requestList = requests.stream().map(r -> {
+	        Map<String, Object> map = new HashMap<>();
+	        map.put("id", r.getId());
+	        map.put("employeeId", r.getEmployeeId());
+	        map.put("employeeName", empIdToName.getOrDefault(r.getEmployeeId(), "N/A"));
+	        map.put("attendanceDate", r.getAttendanceDate() != null ? r.getAttendanceDate() : "");
+	        map.put("requestedStatus", r.getRequestedStatus());
+	        map.put("remarks", r.getRemarks());
+	        map.put("status", r.getStatus());
+	        map.put("createdBy", r.getCreatedBy());
+	        map.put("createdAt", r.getCreatedAt());
+	        map.put("approvedBy", r.getApprovedBy());
+	        map.put("approvedAt", r.getApprovedAt());
+
+	        // ✅ Identify if request belongs to the manager himself
+	        map.put("isManagerRequest", r.getEmployeeId().equals(managerId));
+
+	        return map;
+	    }).collect(Collectors.toList());
+
+	    // 7️⃣ Return structured JSON response
+	    return Map.of(
+	            "managerId", managerId,
+	            "totalRequests", requestList.size(),
+	            "data", requestList
+	    );
+	}
+
+
+
+	@Transactional(rollbackFor = Exception.class)
+	@PostMapping("/requests/approve")
+	public ResponseEntity<?> approveRequest(@RequestBody Map<String, Object> payload) {
+	    try {
+	        Long requestId = Long.valueOf(payload.get("requestId").toString());
+	        String action = payload.get("action").toString(); // Approved / Rejected
+	        String managerId = payload.get("managerId").toString();
+
+	        AttendanceChangeRequest request = attendanceChangeRequestRepository.findById(requestId)
+	                .orElseThrow(() -> new RuntimeException("Request not found"));
+
+	        // ✅ Restrict self-approval
+	        if (request.getEmployeeId().equals(managerId)) {
+	            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+	                    .body(Map.of("error", "You cannot approve or reject your own request."));
+	        }
+
+	        // ✅ Identify whether Employee or Trainee
+	        usermaintenance emp = usermaintenanceRepository.findByEmpid(request.getEmployeeId());
+	        TraineeMaster trainee = null;
+	        if (emp == null) {
+	            trainee = traineemasterRepository.findByTrngid(request.getEmployeeId());
+	        }
+
+	        // ✅ Validate manager relationship
+	        boolean authorized = false;
+	        if (emp != null && managerId.equals(emp.getRepoteTo())) {
+	            authorized = true;
+	        } else if (trainee != null && managerId.equals(trainee.getRepoteTo())) {
+	            authorized = true;
+	        }
+
+	        if (!authorized) {
+	            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+	                    .body(Map.of("error", "You are not authorized to approve this request."));
+	        }
+
+	        LocalDate attendanceDate = request.getAttendanceDate();
+	        int year = attendanceDate.getYear();
+	        int month = attendanceDate.getMonthValue();
+	        String empId = request.getEmployeeId();
+
+	        // ✅ Handle Absent Approval (Employee or Trainee)
+	        if ("Approved".equalsIgnoreCase(action) && "Absent".equalsIgnoreCase(request.getRequestedStatus())) {
+
+	            // Only employees have leave summary — skip for trainees
+	            if (emp != null) {
+	                EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository
+	                        .findByEmpIdAndYear(empId, year)
+	                        .orElseGet(() -> {
+	                            EmployeeLeaveSummary summary = new EmployeeLeaveSummary();
+	                            summary.setEmpId(empId);
+	                            summary.setYear(year);
+	                            summary.setCasualLeaveBalance(0f);
+	                            summary.setLop(0f);
+	                            return summary;
+	                        });
+
+	                Float availableCL = leaveSummary.getCasualLeaveBalance() != null ? leaveSummary.getCasualLeaveBalance() : 0f;
+	                Float lopDays = 0f;
+
+	                if (availableCL >= 1) {
+	                    leaveSummary.setCasualLeaveBalance(availableCL - 1);
+	                } else {
+	                    lopDays = 1f;
+	                }
+
+	                switch (month) {
+	                    case 1: leaveSummary.setLopJan(addLop(leaveSummary.getLopJan(), lopDays)); break;
+	                    case 2: leaveSummary.setLopFeb(addLop(leaveSummary.getLopFeb(), lopDays)); break;
+	                    case 3: leaveSummary.setLopMar(addLop(leaveSummary.getLopMar(), lopDays)); break;
+	                    case 4: leaveSummary.setLopApr(addLop(leaveSummary.getLopApr(), lopDays)); break;
+	                    case 5: leaveSummary.setLopMay(addLop(leaveSummary.getLopMay(), lopDays)); break;
+	                    case 6: leaveSummary.setLopJun(addLop(leaveSummary.getLopJun(), lopDays)); break;
+	                    case 7: leaveSummary.setLopJul(addLop(leaveSummary.getLopJul(), lopDays)); break;
+	                    case 8: leaveSummary.setLopAug(addLop(leaveSummary.getLopAug(), lopDays)); break;
+	                    case 9: leaveSummary.setLopSep(addLop(leaveSummary.getLopSep(), lopDays)); break;
+	                    case 10: leaveSummary.setLopOct(addLop(leaveSummary.getLopOct(), lopDays)); break;
+	                    case 11: leaveSummary.setLopNov(addLop(leaveSummary.getLopNov(), lopDays)); break;
+	                    case 12: leaveSummary.setLopDec(addLop(leaveSummary.getLopDec(), lopDays)); break;
+	                }
+
+	                leaveSummary.setLeaveTaken((leaveSummary.getLeaveTaken() == null ? 0 : leaveSummary.getLeaveTaken()) + 1);
+	                leaveSummary.setUpdatedAt(LocalDateTime.now());
+	                employeeLeaveSummaryRepository.save(leaveSummary);
+
+	                // ✅ Record Leave in Leave Master Table
+	                EmployeeLeaveMasterTbl leaveRecord = new EmployeeLeaveMasterTbl();
+	                leaveRecord.setEmpid(empId);
+	                Timestamp ts = Timestamp.valueOf(attendanceDate.atStartOfDay());
+	                leaveRecord.setStartdate(ts);
+	                leaveRecord.setEnddate(ts);
+	                leaveRecord.setNoofdays(1.0f);
+	                leaveRecord.setNoofbooked(1.0f);
+	                leaveRecord.setDelflg("N");
+	                leaveRecord.setEntitycreflg("N");
+	                leaveRecord.setStatus("Approved");
+	                leaveRecord.setLeavetype(lopDays > 0 ? "LOP" : "CL");
+	                leaveRecord.setLeavereason("Auto Leave applied due to Absent Approval");
+	                employeeLeaveMasterRepository.save(leaveRecord);
+	            }
+	        }
+
+	        // ✅ Update Request Status
+	        request.setStatus(action);
+	        request.setApprovedBy(managerId);
+	        request.setApprovedAt(new Date());
+	        attendanceChangeRequestRepository.save(request);
+
+	        // ✅ Update Attendance Table if Approved
+	        if ("Approved".equalsIgnoreCase(action)) {
+	            Date attendanceDate1 = Date.from(attendanceDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+
+	            UserMasterAttendanceMod attendance = usermasterattendancemodrepository
+	                    .findByAttendanceidAndAttendancedate(request.getEmployeeId(), attendanceDate1)
+	                    .orElse(new UserMasterAttendanceMod());
+
+	            attendance.setUserid("2019" + request.getEmployeeId());
+	            attendance.setAttendanceid(request.getEmployeeId());
+	            attendance.setAttendancedate(attendanceDate1);
+	            attendance.setStatus(request.getRequestedStatus());
+	            attendance.setRemarks(request.getRemarks());
+
+	            // ✅ Default Check-in / Check-out
+	            LocalDateTime checkInTime = attendanceDate.atTime(9, 0);
+	            LocalDateTime checkOutTime = attendanceDate.atTime(18, 0);
+
+	            attendance.setCheckintime(Date.from(checkInTime.atZone(ZoneId.systemDefault()).toInstant()));
+	            attendance.setCheckouttime(Date.from(checkOutTime.atZone(ZoneId.systemDefault()).toInstant()));
+	            attendance.setTotalhoursworked("9:00");
+	            attendance.setCheckinstatus("On-Time");
+	            attendance.setCheckoutstatus("Completed");
+	            attendance.setRcreuserid(request.getEmployeeId());
+	            attendance.setRcretime(new Date());
+	            attendance.setRmoduserid(managerId);
+	            attendance.setRmodtime(new Date());
+
+	            usermasterattendancemodrepository.save(attendance);
+	        }
+
+	        // ✅ Send Email Notification (Employee or Trainee)
+	        String empName = (emp != null ? emp.getFirstname() : trainee.getFirstname());
+	        String empEmail = (emp != null ? emp.getEmailid() : trainee.getEmailid());
+
+	        String subject = "Your Attendance Request Has Been " + action;
+	        String body = String.format(
+	                "Dear %s,\n\nYour attendance change request for %s (%s) has been %s by your manager.\n\nRemarks: %s\n\nRegards,\nWhitestone Software Solutions",
+	                empName, request.getAttendanceDate(), request.getRequestedStatus(), action, request.getRemarks());
+
+	        emailService.sendLeaveEmail("noreply@whitestonesoftware.in", empEmail, subject, body);
+
+	        return ResponseEntity.ok(Map.of("message", "Request " + action.toLowerCase() + " successfully."));
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        throw new RuntimeException("Transaction failed and rolled back: " + e.getMessage());
 	    }
+	}
+
+	private Float addLop(Float existing, Float add) {
+	    return (existing == null ? 0 : existing) + (add == null ? 0 : add);
+	}
+
+
+	    @PostMapping("/attendance/requestChange")
+	    public ResponseEntity<Map<String, Object>> requestAttendanceChange(@RequestBody AttendanceChangeRequest request) {
+	        Map<String, Object> response = new HashMap<>();
+
+	        try {
+	            System.out.println("DATEEEEEE>>>>>>>>>> " + request.getAttendanceDate());
+
+	            // ✅ Step 1: Check if request already exists for same employee/trainee & date
+	            boolean exists = attendanceChangeRequestRepository
+	                    .existsByEmployeeIdAndAttendanceDate(request.getEmployeeId(), request.getAttendanceDate());
+
+	            if (exists) {
+	                response.put("status", "error");
+	                response.put("message", "A request for this date already exists and cannot be submitted again.");
+	                return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+	            }
+
+	            // ✅ Step 2: Save new request
+	            request.setStatus("Pending");
+	            request.setCreatedAt(new Date());
+	            attendanceChangeRequestRepository.save(request);
+
+	            // ✅ Step 3: Identify whether it's an Employee or Trainee
+	            usermaintenance emp = usermaintenanceRepository.findByEmpid(request.getEmployeeId());
+	            TraineeMaster trainee = null;
+	            usermaintenance manager = null;
+
+	            if (emp == null) {
+	                trainee = traineemasterRepository.findByTrngid(request.getEmployeeId());
+	            }
+
+	            // ✅ Step 4: Fetch Manager / Mentor
+	            if (emp != null && emp.getRepoteTo() != null) {
+	                manager = usermaintenanceRepository.findByEmpid(emp.getRepoteTo());
+	            } else if (trainee != null && trainee.getRepoteTo() != null) {
+	                manager = usermaintenanceRepository.findByEmpid(trainee.getRepoteTo());
+	            }
+
+	            // ✅ Step 5: Send email notification if manager found
+	            if (manager != null) {
+	                String subject = "New Attendance Change Request";
+
+	                String empName = (emp != null ? emp.getFirstname() : trainee.getFirstname());
+	                String empEmail = (emp != null ? emp.getEmailid() : trainee.getEmailid());
+
+	                String body = String.format(
+	                        "Dear %s,\n\n%s has submitted an attendance change request for %s with requested status: %s.\n\nRemarks: %s\n\nPlease review and approve/reject it.\n\nBest Regards,\nWhitestone Software Solutions",
+	                        manager.getFirstname(), empName, request.getAttendanceDate(),
+	                        request.getRequestedStatus(), request.getRemarks()
+	                );
+
+	                // from, to, subject, body
+	                emailService.sendLeaveEmail(empEmail, manager.getEmailid(), subject, body);
+	            }
+
+	            response.put("status", "success");
+	            response.put("message", "Attendance change request submitted successfully.");
+	            return ResponseEntity.ok(response);
+
+	        } catch (Exception e) {
+	            e.printStackTrace();
+	            response.put("status", "error");
+	            response.put("message", "An unexpected error occurred while submitting the request: " + e.getMessage());
+	            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+	        }
+	    }
+
+
+	@GetMapping("/attendance/checkin/eligibility/{employeeId}")
+	public ResponseEntity<Map<String, Object>> checkCheckInEligibility(@PathVariable String employeeId) {
+	    Map<String, Object> response = new HashMap<>();
+
+	    try {
+	        // 🔹 Step 1: Check if employee exists in usermaintenance or trainee_master
+	        usermaintenance employee = usermaintenanceRepository.findByEmpid(employeeId);
+	        TraineeMaster trainee = null;
+
+	        if (employee == null) {
+	            // Try trainee repository if not found in employee master
+	            trainee = traineemasterRepository.findByTrngid(employeeId);
+	        }
+
+	        if (employee == null && trainee == null) {
+	            response.put("status", "error");
+	            response.put("eligible", false);
+	            response.put("message", "Employee or Trainee not found.");
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+	        }
+
+	        // 🔹 Step 2: Get yesterday’s date
+	        LocalDate yesterday = LocalDate.now().minusDays(1);
+
+	        // 🔹 Step 3: Skip eligibility if yesterday was a week off (Sunday or 2nd/4th Saturday)
+	        if (isWeekOff(yesterday)) {
+	            response.put("status", "success");
+	            response.put("eligible", true);
+	            response.put("message",
+	                "Yesterday was a week off (Sunday or 2nd/4th Saturday). Check-in allowed. " +
+	                "If you have a different week off, please mark it manually in the Timesheet.");
+	            return ResponseEntity.ok(response);
+	        }
+
+	        // 🔹 Step 4: Convert to Date for DB check
+	        Date yesterdayDate = Date.from(yesterday.atStartOfDay(ZoneId.systemDefault()).toInstant());
+
+	        // 🔹 Step 5: Check attendance for both employees and trainees
+	        Optional<UserMasterAttendanceMod> attendanceOpt =
+	                usermasterattendancemodrepository.findByAttendanceidAndAttendancedate(employeeId, yesterdayDate);
+
+	        if (attendanceOpt.isPresent() &&
+	            "Present".equalsIgnoreCase(attendanceOpt.get().getStatus())) {
+
+	            response.put("status", "success");
+	            response.put("eligible", true);
+	            response.put("message", "Eligible for check-in. Yesterday’s attendance is marked as Present.");
+	            return ResponseEntity.ok(response);
+	        }
+
+	        // 🔹 Step 6: Check if pending attendance request exists (common for both)
+	        Optional<AttendanceChangeRequest> pendingRequestOpt =
+	                attendanceChangeRequestRepository.findByEmployeeIdAndAttendanceDateAndStatus(
+	                        employeeId, yesterday, "Pending");
+
+	        if (pendingRequestOpt.isPresent()) {
+	            response.put("status", "success");
+	            response.put("eligible", true);
+	            response.put("message", "Pending attendance change request found. Check-in allowed.");
+	            return ResponseEntity.ok(response);
+	        }
+
+	        // 🔹 Step 7: Not eligible
+	        response.put("status", "error");
+	        response.put("eligible", false);
+	        response.put("message",
+	                "Yesterday's attendance is not marked or no pending request found. " +
+	                "Please go to Attendance → Timesheet, select yesterday’s date, " +
+	                "mark the status and reason, submit, and try check-in again.");
+	        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        response.put("status", "error");
+	        response.put("eligible", false);
+	        response.put("message", "An unexpected error occurred while checking eligibility: " + e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+	    }
+	}
+
+
+
+
+	
+	private boolean isWeekOff(LocalDate date) {
+	    // ✅ Always treat Sunday as week off
+	    if (date.getDayOfWeek() == DayOfWeek.SUNDAY) {
+	        return true;
+	    }
+
+	    // ✅ For Saturdays: check if it’s the 2nd or 4th one in the month
+	    if (date.getDayOfWeek() == DayOfWeek.SATURDAY) {
+	        LocalDate firstDay = date.withDayOfMonth(1);
+	        int saturdayCount = 0;
+	        for (int i = 0; i < date.getDayOfMonth(); i++) {
+	            LocalDate d = firstDay.plusDays(i);
+	            if (d.getDayOfWeek() == DayOfWeek.SATURDAY) {
+	                saturdayCount++;
+	            }
+	        }
+	        // 2nd or 4th Saturday → week off
+	        if (saturdayCount == 2 || saturdayCount == 4) {
+	            return true;
+	        }
+	    }
+
+	    return false;
 	}
 
 

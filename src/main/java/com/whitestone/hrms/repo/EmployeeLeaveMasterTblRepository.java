@@ -3,6 +3,7 @@ package com.whitestone.hrms.repo;
 import java.sql.Timestamp;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -47,4 +48,11 @@ public interface EmployeeLeaveMasterTblRepository extends JpaRepository<Employee
             List<String> statuses
     );
 
+	@Query("SELECT e FROM EmployeeLeaveMasterTbl e WHERE e.empid = :empId AND :attendanceDate BETWEEN e.startdate AND e.enddate")
+	Optional<EmployeeLeaveMasterTbl> findByEmpidAndStartdate(
+	        @Param("empId") String empId,
+	        @Param("attendanceDate") Date attendanceDate);
+
+
+	
 }

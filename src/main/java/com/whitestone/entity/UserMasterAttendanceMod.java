@@ -16,81 +16,81 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class UserMasterAttendanceMod {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE,generator = "USR_ATTEN_SEQ")
-    @SequenceGenerator(name = "USR_ATTEN_SEQ", sequenceName = "USR_ATTEN_SEQ", allocationSize = 1)
-    @Column(name = "SRL_NUM")
-    private Long srlnum;
-   
-    @Column(name = "USER_ID", nullable = false, length = 20)
-    private String userid;
-
-    @Column(name = "ATTENDANCE_ID", nullable = false, length = 20)
-    private String attendanceid;
-
-    @Column(name = "ATTENDANCE_DATE")
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    private Date attendancedate;
-
-    @Column(name = "STATUS", length = 20)
-    private String status;
-
-    @Column(name = "CHECK_IN_TIME")
-    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
-    private Date checkintime;
-
-    @Column(name = "CHECK_OUT_TIME")
-    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
-    private Date checkouttime;
-
-    @Column(name = "TOTAL_HOURS_WORKED")
-    private String totalhoursworked;
-
-    @Column(name = "CHECK_IN_STATUS", length = 20)
-    private String checkinstatus;
-
-    @Column(name = "CHECK_OUT_STATUS", length = 20)
-    private String checkoutstatus;
-
-    @Column(name = "REMARKS", length = 50)
-    private String remarks;
-
-    @Column(name = "OVER_TIME_HOURS")
-    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
-    private Date overtimehours;
-
-    @Column(name = "SHIFT", length = 50)
-    private String shift;
-
-    @Column(name = "HOLIDAY_STATUS", length = 50)
-    private String holidaystatus;
-
-    @Column(name = "CHECK_IN_LOCATION", length = 50)
-    private String checkinlocation;
-
-    @Column(name = "CHECK_OUT_LOCATION", length = 50)
-    private String checkoutlocation;
-
-    @Column(name = "RCRE_USER_ID", length = 20)
-    private String rcreuserid;
-
-    @Column(name = "RCRE_TIME")
-    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
-    private Date rcretime;
-
-    @Column(name = "RMOD_USER_ID", length = 20)
-    private String rmoduserid;
-
-    @Column(name = "RMOD_TIME")
-    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
-    private Date rmodtime;
-
-    @Column(name = "RVFY_USER_ID", length = 15)
-    private String rvfyuserid;
-
-    @Column(name = "RVFY_TIME")
-    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
-    private Date rvfytime;
+	    @Id
+	    @GeneratedValue(strategy = GenerationType.SEQUENCE,generator = "USR_ATTEN_SEQ")
+	    @SequenceGenerator(name = "USR_ATTEN_SEQ", sequenceName = "USR_ATTEN_SEQ", allocationSize = 1)
+	    @Column(name = "SRL_NUM")
+	    private Long srlnum;
+	   
+	    @Column(name = "USER_ID", nullable = false, length = 20)
+	    private String userid;
+	
+	    @Column(name = "ATTENDANCE_ID", nullable = false, length = 20)
+	    private String attendanceid;
+	
+	    @Column(name = "ATTENDANCE_DATE")
+	    @JsonFormat(pattern = "yyyy-MM-dd")
+	    private Date attendancedate;
+	
+	    @Column(name = "STATUS", length = 20)
+	    private String status;
+	
+	    @Column(name = "CHECK_IN_TIME")
+	    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
+	    private Date checkintime;
+	
+	    @Column(name = "CHECK_OUT_TIME")
+	    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
+	    private Date checkouttime;
+	
+	    @Column(name = "TOTAL_HOURS_WORKED")
+	    private String totalhoursworked;
+	
+	    @Column(name = "CHECK_IN_STATUS", length = 20)
+	    private String checkinstatus;
+	
+	    @Column(name = "CHECK_OUT_STATUS", length = 20)
+	    private String checkoutstatus;
+	
+	    @Column(name = "REMARKS", length = 50)
+	    private String remarks;
+	
+	    @Column(name = "OVER_TIME_HOURS")
+	    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
+	    private Date overtimehours;
+	
+	    @Column(name = "SHIFT", length = 50)
+	    private String shift;
+	
+	    @Column(name = "HOLIDAY_STATUS", length = 50)
+	    private String holidaystatus;
+	
+	    @Column(name = "CHECK_IN_LOCATION", length = 50)
+	    private String checkinlocation;
+	
+	    @Column(name = "CHECK_OUT_LOCATION", length = 50)
+	    private String checkoutlocation;
+	
+	    @Column(name = "RCRE_USER_ID", length = 20)
+	    private String rcreuserid;
+	
+	    @Column(name = "RCRE_TIME")
+	    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
+	    private Date rcretime;
+	
+	    @Column(name = "RMOD_USER_ID", length = 20)
+	    private String rmoduserid;
+	
+	    @Column(name = "RMOD_TIME")
+	    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
+	    private Date rmodtime;
+	
+	    @Column(name = "RVFY_USER_ID", length = 15)
+	    private String rvfyuserid;
+	
+	    @Column(name = "RVFY_TIME")
+	    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
+	    private Date rvfytime;
 
 	public Long getSrlnum() {
 		return srlnum;
