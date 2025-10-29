@@ -5307,6 +5307,7 @@ public class AppController {
 	            // 🟩 Regular Attendance Record
 	            } else if (hasAttendance) {
 	                String status = attendanceRecord.getStatus().trim();
+	                String originalStatus = status; // Keep original status for display
 
 	                switch (status.toLowerCase()) {
 	                    case "present":
@@ -5332,7 +5333,7 @@ public class AppController {
 	                        event.put("backgroundColor", "#6f42c1"); // purple
 	                        break;
 	                    case "absent":
-	                    default:
+	                        // For Absent, check if CL is available
 	                        Optional<EmployeeLeaveSummary> summaryOpt =
 	                                employeeLeaveSummaryRepository.findByEmpIdAndYear(employeeId, year);
 	                        if (summaryOpt.isPresent() && summaryOpt.get().getCasualLeaveBalance() > 0) {
@@ -5343,10 +5344,27 @@ public class AppController {
 	                            event.put("backgroundColor", "#ff4c4c"); // red
 	                        }
 	                        break;
+	                    default:
+	                        // For any other status including "absent", check CL balance
+	                        if ("absent".equalsIgnoreCase(status)) {
+	                            Optional<EmployeeLeaveSummary> summaryOpt1 =
+	                                    employeeLeaveSummaryRepository.findByEmpIdAndYear(employeeId, year);
+	                            if (summaryOpt1.isPresent() && summaryOpt1.get().getCasualLeaveBalance() > 0) {
+	                                status = "Absent (CL Used)";
+	                                event.put("backgroundColor", "#ffa500"); // orange
+	                            } else {
+	                                status = "Absent (LOP)";
+	                                event.put("backgroundColor", "#ff4c4c"); // red
+	                            }
+	                        } else {
+	                            event.put("backgroundColor", getStatusColor(status));
+	                        }
+	                        break;
 	                }
 
 	                event.put("title", status);
 	                extendedProps.put("status", status);
+	                extendedProps.put("originalStatus", originalStatus);
 
 	            // 🟠 No record (Miss Punch or Future Date)
 	            } else {
@@ -5380,10 +5398,14 @@ public class AppController {
 	private String getStatusColor(String status) {
 	    if (status == null) return "#ffffff";
 	    
-	    switch (status.toLowerCase()) {
+	    String normalizedStatus = status.toLowerCase();
+	    
+	    switch (normalizedStatus) {
 	        case "present": return "#28a745";
 	        case "early leave": return "#fd7e14"; // orange for early leave
-	      //  case "absent": return "#ff4c4c";
+	        case "absent": return "#ff4c4c";
+	        case "absent (cl used)": return "#ffa500"; // orange for CL used
+	        case "absent (lop)": return "#ff4c4c"; // red for LOP
 	        case "miss punch": 
 	        case "forgot": return "#ffff84";
 	        case "week off": return "#e0e0e0";
