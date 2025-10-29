@@ -496,14 +496,24 @@ public class AppController {
 	}
 
 	private String calculateStatus(long durationHours) {
-		DayOfWeek day = LocalDate.now().getDayOfWeek();
-		if (durationHours >= 8) {
-			return "Present";
-		} else if (durationHours >= 4) {
-			return day == DayOfWeek.SATURDAY ? "Present" : "Half-Day";
-		} else {
-			return "Absent";
-		}
+	    DayOfWeek day = LocalDate.now().getDayOfWeek();
+
+	    // ✅ Full day logic
+	    if (durationHours >= 8) {
+	        return "Present";
+	    }
+	    // ✅ Early leave logic (between 6 and 8 hours)
+	    else if (durationHours >= 6 && durationHours < 8) {
+	        return "Early Leave";
+	    }
+	    // ✅ Half-day logic (between 4 and 6 hours, except Saturday)
+	    else if (durationHours >= 4 && durationHours < 6) {
+	        return day == DayOfWeek.SATURDAY ? "Present" : "Half-Day";
+	    }
+	    // ✅ Less than 4 hours → Absent
+	    else {
+	        return "Absent";
+	    }
 	}
 
 	private ResponseEntity<?> successResponse(String message) {
@@ -5071,7 +5081,7 @@ public class AppController {
 	            attendanceMap.put(dateFormat.format(record.getAttendancedate()), record.getStatus());
 	        }
 
-	        int present = 0, absent = 0, missPunch = 0, weekOff = 0, compOff = 0, publicHoliday = 0, forgot = 0, od = 0;
+	        int present = 0, absent = 0, missPunch = 0, weekOff = 0, compOff = 0, publicHoliday = 0, forgot = 0, od = 0, earlyLeave = 0;
 	        List<Map<String, String>> holidaysList = new ArrayList<>();
 	        List<Map<String, String>> specialAttendanceList = new ArrayList<>();
 
@@ -5148,6 +5158,9 @@ public class AppController {
 	                    case "od":
 	                        od++;
 	                        break;
+	                    case "early leave":
+	                        earlyLeave++;
+	                        break;
 	                    default:
 	                        absent++;
 	                        break;
@@ -5165,6 +5178,7 @@ public class AppController {
 	        data.put("compOff", compOff);
 	        data.put("publicHoliday", publicHoliday);
 	        data.put("od", od);
+	        data.put("earlyLeave", earlyLeave); // Added early leave count
 	        data.put("holidays", holidaysList);
 	        data.put("specialAttendance", specialAttendanceList); // Attendance on holidays/week-offs
 	        data.put("totalHolidays", holidaysList.size());
@@ -5298,6 +5312,9 @@ public class AppController {
 	                    case "present":
 	                        event.put("backgroundColor", "#28a745"); // green
 	                        break;
+	                    case "early leave":
+	                        event.put("backgroundColor", "#fd7e14"); // orange for early leave
+	                        break;
 	                    case "miss punch":
 	                    case "forgot":
 	                        event.put("backgroundColor", "#ffff84"); // yellow
@@ -5365,7 +5382,8 @@ public class AppController {
 	    
 	    switch (status.toLowerCase()) {
 	        case "present": return "#28a745";
-	        case "absent": return "#ff4c4c";
+	        case "early leave": return "#fd7e14"; // orange for early leave
+	      //  case "absent": return "#ff4c4c";
 	        case "miss punch": 
 	        case "forgot": return "#ffff84";
 	        case "week off": return "#e0e0e0";
