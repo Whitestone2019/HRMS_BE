@@ -2394,7 +2394,7 @@ public class AppController {
 
 			// fetch master + mod leaves (ensure these repository methods exist)
 			List<EmployeeLeaveMasterTbl> masterLeaves = employeeLeaveMasterRepository
-					.findByEmpidAndStartdateBetweenAndStatusIn(empId,
+					.findByEmpidAndStartdateBetweenAndStatusInIgnoreCase(empId,
 							Date.from(yearStart.atStartOfDay(ZoneId.systemDefault()).toInstant()),
 							Date.from(yearEnd.atStartOfDay(ZoneId.systemDefault()).toInstant()), statuses);
 
@@ -7113,12 +7113,11 @@ public class AppController {
 	            // 🔹 Step 2: Get yesterday’s date
 	            LocalDate yesterday = LocalDate.now().minusDays(1);
 
-	            // 🔹 Step 3: Week off check
+	            // 🔹 Step 3: Week off check (Sunday or 2nd/4th Saturday)
 	            if (isWeekOff(yesterday)) {
 	                response.put("status", "success");
 	                response.put("eligible", true);
-	                response.put("message",
-	                        "Yesterday was a week off (Sunday or 2nd/4th Saturday). Check-in allowed.");
+	                response.put("message", "Yesterday was a week off (Sunday or 2nd/4th Saturday). Check-in allowed.");
 	                return ResponseEntity.ok(response);
 	            }
 
@@ -7130,11 +7129,30 @@ public class AppController {
 	            Optional<UserMasterAttendanceMod> attendanceOpt =
 	                    usermasterattendancemodrepository.findByAttendanceidAndAttendancedate(employeeId, startOfDay);
 
-	            if (attendanceOpt.isPresent() &&
-	                    "Present".equalsIgnoreCase(attendanceOpt.get().getStatus())) {
-	                response.put("status", "success");
-	                response.put("eligible", true);
-	                response.put("message", "Eligible for check-in. Yesterday’s attendance is marked as Present.");
+	            if (attendanceOpt.isPresent()) {
+	                String status = attendanceOpt.get().getStatus();
+
+	                if ("Present".equalsIgnoreCase(status)) {
+	                    response.put("status", "success");
+	                    response.put("eligible", true);
+	                    response.put("message", "Eligible for check-in. Yesterday’s attendance is marked as Present.");
+	                } 
+	                else if ("Early Leave".equalsIgnoreCase(status)) {
+	                    response.put("status", "warning");
+	                    response.put("eligible", true);
+	                    response.put("message", "Eligible for check-in, but yesterday was marked as Early Leave.");
+	                } 
+	                else if ("Half-Day".equalsIgnoreCase(status)) {
+	                    response.put("status", "warning");
+	                    response.put("eligible", true);
+	                    response.put("message", "Eligible for check-in, but yesterday was marked as Half-Day.");
+	                } 
+	                else if ("Absent".equalsIgnoreCase(status)) {
+	                    response.put("status", "success");
+	                    response.put("eligible", true);
+	                    response.put("message", "Eligible for check-in, but yesterday was marked as Absent.");
+	                } 
+	              
 	                return ResponseEntity.ok(response);
 	            }
 
@@ -7152,11 +7170,11 @@ public class AppController {
 
 	            // 🔹 Step 7: Check leave record covering yesterday
 	            List<EmployeeLeaveMasterTbl> leaves = employeeLeaveMasterRepository
-	                    .findByEmpidAndStartdateBetweenAndStatusIn(
-	                            employeeId, startOfDay, endOfDay, Arrays.asList("Approved", "Pending"));
+	                    .findByEmpidAndStartdateBetweenAndStatusInIgnoreCase(
+	                            employeeId, startOfDay, endOfDay, Arrays.asList("approved", "pending"));
 
 	            if (!leaves.isEmpty()) {
-	                EmployeeLeaveMasterTbl leave = leaves.get(0); // Take first match
+	                EmployeeLeaveMasterTbl leave = leaves.get(0);
 	                LocalDate startDate = leave.getStartdate().toLocalDateTime().toLocalDate();
 	                LocalDate endDate = leave.getEnddate().toLocalDateTime().toLocalDate();
 
@@ -7168,12 +7186,11 @@ public class AppController {
 	                return ResponseEntity.ok(response);
 	            }
 
-	            // 🔹 Step 8: Not eligible
+	            // 🔹 Step 8: Not eligible (no attendance, leave, or request)
 	            response.put("status", "error");
 	            response.put("eligible", false);
 	            response.put("message",
-	                    "Yesterday's attendance is not marked and no leave/pending request found. " +
-	                            "Please update the timesheet and try again.");
+	                    "Yesterday's attendance is not marked and no leave/pending request found. Please update the timesheet and try again.");
 	            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
 
 	        } catch (Exception e) {
@@ -7184,6 +7201,7 @@ public class AppController {
 	            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 	        }
 	    }
+
 
 
 

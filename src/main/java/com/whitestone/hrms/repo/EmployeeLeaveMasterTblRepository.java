@@ -41,12 +41,17 @@ public interface EmployeeLeaveMasterTblRepository extends JpaRepository<Employee
 	@Query(value = "SELECT COUNT(*) FROM EMPLOYEE_LEAVE_MASTER_TBL WHERE EMP_ID = ?1 AND TRUNC(START_DATE) = TRUNC(?2)", nativeQuery = true)
 	int countByEmpidAndStartDate(String empid, Timestamp startdate);
 	
-	List<EmployeeLeaveMasterTbl> findByEmpidAndStartdateBetweenAndStatusIn(
-            String empid,
-            Date startdate,
-            Date enddate,
-            List<String> statuses
-    );
+	@Query("SELECT e FROM EmployeeLeaveMasterTbl e " +
+		       "WHERE e.empid = :empid " +
+		       "AND e.startdate BETWEEN :startdate AND :enddate " +
+		       "AND LOWER(e.status) IN :statuses")
+		List<EmployeeLeaveMasterTbl> findByEmpidAndStartdateBetweenAndStatusInIgnoreCase(
+		        @Param("empid") String empid,
+		        @Param("startdate") Date startdate,
+		        @Param("enddate") Date enddate,
+		        @Param("statuses") List<String> statuses
+		);
+
 
 	@Query("SELECT e FROM EmployeeLeaveMasterTbl e WHERE e.empid = :empId AND :attendanceDate BETWEEN e.startdate AND e.enddate")
 	Optional<EmployeeLeaveMasterTbl> findByEmpidAndStartdate(
