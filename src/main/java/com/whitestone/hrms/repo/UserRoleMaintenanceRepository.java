@@ -10,4 +10,7 @@ import com.whitestone.entity.UserRoleMaintenance;
 public interface UserRoleMaintenanceRepository extends JpaRepository<UserRoleMaintenance, String> {
 	//You can define custom query methods here if needed.
 	 Optional<UserRoleMaintenance> findByRoleid(String roleid);
+
+	 Optional<UserRoleMaintenance> findByRolenameIgnoreCase(String rolename);
+
 }

@@ -3132,103 +3132,194 @@ public class AppController {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 		}
 	}
-
+	
 	@PutMapping("/update/advance/approval/{advanceId}")
 	@Transactional
 	public ResponseEntity<Map<String, Object>> updateAdvance(@PathVariable String advanceId,
-			@RequestBody Map<String, Object> requestBody) {
+	        @RequestBody Map<String, Object> requestBody) {
 
-		Map<String, Object> response = new HashMap<>();
-		String Reason = (String) requestBody.get("reason");
-		try {
-			// Fetch the existing advance record by ID
-			Optional<AdvancesDetailsMod> existingAdvanceOpt = advancesDetailsModRepository.findById(advanceId);
-			if (!existingAdvanceOpt.isPresent()) {
-				response.put("success", false);
-				response.put("message", "Advance not found.");
-				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-			}
+	    Map<String, Object> response = new HashMap<>();
+	    String reason = (String) requestBody.get("reason");
 
-			// Update the relevant fields
-			AdvancesDetailsMod existingAdvance = existingAdvanceOpt.get();
-			existingAdvance.setEntityCreFlg("Y");
-			existingAdvance.setPaymentStatus(0);
-			existingAdvance.setRejectreason(Reason);
-			existingAdvance.setRmodTime(new Date());
-			String approver = existingAdvance.getApprover();
+	    try {
+	        Optional<AdvancesDetailsMod> existingAdvanceOpt = advancesDetailsModRepository.findById(advanceId);
+	        if (!existingAdvanceOpt.isPresent()) {
+	            response.put("success", false);
+	            response.put("message", "Advance not found.");
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+	        }
 
-			usermaintenance currentApprover = usermaintenanceRepository.findByEmpid(approver);
+	        AdvancesDetailsMod existingAdvance = existingAdvanceOpt.get();
+	        existingAdvance.setEntityCreFlg("Y");
+	        existingAdvance.setPaymentStatus(0);
+	        existingAdvance.setRejectreason(reason);
+	        existingAdvance.setRmodTime(new Date());
 
-			if (!currentApprover.equals("10029")) {
+	        String currentApproverId = existingAdvance.getApprover();
+	        usermaintenance currentApprover = usermaintenanceRepository.findByEmpid(currentApproverId);
 
-				if (currentApprover != null && currentApprover.getRepoteTo() != null) {
-					usermaintenance nextApprover = usermaintenanceRepository.findByEmpid(currentApprover.getRepoteTo());
+	        // 🧩 CTO -> Next Approver -> Check Role
+	        if (currentApprover != null && currentApprover.getRepoteTo() != null) {
+	            usermaintenance nextApprover = usermaintenanceRepository.findByEmpid(currentApprover.getRepoteTo());
 
-					if (nextApprover != null && nextApprover.getRoleid() != null) {
-						Optional<UserRoleMaintenance> roleOpt = userRoleMaintenanceRepository
-								.findByRoleid(nextApprover.getRoleid());
+	            if (nextApprover != null && nextApprover.getRoleid() != null) {
+	                Optional<UserRoleMaintenance> roleOpt = userRoleMaintenanceRepository
+	                        .findByRoleid(nextApprover.getRoleid());
 
-						if (roleOpt.isPresent()) {
-							existingAdvance.setApprover(nextApprover.getEmpid());
-							existingAdvance.setStatus("Pending for " + roleOpt.get().getRolename() + " approval");
-						} else {
-							// Role not found
-							existingAdvance.setStatus("Payment to be Initiate");
-							existingAdvance.setApprover("10029");
-						}
-					} else {
-						// nextApprover is null
-						existingAdvance.setStatus("Payment to be Initiate");
-						existingAdvance.setApprover("10029");
-					}
-				} else {
-					existingAdvance.setStatus("Payment to be Initiate");
-					existingAdvance.setApprover("10029");
-				}
-			} else {
-				existingAdvance.setStatus("Approved");
-				existingAdvance.setApprover("10029");
-			}
+	                if (roleOpt.isPresent()) {
+	                    String nextRoleName = roleOpt.get().getRolename();
 
-			// Save the updated advance
-			advancesDetailsModRepository.save(existingAdvance);
+	                    // ✅ If next role is Accountant (ACC), finalize approval
+	                    if ("Accountant".equalsIgnoreCase(nextRoleName) || "ACC".equalsIgnoreCase(nextRoleName)) {
+	                        existingAdvance.setStatus("Approved");
+	                        existingAdvance.setApprover(nextApprover.getEmpid());
+	                    } else {
+	                        // Otherwise, send to next approver for their approval
+	                        existingAdvance.setApprover(nextApprover.getEmpid());
+	                        existingAdvance.setStatus("Pending for " + nextRoleName + " approval");
+	                    }
+	                } else {
+	                    // Role not found
+	                    existingAdvance.setStatus("Payment to be Initiate");
+	                }
+	            } else {
+	                existingAdvance.setStatus("Payment to be Initiate");
+	            }
+	        } else {
+	            existingAdvance.setStatus("Payment to be Initiate");
+	        }
 
-			// Get employee info related to the advance
-			String empId = existingAdvance.getEmpId();
-			usermaintenance employee = usermaintenanceRepository.findByEmpid(empId);
-			if (employee == null) {
-				response.put("success", false);
-				response.put("message", "Employee not found.");
-				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-			}
+	        advancesDetailsModRepository.save(existingAdvance);
 
-			// Email notification to employee
-			String subjectToEmployee = "Your Advance Request Has Been Approved";
-			String bodyToEmployee = "Dear " + employee.getFirstname() + ",\n\n" + "Your advance request (ID: "
-					+ advanceId + ") has been approved by the admin.\n\n" + "Regards,\nHRMS System";
+	        // 📨 Send email to employee
+	        String empId = existingAdvance.getEmpId();
+	        usermaintenance employee = usermaintenanceRepository.findByEmpid(empId);
+	        if (employee == null) {
+	            response.put("success", false);
+	            response.put("message", "Employee not found.");
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+	        }
 
-			usermaintenance manager = usermaintenanceRepository.findByEmpid(employee.getRepoteTo());
+	        String subjectToEmployee = "Your Advance Request Has Been Approved";
+	        String bodyToEmployee = "Dear " + employee.getFirstname() + ",\n\n"
+	                + "Your advance request (ID: " + advanceId + ") has been approved.\n\n"
+	                + "Regards,\nHRMS System";
 
-			if (employee.getEmailid() != null) {
-				emailService.sendLeaveEmail(manager.getEmailid(), employee.getEmailid(), subjectToEmployee,
-						bodyToEmployee);
-			} else {
-				System.out.println("No email found for employee: " + employee.getEmpid());
-			}
+	        usermaintenance manager = usermaintenanceRepository.findByEmpid(employee.getRepoteTo());
+	        if (employee.getEmailid() != null) {
+	            emailService.sendLeaveEmail(manager.getEmailid(), employee.getEmailid(), subjectToEmployee, bodyToEmployee);
+	        }
 
-			// Success response
-			response.put("success", true);
-			response.put("message", "Advance updated successfully and email sent.");
-			return ResponseEntity.ok(response);
+	        response.put("success", true);
+	        response.put("message", "Advance updated successfully and email sent.");
+	        return ResponseEntity.ok(response);
 
-		} catch (Exception e) {
-			e.printStackTrace();
-			response.put("success", false);
-			response.put("message", "Error occurred while updating advance.");
-			response.put("errorDetails", e.getMessage());
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-		}
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        response.put("success", false);
+	        response.put("message", "Error occurred while updating advance.");
+	        response.put("errorDetails", e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+	    }
 	}
+
+
+//	@PutMapping("/update/advance/approval/{advanceId}")
+//	@Transactional
+//	public ResponseEntity<Map<String, Object>> updateAdvance(@PathVariable String advanceId,
+//			@RequestBody Map<String, Object> requestBody) {
+//
+//		Map<String, Object> response = new HashMap<>();
+//		String Reason = (String) requestBody.get("reason");
+//		try {
+//			// Fetch the existing advance record by ID
+//			Optional<AdvancesDetailsMod> existingAdvanceOpt = advancesDetailsModRepository.findById(advanceId);
+//			if (!existingAdvanceOpt.isPresent()) {
+//				response.put("success", false);
+//				response.put("message", "Advance not found.");
+//				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+//			}
+//
+//			// Update the relevant fields
+//			AdvancesDetailsMod existingAdvance = existingAdvanceOpt.get();
+//			existingAdvance.setEntityCreFlg("Y");
+//			existingAdvance.setPaymentStatus(0);
+//			existingAdvance.setRejectreason(Reason);
+//			existingAdvance.setRmodTime(new Date());
+//			String approver = existingAdvance.getApprover();
+//
+//			usermaintenance currentApprover = usermaintenanceRepository.findByEmpid(approver);
+//
+//			if (!currentApprover.equals("10029")) {
+//
+//				if (currentApprover != null && currentApprover.getRepoteTo() != null) {
+//					usermaintenance nextApprover = usermaintenanceRepository.findByEmpid(currentApprover.getRepoteTo());
+//
+//					if (nextApprover != null && nextApprover.getRoleid() != null) {
+//						Optional<UserRoleMaintenance> roleOpt = userRoleMaintenanceRepository
+//								.findByRoleid(nextApprover.getRoleid());
+//
+//						if (roleOpt.isPresent()) {
+//							existingAdvance.setApprover(nextApprover.getEmpid());
+//							existingAdvance.setStatus("Pending for " + roleOpt.get().getRolename() + " approval");
+//						} else {
+//							// Role not found
+//							existingAdvance.setStatus("Payment to be Initiate");
+//							existingAdvance.setApprover("10029");
+//						}
+//					} else {
+//						// nextApprover is null
+//						existingAdvance.setStatus("Payment to be Initiate");
+//						existingAdvance.setApprover("10029");
+//					}
+//				} else {
+//					existingAdvance.setStatus("Payment to be Initiate");
+//					existingAdvance.setApprover("10029");
+//				}
+//			} else {
+//				existingAdvance.setStatus("Approved");
+//				existingAdvance.setApprover("10029");
+//			}
+//
+//			// Save the updated advance
+//			advancesDetailsModRepository.save(existingAdvance);
+//
+//			// Get employee info related to the advance
+//			String empId = existingAdvance.getEmpId();
+//			usermaintenance employee = usermaintenanceRepository.findByEmpid(empId);
+//			if (employee == null) {
+//				response.put("success", false);
+//				response.put("message", "Employee not found.");
+//				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+//			}
+//
+//			// Email notification to employee
+//			String subjectToEmployee = "Your Advance Request Has Been Approved";
+//			String bodyToEmployee = "Dear " + employee.getFirstname() + ",\n\n" + "Your advance request (ID: "
+//					+ advanceId + ") has been approved by the admin.\n\n" + "Regards,\nHRMS System";
+//
+//			usermaintenance manager = usermaintenanceRepository.findByEmpid(employee.getRepoteTo());
+//
+//			if (employee.getEmailid() != null) {
+//				emailService.sendLeaveEmail(manager.getEmailid(), employee.getEmailid(), subjectToEmployee,
+//						bodyToEmployee);
+//			} else {
+//				System.out.println("No email found for employee: " + employee.getEmpid());
+//			}
+//
+//			// Success response
+//			response.put("success", true);
+//			response.put("message", "Advance updated successfully and email sent.");
+//			return ResponseEntity.ok(response);
+//
+//		} catch (Exception e) {
+//			e.printStackTrace();
+//			response.put("success", false);
+//			response.put("message", "Error occurred while updating advance.");
+//			response.put("errorDetails", e.getMessage());
+//			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+//		}
+//	}
 
 	@PutMapping("/update/expenses/{expenseId}/payment-status")
 	@Transactional
