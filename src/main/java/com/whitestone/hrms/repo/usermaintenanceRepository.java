@@ -51,4 +51,8 @@ public interface usermaintenanceRepository extends JpaRepository<usermaintenance
     @Transactional
     @Query("UPDATE usermaintenance u SET u.password = :password WHERE u.empid = :empId OR u.userid = :empId AND u.status = 'Active'")
     int updatePasswordByEmpId(@Param("password") String password, @Param("empId") String empId);
+    
+    
+    List<usermaintenance> findByStatusIgnoreCase(String status);
+
 }

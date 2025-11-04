@@ -1,7 +1,10 @@
 package com.whitestone.hrms.controller;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,10 +44,15 @@ import javax.crypto.SecretKey;
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.ClientAnchor;
+import org.apache.poi.ss.usermodel.CreationHelper;
+import org.apache.poi.ss.usermodel.Drawing;
 import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.Picture;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.util.IOUtils;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.hibernate.PropertyValueException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7321,6 +7329,88 @@ public class AppController {
 
 	    return false;
 	}
+	
+	@GetMapping("/download/employees/excel")
+	public ResponseEntity<byte[]> downloadEmployeeExcel() {
+	    try (Workbook workbook = new XSSFWorkbook()) {
+	        Sheet sheet = workbook.createSheet("Employee Photos");
+
+	        // Create header row
+	        Row headerRow = sheet.createRow(0);
+	        String[] headers = {"S.No", "Employee ID", "Name", "Photo"};
+	        for (int i = 0; i < headers.length; i++) {
+	            Cell cell = headerRow.createCell(i);
+	            cell.setCellValue(headers[i]);
+	        }
+
+	        // Adjust column width
+	        sheet.setColumnWidth(0, 2000);
+	        sheet.setColumnWidth(1, 5000);
+	        sheet.setColumnWidth(2, 7000);
+	        sheet.setColumnWidth(3, 10000);
+
+	        // ✅ Fetch only active employees
+	        List<usermaintenance> employees = usermaintenanceRepository.findByStatusIgnoreCase("Active");
+
+	        int rowNum = 1;
+	        CreationHelper helper = workbook.getCreationHelper();
+	        Drawing<?> drawing = sheet.createDrawingPatriarch();
+
+	        for (usermaintenance emp : employees) {
+	            Row row = sheet.createRow(rowNum);
+	            row.setHeightInPoints(80); // taller row to fit image
+
+	            row.createCell(0).setCellValue(rowNum);
+	            row.createCell(1).setCellValue(emp.getEmpid());
+	            row.createCell(2).setCellValue(emp.getFirstname() + " " + emp.getLastname());
+
+	            // Fetch employee photo
+	            Optional<EmployeePhoto> photoOpt = employeerepository.findByEmployeeId(emp.getEmpid());
+
+	            if (photoOpt.isPresent()) {
+	                String filePath = photoOpt.get().getFileUrl();
+	                File file = new File(filePath);
+	                if (file.exists()) {
+	                    try (InputStream is = new FileInputStream(file)) {
+	                        byte[] bytes = IOUtils.toByteArray(is);
+	                        int pictureIdx = workbook.addPicture(bytes, Workbook.PICTURE_TYPE_JPEG);
+
+	                        ClientAnchor anchor = helper.createClientAnchor();
+	                        anchor.setCol1(3);
+	                        anchor.setRow1(rowNum);
+	                        anchor.setCol2(4);
+	                        anchor.setRow2(rowNum + 1);
+
+	                        Picture pict = drawing.createPicture(anchor, pictureIdx);
+	                        pict.resize(1, 1);
+	                    } catch (IOException e) {
+	                        row.createCell(3).setCellValue("Error loading photo");
+	                    }
+	                } else {
+	                    row.createCell(3).setCellValue("File not found");
+	                }
+	            } else {
+	                row.createCell(3).setCellValue("No Photo");
+	            }
+	            rowNum++;
+	        }
+
+	        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+	        workbook.write(outputStream);
+
+	        HttpHeaders headersResponse = new HttpHeaders();
+	        headersResponse.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=Active_Employee_Photos.xlsx");
+	        headersResponse.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+
+	        return new ResponseEntity<>(outputStream.toByteArray(), headersResponse, HttpStatus.OK);
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                .body(("Failed to generate Excel: " + e.getMessage()).getBytes());
+	    }
+	}
+
 
 
 
