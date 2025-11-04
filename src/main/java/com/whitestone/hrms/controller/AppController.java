@@ -53,6 +53,7 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.util.IOUtils;
+import org.apache.poi.util.Units;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.hibernate.PropertyValueException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7347,7 +7348,7 @@ public class AppController {
 	        sheet.setColumnWidth(0, 2000);
 	        sheet.setColumnWidth(1, 5000);
 	        sheet.setColumnWidth(2, 7000);
-	        sheet.setColumnWidth(3, 10000);
+	        sheet.setColumnWidth(3, 8000); // enough space for portrait photo
 
 	        // ✅ Fetch only active employees
 	        List<usermaintenance> employees = usermaintenanceRepository.findByStatusIgnoreCase("Active");
@@ -7358,7 +7359,7 @@ public class AppController {
 
 	        for (usermaintenance emp : employees) {
 	            Row row = sheet.createRow(rowNum);
-	            row.setHeightInPoints(80); // taller row to fit image
+	            row.setHeightInPoints(150); // Taller row for photo
 
 	            row.createCell(0).setCellValue(rowNum);
 	            row.createCell(1).setCellValue(emp.getEmpid());
@@ -7370,6 +7371,7 @@ public class AppController {
 	            if (photoOpt.isPresent()) {
 	                String filePath = photoOpt.get().getFileUrl();
 	                File file = new File(filePath);
+
 	                if (file.exists()) {
 	                    try (InputStream is = new FileInputStream(file)) {
 	                        byte[] bytes = IOUtils.toByteArray(is);
@@ -7381,8 +7383,14 @@ public class AppController {
 	                        anchor.setCol2(4);
 	                        anchor.setRow2(rowNum + 1);
 
+	                        // Center image in the cell
+	                        anchor.setDx1(Units.toEMU(20));  // left padding
+	                        anchor.setDy1(Units.toEMU(10));  // top padding
+
 	                        Picture pict = drawing.createPicture(anchor, pictureIdx);
-	                        pict.resize(1, 1);
+
+	                        // ✅ Resize while maintaining aspect ratio (0.5–0.6 is best for portraits)
+	                        pict.resize(0.55);
 	                    } catch (IOException e) {
 	                        row.createCell(3).setCellValue("Error loading photo");
 	                    }
@@ -7392,6 +7400,7 @@ public class AppController {
 	            } else {
 	                row.createCell(3).setCellValue("No Photo");
 	            }
+
 	            rowNum++;
 	        }
 
@@ -7410,6 +7419,7 @@ public class AppController {
 	                .body(("Failed to generate Excel: " + e.getMessage()).getBytes());
 	    }
 	}
+
 
 
 
