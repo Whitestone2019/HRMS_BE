@@ -35,7 +35,10 @@ public class ExpenseDetails {
 	    private String category;
 		 
 	    @Column(name = "AMOUNT", precision = 15, scale = 2)
-	    private BigDecimal amount; 
+	    private BigDecimal amount;
+	    
+	    @Column(name = "APPROVED_AMOUNT", precision = 15, scale = 2)
+	    private BigDecimal approvedAmount;
 		 
 	    @Column(name = "CURRENCY", length = 10)
 	    private String currency;
@@ -69,7 +72,6 @@ public class ExpenseDetails {
 	    @JsonFormat(pattern = "YYYY-MM-DD HH:mm:ss")
 	    private Date rmodtime;
 
-	 
 		public String getExpenseId() {
 			return expenseId;
 		}
@@ -116,6 +118,14 @@ public class ExpenseDetails {
 
 		public void setAmount(BigDecimal amount) {
 			this.amount = amount;
+		}
+
+		public BigDecimal getApprovedAmount() {
+			return approvedAmount;
+		}
+
+		public void setApprovedAmount(BigDecimal approvedAmount) {
+			this.approvedAmount = approvedAmount;
 		}
 
 		public String getCurrency() {
@@ -196,84 +206,6 @@ public class ExpenseDetails {
 
 		public void setRmodtime(Date rmodtime) {
 			this.rmodtime = rmodtime;
-		}
-
-
-		@Override
-		public String toString() {
-			return "ExpenseDetails [expenseId=" + expenseId + ", empId=" + empId + ", employeeName=" + employeeName
-					+ ", expensedate=" + expensedate + ", category=" + category + ", amount=" + amount + ", currency="
-					+ currency + ", description=" + description + ", recipt=" + recipt + ", status=" + status
-					+ ", entitycreflg=" + entitycreflg + ", delflg=" + delflg + ", rcreuserid=" + rcreuserid
-					+ ", rcretime=" + rcretime + ", rmoduserid=" + rmoduserid + ", rmodtime=" + rmodtime
-					+ ", getExpenseId()=" + getExpenseId()
-					+ ", getEmpId()=" + getEmpId() + ", getEmployeeName()=" + getEmployeeName() + ", getExpensedate()="
-					+ getExpensedate() + ", getCategory()=" + getCategory() + ", getAmount()=" + getAmount()
-					+ ", getCurrency()=" + getCurrency() + ", getDescription()=" + getDescription() + ", getRecipt()="
-					+ getRecipt() + ", getStatus()=" + getStatus() + ", getEntitycreflg()=" + getEntitycreflg()
-					+ ", getDelflg()=" + getDelflg() + ", getRcreuserid()=" + getRcreuserid() + ", getRcretime()="
-					+ getRcretime() + ", getRmoduserid()=" + getRmoduserid() + ", getRmodtime()=" + getRmodtime()
-					+ ", getClass()="
-					+ getClass() + ", hashCode()=" + hashCode() + ", toString()=" + super.toString() + "]";
-		}
-
-		public ExpenseDetails(String expenseId, String empId, String employeeName, Date expensedate, String category,
-				BigDecimal amount, String currency, String description, String recipt, String status,
-				String entitycreflg, String delflg, String rcreuserid, Date rcretime, String rmoduserid, Date rmodtime,
-				String rvfyuserid, Date rvfytime) {
-			super();
-			this.expenseId = expenseId;
-			this.empId = empId;
-			this.employeeName = employeeName;
-			this.expensedate = expensedate;
-			this.category = category;
-			this.amount = amount;
-			this.currency = currency;
-			this.description = description;
-			this.recipt = recipt;
-			this.status = status;
-			this.entitycreflg = entitycreflg;
-			this.delflg = delflg;
-			this.rcreuserid = rcreuserid;
-			this.rcretime = rcretime;
-			this.rmoduserid = rmoduserid;
-			this.rmodtime = rmodtime;
-		
-		}
-
-		public ExpenseDetails() {
-			super();
-			// TODO Auto-generated constructor stub
-		}
-		
-		public static void save(ExpenseDetails mainProf) {
-			// TODO Auto-generated method stub
-			
-		}
-
-		public static ExpenseDetails getExpenseStats() {
-			// TODO Auto-generated method stub
-			return null;
-		}
-
-		public void setTotalExpenses(Object totalExpenses) {
-			// TODO Auto-generated method stub
-			
-		}
-
-		public void setPendingReports(Object pendingReports) {
-			// TODO Auto-generated method stub
-			
-		}
-
-		public void setApprovedExpenses(Object approvedExpenses) {
-			// TODO Auto-generated method stub
-			
-		}
-
-		public void setOpenAdvances(Object openAdvances) {
-			// TODO Auto-generated method stub
-			
 		}
 	
 	

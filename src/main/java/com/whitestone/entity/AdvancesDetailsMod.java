@@ -25,6 +25,9 @@ public class AdvancesDetailsMod {
 
     @Column(name = "AMOUNT", precision = 15, scale = 2)
     private BigDecimal amount;
+    
+    @Column(name = "APPROVED_AMOUNT", precision = 15, scale = 2)
+    private BigDecimal approvedAmount;
 
     @Column(name = "ADVANCE_DATE")
     @JsonFormat(pattern = "yyyy-MM-dd")
@@ -98,6 +101,14 @@ public class AdvancesDetailsMod {
 
 	public void setAmount(BigDecimal amount) {
 		this.amount = amount;
+	}
+
+	public BigDecimal getApprovedAmount() {
+		return approvedAmount;
+	}
+
+	public void setApprovedAmount(BigDecimal approvedAmount) {
+		this.approvedAmount = approvedAmount;
 	}
 
 	public Date getAdvanceDate() {
@@ -202,45 +213,6 @@ public class AdvancesDetailsMod {
 
 	public void setRmodTime(Date rmodTime) {
 		this.rmodTime = rmodTime;
-	}
-
-	@Override
-	public String toString() {
-		return "AdvancesDetailsMod [advanceId=" + advanceId + ", empId=" + empId + ", employeeName=" + employeeName
-				+ ", amount=" + amount + ", advanceDate=" + advanceDate + ", paidThrough=" + paidThrough
-				+ ", applyToTrip=" + applyToTrip + ", status=" + status + ", approver=" + approver + ", paymentStatus="
-				+ paymentStatus + ", rejectreason=" + rejectreason + ", entityCreFlg=" + entityCreFlg + ", delFlg="
-				+ delFlg + ", rcreUserId=" + rcreUserId + ", rcreTime=" + rcreTime + ", rmodUserId=" + rmodUserId
-				+ ", rmodTime=" + rmodTime + "]";
-	}
-
-	public AdvancesDetailsMod(String advanceId, String empId, String employeeName, BigDecimal amount, Date advanceDate,
-			String paidThrough, String applyToTrip, String status, String approver, Integer paymentStatus,
-			String rejectreason, String entityCreFlg, String delFlg, String rcreUserId, Date rcreTime,
-			String rmodUserId, Date rmodTime) {
-		super();
-		this.advanceId = advanceId;
-		this.empId = empId;
-		this.employeeName = employeeName;
-		this.amount = amount;
-		this.advanceDate = advanceDate;
-		this.paidThrough = paidThrough;
-		this.applyToTrip = applyToTrip;
-		this.status = status;
-		this.approver = approver;
-		this.paymentStatus = paymentStatus;
-		this.rejectreason = rejectreason;
-		this.entityCreFlg = entityCreFlg;
-		this.delFlg = delFlg;
-		this.rcreUserId = rcreUserId;
-		this.rcreTime = rcreTime;
-		this.rmodUserId = rmodUserId;
-		this.rmodTime = rmodTime;
-	}
-
-	public AdvancesDetailsMod() {
-		super();
-		// TODO Auto-generated constructor stub
 	}
 
 	

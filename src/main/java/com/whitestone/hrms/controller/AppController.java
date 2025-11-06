@@ -3058,90 +3058,95 @@ public class AppController {
 	@PutMapping("/update/expenses/{expenseId}")
 	@Transactional
 	public ResponseEntity<Map<String, Object>> updateExpense(@PathVariable String expenseId,
-			@RequestBody Map<String, Object> requestBody) {
+	        @RequestBody Map<String, Object> requestBody) {
 
-		Map<String, Object> response = new HashMap<>();
-		String reason = (String) requestBody.get("reason");
+	    Map<String, Object> response = new HashMap<>();
+	    String reason = (String) requestBody.get("reason");
+	    BigDecimal approvedAmount = new BigDecimal(requestBody.get("approvedAmount").toString());
 
-		try {
-			// Fetch the existing expense record by ID
-			Optional<ExpenseDetailsMod> existingExpenseOpt = expenseDetailsRepository.findById(expenseId);
-			if (!existingExpenseOpt.isPresent()) {
-				response.put("success", false);
-				response.put("message", "Expense not found.");
-				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-			}
+	    try {
+	        Optional<ExpenseDetailsMod> existingExpenseOpt = expenseDetailsRepository.findById(expenseId);
+	        if (!existingExpenseOpt.isPresent()) {
+	            response.put("success", false);
+	            response.put("message", "Expense not found.");
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+	        }
 
-			ExpenseDetailsMod existingExpense = existingExpenseOpt.get();
-			existingExpense.setEntitycreflg("Y");
-			existingExpense.setPaymentStatus(0);
-			existingExpense.setRejectreason(reason);
-			existingExpense.setRmodtime(new Date());
+	        ExpenseDetailsMod existingExpense = existingExpenseOpt.get();
+	        existingExpense.setEntitycreflg("Y");
+	        existingExpense.setPaymentStatus(0);
+	        existingExpense.setRejectreason(reason);
+	        existingExpense.setApprovedAmount(approvedAmount);
+	        existingExpense.setRmodtime(new Date());
 
-			String approver = existingExpense.getApprover();
-			usermaintenance currentApprover = usermaintenanceRepository.findByEmpid(approver);
+	        String approver = existingExpense.getApprover();
+	        usermaintenance currentApprover = usermaintenanceRepository.findByEmpid(approver);
 
-			if (!approver.equals("10029")) {
-				if (currentApprover != null && currentApprover.getRepoteTo() != null) {
-					usermaintenance nextApprover = usermaintenanceRepository.findByEmpid(currentApprover.getRepoteTo());
+	        if (!approver.equals("10029")) {
+	            if (currentApprover != null && currentApprover.getRepoteTo() != null) {
+	                usermaintenance nextApprover = usermaintenanceRepository.findByEmpid(currentApprover.getRepoteTo());
 
-					if (nextApprover != null && nextApprover.getRoleid() != null) {
-						Optional<UserRoleMaintenance> roleOpt = userRoleMaintenanceRepository
-								.findByRoleid(nextApprover.getRoleid());
+	                if (nextApprover != null && nextApprover.getRoleid() != null) {
+	                    Optional<UserRoleMaintenance> roleOpt = userRoleMaintenanceRepository
+	                            .findByRoleid(nextApprover.getRoleid());
 
-						if (roleOpt.isPresent()) {
-							existingExpense.setApprover(nextApprover.getEmpid());
-							existingExpense.setStatus("Pending for " + roleOpt.get().getRolename() + " approval");
-						} else {
-							existingExpense.setStatus("Payment to be Initiate");
-							existingExpense.setApprover("10029");
-						}
-					} else {
-						existingExpense.setStatus("Payment to be Initiate");
-						existingExpense.setApprover("10029");
-					}
-				} else {
-					existingExpense.setStatus("Payment to be Initiate");
-					existingExpense.setApprover("10029");
-				}
-			}
-			expenseDetailsRepository.save(existingExpense);
+	                    if (roleOpt.isPresent()) {
+	                        existingExpense.setApprover(nextApprover.getEmpid());
+	                        existingExpense.setStatus("Pending for " + roleOpt.get().getRolename() + " approval");
+	                    } else {
+	                        existingExpense.setStatus("Payment to be Initiate");
+	                        existingExpense.setApprover("10029");
+	                    }
+	                } else {
+	                    existingExpense.setStatus("Payment to be Initiate");
+	                    existingExpense.setApprover("10029");
+	                }
+	            } else {
+	                existingExpense.setStatus("Payment to be Initiate");
+	                existingExpense.setApprover("10029");
+	            }
+	        }
 
-			// Email notification
-			String empId = existingExpense.getEmpId();
-			usermaintenance employee = usermaintenanceRepository.findByEmpid(empId);
-			if (employee == null) {
-				response.put("success", false);
-				response.put("message", "Employee not found.");
-				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-			}
+	        expenseDetailsRepository.save(existingExpense);
 
-			String subjectToEmployee = "Your Expense Request Has Been Approved";
-			String bodyToEmployee = "Dear " + employee.getFirstname() + ",\n\n" + "Your expense request (ID: "
-					+ expenseId + ") has been approved by the admin.\n\n" + "Regards,\nHRMS System";
+	        // Email notification
+	        String empId = existingExpense.getEmpId();
+	        usermaintenance employee = usermaintenanceRepository.findByEmpid(empId);
+	        if (employee == null) {
+	            response.put("success", false);
+	            response.put("message", "Employee not found.");
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+	        }
 
-			usermaintenance manager = usermaintenanceRepository.findByEmpid(employee.getRepoteTo());
+	        // Format currency (optional)
+	        BigDecimal appliedAmount = existingExpense.getAmount(); // assuming you have this field
+	        String subjectToEmployee = "Your Expense Request Has Been Approved";
 
-			if (employee.getEmailid() != null) {
-				emailService.sendLeaveEmail(manager.getEmailid(), employee.getEmailid(), subjectToEmployee,
-						bodyToEmployee);
-			} else {
-				System.out.println("No email found for employee: " + empId);
-			}
+	        String bodyToEmployee = "Dear " + employee.getFirstname() + ",\n\n"
+	                + "Your expense request (ID: " + expenseId + ") has been approved.\n\n"
+	                + "Applied Amount : ₹" + appliedAmount + "\n"
+	                + "Approved Amount : ₹" + approvedAmount + "\n\n"
+	                + "Regards,\nHRMS System";
 
-			response.put("success", true);
-			response.put("message", "Expense updated successfully and email sent.");
-			return ResponseEntity.ok(response);
+	        usermaintenance manager = usermaintenanceRepository.findByEmpid(employee.getRepoteTo());
+	        if (employee.getEmailid() != null) {
+	            emailService.sendLeaveEmail(manager.getEmailid(), employee.getEmailid(), subjectToEmployee, bodyToEmployee);
+	        } else {
+	            System.out.println("No email found for employee: " + empId);
+	        }
 
-		} catch (Exception e) {
-			e.printStackTrace();
-			response.put("success", false);
-			response.put("message", "Error occurred while updating expense.");
-			response.put("errorDetails", e.getMessage());
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-		}
+	        response.put("success", true);
+	        response.put("message", "Expense updated successfully and email sent.");
+	        return ResponseEntity.ok(response);
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        response.put("success", false);
+	        response.put("message", "Error occurred while updating expense.");
+	        response.put("errorDetails", e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+	    }
 	}
-	
 	@PutMapping("/update/advance/approval/{advanceId}")
 	@Transactional
 	public ResponseEntity<Map<String, Object>> updateAdvance(@PathVariable String advanceId,
@@ -3149,6 +3154,7 @@ public class AppController {
 
 	    Map<String, Object> response = new HashMap<>();
 	    String reason = (String) requestBody.get("reason");
+	    BigDecimal approvedAmount = new BigDecimal(requestBody.get("approvedAmount").toString());
 
 	    try {
 	        Optional<AdvancesDetailsMod> existingAdvanceOpt = advancesDetailsModRepository.findById(advanceId);
@@ -3161,13 +3167,13 @@ public class AppController {
 	        AdvancesDetailsMod existingAdvance = existingAdvanceOpt.get();
 	        existingAdvance.setEntityCreFlg("Y");
 	        existingAdvance.setPaymentStatus(0);
+	        existingAdvance.setApprovedAmount(approvedAmount);
 	        existingAdvance.setRejectreason(reason);
 	        existingAdvance.setRmodTime(new Date());
 
 	        String currentApproverId = existingAdvance.getApprover();
 	        usermaintenance currentApprover = usermaintenanceRepository.findByEmpid(currentApproverId);
 
-	        // 🧩 CTO -> Next Approver -> Check Role
 	        if (currentApprover != null && currentApprover.getRepoteTo() != null) {
 	            usermaintenance nextApprover = usermaintenanceRepository.findByEmpid(currentApprover.getRepoteTo());
 
@@ -3178,17 +3184,14 @@ public class AppController {
 	                if (roleOpt.isPresent()) {
 	                    String nextRoleName = roleOpt.get().getRolename();
 
-	                    // ✅ If next role is Accountant (ACC), finalize approval
 	                    if ("Accountant".equalsIgnoreCase(nextRoleName) || "ACC".equalsIgnoreCase(nextRoleName)) {
 	                        existingAdvance.setStatus("Approved");
 	                        existingAdvance.setApprover(nextApprover.getEmpid());
 	                    } else {
-	                        // Otherwise, send to next approver for their approval
 	                        existingAdvance.setApprover(nextApprover.getEmpid());
 	                        existingAdvance.setStatus("Pending for " + nextRoleName + " approval");
 	                    }
 	                } else {
-	                    // Role not found
 	                    existingAdvance.setStatus("Payment to be Initiate");
 	                }
 	            } else {
@@ -3200,7 +3203,7 @@ public class AppController {
 
 	        advancesDetailsModRepository.save(existingAdvance);
 
-	        // 📨 Send email to employee
+	        // Email notification
 	        String empId = existingAdvance.getEmpId();
 	        usermaintenance employee = usermaintenanceRepository.findByEmpid(empId);
 	        if (employee == null) {
@@ -3209,9 +3212,12 @@ public class AppController {
 	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
 	        }
 
+	        BigDecimal appliedAmount = existingAdvance.getAmount(); // assuming this field exists
 	        String subjectToEmployee = "Your Advance Request Has Been Approved";
 	        String bodyToEmployee = "Dear " + employee.getFirstname() + ",\n\n"
 	                + "Your advance request (ID: " + advanceId + ") has been approved.\n\n"
+	                + "Applied Amount : ₹" + appliedAmount + "\n"
+	                + "Approved Amount : ₹" + approvedAmount + "\n\n"
 	                + "Regards,\nHRMS System";
 
 	        usermaintenance manager = usermaintenanceRepository.findByEmpid(employee.getRepoteTo());
@@ -7252,7 +7258,18 @@ public class AppController {
 	                    response.put("eligible", true);
 	                    response.put("message", "Eligible for check-in, but yesterday was marked as Absent.");
 	                } 
+	                
+	                else if ("Public holiday".equalsIgnoreCase(status)) {
+	                    response.put("status", "success");
+	                    response.put("eligible", true);
+	                    response.put("message", "Eligible for check-in, but yesterday was marked as Public holiday.");
+	                } 
 	              
+	                else if ("holiday".equalsIgnoreCase(status)) {
+	                    response.put("status", "success");
+	                    response.put("eligible", true);
+	                    response.put("message", "Eligible for check-in, but yesterday was marked as holiday.");
+	                } 
 	                return ResponseEntity.ok(response);
 	            }
 

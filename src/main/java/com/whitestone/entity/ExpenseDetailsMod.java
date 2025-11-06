@@ -34,6 +34,9 @@ public class ExpenseDetailsMod {
 
 	@Column(name = "AMOUNT", precision = 15, scale = 2)
 	private BigDecimal amount;
+	
+	 @Column(name = "APPROVED_AMOUNT", precision = 15, scale = 2)
+	    private BigDecimal approvedAmount;
 
 	@Column(name = "CURRENCY", length = 10)
 	private String currency;
@@ -129,6 +132,14 @@ public class ExpenseDetailsMod {
 
 	public void setAmount(BigDecimal amount) {
 		this.amount = amount;
+	}
+
+	public BigDecimal getApprovedAmount() {
+		return approvedAmount;
+	}
+
+	public void setApprovedAmount(BigDecimal approvedAmount) {
+		this.approvedAmount = approvedAmount;
 	}
 
 	public String getCurrency() {
@@ -251,48 +262,6 @@ public class ExpenseDetailsMod {
 		this.paymentStatus = paymentStatus;
 	}
 
-	@Override
-	public String toString() {
-		return "ExpenseDetailsMod [expenseId=" + expenseId + ", empId=" + empId + ", employeeName=" + employeeName
-				+ ", date=" + date + ", category=" + category + ", amount=" + amount + ", currency=" + currency
-				+ ", description=" + description + ", recipt=" + recipt + ", status=" + status + ", approver="
-				+ approver + ", entitycreflg=" + entitycreflg + ", delflg=" + delflg + ", rcreuserid=" + rcreuserid
-				+ ", rcretime=" + rcretime + ", rmoduserid=" + rmoduserid + ", rmodtime=" + rmodtime + ", rvfyuserid="
-				+ rvfyuserid + ", rvfytime=" + rvfytime + ", rejectreason=" + rejectreason + ", paymentStatus="
-				+ paymentStatus + "]";
-	}
-
-	public ExpenseDetailsMod(String expenseId, String empId, String employeeName, Date date, String category,
-			BigDecimal amount, String currency, String description, String recipt, String status, String approver,
-			String entitycreflg, String delflg, String rcreuserid, Date rcretime, String rmoduserid, Date rmodtime,
-			String rvfyuserid, Date rvfytime, String rejectreason, Integer paymentStatus) {
-		super();
-		this.expenseId = expenseId;
-		this.empId = empId;
-		this.employeeName = employeeName;
-		this.date = date;
-		this.category = category;
-		this.amount = amount;
-		this.currency = currency;
-		this.description = description;
-		this.recipt = recipt;
-		this.status = status;
-		this.approver = approver;
-		this.entitycreflg = entitycreflg;
-		this.delflg = delflg;
-		this.rcreuserid = rcreuserid;
-		this.rcretime = rcretime;
-		this.rmoduserid = rmoduserid;
-		this.rmodtime = rmodtime;
-		this.rvfyuserid = rvfyuserid;
-		this.rvfytime = rvfytime;
-		this.rejectreason = rejectreason;
-		this.paymentStatus = paymentStatus;
-	}
-
-	public ExpenseDetailsMod() {
-		super();
-		// TODO Auto-generated constructor stub
-	}
+	
 
 }
