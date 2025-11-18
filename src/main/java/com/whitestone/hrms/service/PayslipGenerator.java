@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.Month;
+import java.time.Year;
 import java.util.List;
 import java.util.Map;
 
@@ -117,7 +118,7 @@ public class PayslipGenerator {
             detailsTable.setSpacingBefore(10f);
 
             // Retrieve LOP days
-            EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository.findByEmpId(employeeId);
+            EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository.findByEmpId_AndYear(employeeId,Year.now().getValue());
             Float lopDays = 0.0f;
             if (leaveSummary != null) {
                 switch (requestedMonth) {

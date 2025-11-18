@@ -1,12 +1,14 @@
 package com.whitestone.entity;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.PreUpdate;
 import javax.persistence.Table;
 
 @Entity
@@ -16,15 +18,15 @@ public class PayrollHistory {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
-    @Column(name = "Emp_id")
+
+    @Column(name = "emp_id")
     private String empid;
 
     @Column(name = "month")
     private String month;
 
     @Column(name = "status")
-    private String status;
+    private String status; // Pending, Processed, Failed, etc.
 
     @Column(name = "pymt_prod_type_code")
     private String pymtProdTypeCode;
@@ -45,7 +47,7 @@ public class PayrollHistory {
     private String beneIfsc;
 
     @Column(name = "amount")
-    private Double amount;
+    private Double amount; // net pay
 
     @Column(name = "debit_narr")
     private String debitNarr;
@@ -61,6 +63,9 @@ public class PayrollHistory {
 
     @Column(name = "remark")
     private String remark;
+    
+    @Column(name = "other_deductions_remarks", length = 500)
+    private String otherDeductionsRemarks = "";
 
     @Column(name = "pymt_date")
     private LocalDate pymtDate;
@@ -82,6 +87,56 @@ public class PayrollHistory {
 
     @Column(name = "addl_info5")
     private String addlInfo5;
+
+    @Column(name = "per_day_rate")
+    private Double perDayRate;
+
+    @Column(name = "per_day_allowance")
+    private Double perDayAllowance;
+
+    @Column(name = "per_day_allowance_days")
+    private Long perDayAllowanceDays;
+
+    @Column(name = "lop_days")
+    private Float lopDays;
+
+    @Column(name = "lop_deduction")
+    private Double lopDeduction; // newly added
+
+    @Column(name = "deductions")
+    private Double deductions; // total combined deductions
+    
+    @Column(name = "other_Deductions")
+    private Double otherDeductions; // total combined deductions
+
+    @Column(name = "pg_allowance")
+    private Double pgAllowance; // newly added
+
+    @Column(name = "pg_rent_allowance")
+    private Double pgRentAllowance; // newly added
+
+    @Column(name = "total_earnings")
+    private Double totalEarnings; // newly added
+
+    @Column(name = "total_deductions")
+    private Double totalDeductions; // newly added
+
+    @Column(name = "net_pay")
+    private Double netPay; // final net pay
+
+    @Column(name = "effective_working_days")
+    private Long effectiveWorkingDays;
+
+    @Column(name = "created_date")
+    private LocalDateTime createdDate = LocalDateTime.now();
+
+    @Column(name = "updated_date")
+    private LocalDateTime updatedDate;
+
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedDate = LocalDateTime.now();
+    }
 
 	public Long getId() {
 		return id;
@@ -211,6 +266,14 @@ public class PayrollHistory {
 		this.remark = remark;
 	}
 
+	public String getOtherDeductionsRemarks() {
+		return otherDeductionsRemarks;
+	}
+
+	public void setOtherDeductionsRemarks(String otherDeductionsRemarks) {
+		this.otherDeductionsRemarks = otherDeductionsRemarks;
+	}
+
 	public LocalDate getPymtDate() {
 		return pymtDate;
 	}
@@ -267,62 +330,126 @@ public class PayrollHistory {
 		this.addlInfo5 = addlInfo5;
 	}
 
-	@Override
-	public String toString() {
-		return "PayrollHistory [id=" + id + ", empid=" + empid + ", month=" + month + ", status=" + status
-				+ ", pymtProdTypeCode=" + pymtProdTypeCode + ", pymtMode=" + pymtMode + ", debitAccNo=" + debitAccNo
-				+ ", bnfName=" + bnfName + ", beneAccNo=" + beneAccNo + ", beneIfsc=" + beneIfsc + ", amount=" + amount
-				+ ", debitNarr=" + debitNarr + ", creditNarr=" + creditNarr + ", mobileNum=" + mobileNum + ", emailId="
-				+ emailId + ", remark=" + remark + ", pymtDate=" + pymtDate + ", refNo=" + refNo + ", addlInfo1="
-				+ addlInfo1 + ", addlInfo2=" + addlInfo2 + ", addlInfo3=" + addlInfo3 + ", addlInfo4=" + addlInfo4
-				+ ", addlInfo5=" + addlInfo5 + ", getId()=" + getId() + ", getEmpid()=" + getEmpid() + ", getMonth()="
-				+ getMonth() + ", getStatus()=" + getStatus() + ", getPymtProdTypeCode()=" + getPymtProdTypeCode()
-				+ ", getPymtMode()=" + getPymtMode() + ", getDebitAccNo()=" + getDebitAccNo() + ", getBnfName()="
-				+ getBnfName() + ", getBeneAccNo()=" + getBeneAccNo() + ", getBeneIfsc()=" + getBeneIfsc()
-				+ ", getAmount()=" + getAmount() + ", getDebitNarr()=" + getDebitNarr() + ", getCreditNarr()="
-				+ getCreditNarr() + ", getMobileNum()=" + getMobileNum() + ", getEmailId()=" + getEmailId()
-				+ ", getRemark()=" + getRemark() + ", getPymtDate()=" + getPymtDate() + ", getRefNo()=" + getRefNo()
-				+ ", getAddlInfo1()=" + getAddlInfo1() + ", getAddlInfo2()=" + getAddlInfo2() + ", getAddlInfo3()="
-				+ getAddlInfo3() + ", getAddlInfo4()=" + getAddlInfo4() + ", getAddlInfo5()=" + getAddlInfo5()
-				+ ", getClass()=" + getClass() + ", hashCode()=" + hashCode() + ", toString()=" + super.toString()
-				+ "]";
+	public Double getPerDayRate() {
+		return perDayRate;
 	}
 
-	public PayrollHistory(Long id, String empid, String month, String status, String pymtProdTypeCode, String pymtMode,
-			String debitAccNo, String bnfName, String beneAccNo, String beneIfsc, Double amount, String debitNarr,
-			String creditNarr, String mobileNum, String emailId, String remark, LocalDate pymtDate, String refNo,
-			String addlInfo1, String addlInfo2, String addlInfo3, String addlInfo4, String addlInfo5) {
-		super();
-		this.id = id;
-		this.empid = empid;
-		this.month = month;
-		this.status = status;
-		this.pymtProdTypeCode = pymtProdTypeCode;
-		this.pymtMode = pymtMode;
-		this.debitAccNo = debitAccNo;
-		this.bnfName = bnfName;
-		this.beneAccNo = beneAccNo;
-		this.beneIfsc = beneIfsc;
-		this.amount = amount;
-		this.debitNarr = debitNarr;
-		this.creditNarr = creditNarr;
-		this.mobileNum = mobileNum;
-		this.emailId = emailId;
-		this.remark = remark;
-		this.pymtDate = pymtDate;
-		this.refNo = refNo;
-		this.addlInfo1 = addlInfo1;
-		this.addlInfo2 = addlInfo2;
-		this.addlInfo3 = addlInfo3;
-		this.addlInfo4 = addlInfo4;
-		this.addlInfo5 = addlInfo5;
+	public void setPerDayRate(Double perDayRate) {
+		this.perDayRate = perDayRate;
 	}
 
-	public PayrollHistory() {
-		super();
-		// TODO Auto-generated constructor stub
+	public Double getPerDayAllowance() {
+		return perDayAllowance;
+	}
+
+	public void setPerDayAllowance(Double perDayAllowance) {
+		this.perDayAllowance = perDayAllowance;
+	}
+
+	public Long getPerDayAllowanceDays() {
+		return perDayAllowanceDays;
+	}
+
+	public void setPerDayAllowanceDays(Long perDayAllowanceDays) {
+		this.perDayAllowanceDays = perDayAllowanceDays;
+	}
+
+	public Float getLopDays() {
+		return lopDays;
+	}
+
+	public void setLopDays(Float lopDays) {
+		this.lopDays = lopDays;
+	}
+
+	public Double getLopDeduction() {
+		return lopDeduction;
+	}
+
+	public void setLopDeduction(Double lopDeduction) {
+		this.lopDeduction = lopDeduction;
+	}
+
+	public Double getDeductions() {
+		return deductions;
+	}
+
+	public void setDeductions(Double deductions) {
+		this.deductions = deductions;
+	}
+
+	public Double getOtherDeductions() {
+		return otherDeductions;
+	}
+
+	public void setOtherDeductions(Double otherDeductions) {
+		this.otherDeductions = otherDeductions;
+	}
+
+	public Double getPgAllowance() {
+		return pgAllowance;
+	}
+
+	public void setPgAllowance(Double pgAllowance) {
+		this.pgAllowance = pgAllowance;
+	}
+
+	public Double getPgRentAllowance() {
+		return pgRentAllowance;
+	}
+
+	public void setPgRentAllowance(Double pgRentAllowance) {
+		this.pgRentAllowance = pgRentAllowance;
+	}
+
+	public Double getTotalEarnings() {
+		return totalEarnings;
+	}
+
+	public void setTotalEarnings(Double totalEarnings) {
+		this.totalEarnings = totalEarnings;
+	}
+
+	public Double getTotalDeductions() {
+		return totalDeductions;
+	}
+
+	public void setTotalDeductions(Double totalDeductions) {
+		this.totalDeductions = totalDeductions;
+	}
+
+	public Double getNetPay() {
+		return netPay;
+	}
+
+	public void setNetPay(Double netPay) {
+		this.netPay = netPay;
+	}
+
+	public Long getEffectiveWorkingDays() {
+		return effectiveWorkingDays;
+	}
+
+	public void setEffectiveWorkingDays(Long effectiveWorkingDays) {
+		this.effectiveWorkingDays = effectiveWorkingDays;
+	}
+
+	public LocalDateTime getCreatedDate() {
+		return createdDate;
+	}
+
+	public void setCreatedDate(LocalDateTime createdDate) {
+		this.createdDate = createdDate;
+	}
+
+	public LocalDateTime getUpdatedDate() {
+		return updatedDate;
+	}
+
+	public void setUpdatedDate(LocalDateTime updatedDate) {
+		this.updatedDate = updatedDate;
 	}
 
 	
-    
+
 }

@@ -1,6 +1,7 @@
 package com.whitestone.hrms.repo;
 
 import java.util.List;
+import java.util.Optional;
 
 import javax.transaction.Transactional;
 
@@ -28,6 +29,13 @@ public interface PayrollRepository extends JpaRepository<Payroll, Long> {
 	default boolean existsByEmpidAndMonth(String empId, String month) {
 	    return countByEmpidAndMonth(empId, month) > 0;
 	}
+	
+	Payroll findByEmpidAndMonth(String empid, String month);
+
+	
+	@Query("SELECT p FROM Payroll p WHERE p.empid = :empid AND p.month = :month")
+    Optional<Payroll> findByEmpidAndMonth1(@Param("empid") String empid, @Param("month") String month);
+
 
 
 

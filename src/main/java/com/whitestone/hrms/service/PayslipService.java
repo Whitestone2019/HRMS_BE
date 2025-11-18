@@ -40,7 +40,13 @@ public class PayslipService {
 	}
 
 	public ByteArrayResource generatePayslip(String employeeId, String month) {
-		byte[] pdfBytes = payslipGenerator.createPayslipPdf(employeeId, month);
+		byte[] pdfBytes = null;
+		try {
+			pdfBytes = payslipGenerator.createPayslipPdf(employeeId, month);
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		return new ByteArrayResource(pdfBytes);
 	}
 }
