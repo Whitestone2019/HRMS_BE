@@ -17,4 +17,6 @@ public interface EmployeeSkillModRepository extends JpaRepository<EmployeeSkillM
     // JPA Query to find skills by userId (use entity name, not table name)
     @Query("SELECT e FROM EmployeeSkillMod e WHERE e.userid = :userid")
     List<EmployeeSkillMod> findByUserid(@Param("userid") Long userid);
+    
+    void deleteByUserid(Long userid);
 }

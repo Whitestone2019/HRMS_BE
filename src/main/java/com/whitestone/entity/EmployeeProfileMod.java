@@ -97,272 +97,533 @@ public class EmployeeProfileMod {
     
     @Column(name = "UAN_NUMBER", length = 15)
     private String uannumber;
+    
+    @Column(name = "PHOTO_PATH", length = 500)
+    private String photoPath;
 
+    @Column(name = "AADHAR_PATH", length = 500)
+    private String aadharPath;
+
+    @Column(name = "PAN_PATH", length = 500)
+    private String panPath;
+
+    @Column(name = "TENTH_PATH", length = 500)
+    private String tenthPath;
+
+    @Column(name = "TWELFTH_PATH", length = 500)
+    private String twelfthPath;
+
+    @Column(name = "DEGREE_PATH", length = 500)
+    private String degreePath;
+    
+ // ADD THESE NEW COLUMNS TO YOUR TABLE & ENTITY
+
+    @Column(name = "GENDER", length = 10)
+    private String gender;
+
+    @Column(name = "MARITAL_STATUS", length = 20)
+    private String maritalstatus;
+
+    @Column(name = "NATIONALITY", length = 50)
+    private String nationality = "Indian";
+
+    @Column(name = "DATE_OF_JOINING")
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private Date dateofjoining;
+
+    @Column(name = "DESIGNATION", length = 100)
+    private String designation;
+
+    @Column(name = "DEPARTMENT", length = 100)
+    private String department;
+
+    @Column(name = "WORK_LOCATION", length = 50)
+    private String worklocation;
+
+    @Column(name = "REPORTING_MANAGER", length = 15)
+    private String reportingmanager;
+
+    @Column(name = "EMERGENCY_CONTACT_NAME", length = 80)
+    private String emergencycontactname;
+
+    @Column(name = "EMERGENCY_CONTACT_NUMBER", length = 30)
+    private String emergencycontactnumber;
+
+    @Column(name = "EMERGENCY_CONTACT_RELATION", length = 50)
+    private String emergencycontactrelation;
+
+    @Column(name = "ALTERNATE_MOBILE_NUMBER", length = 30)
+    private String alternatemobilenumber;
+
+    @Column(name = "PASSPORT_NUMBER", length = 20)
+    private String passportnumber;
+
+    @Column(name = "DRIVING_LICENSE", length = 30)
+    private String drivinglicense;
+
+    @Column(name = "ESI_NUMBER", length = 20)
+    private String esinumber;
+
+	
 	public Long getUserid() {
 		return userid;
 	}
+
 
 	public void setUserid(Long userid) {
 		this.userid = userid;
 	}
 
+
 	public String getEmpid() {
 		return empid;
 	}
+
 
 	public void setEmpid(String empid) {
 		this.empid = empid;
 	}
 
+
 	public String getEmployeename() {
 		return employeename;
 	}
+
 
 	public void setEmployeename(String employeename) {
 		this.employeename = employeename;
 	}
 
+
 	public Date getDateofbirth() {
 		return dateofbirth;
 	}
+
 
 	public void setDateofbirth(Date dateofbirth) {
 		this.dateofbirth = dateofbirth;
 	}
 
+
 	public String getBloodgroup() {
 		return bloodgroup;
 	}
+
 
 	public void setBloodgroup(String bloodgroup) {
 		this.bloodgroup = bloodgroup;
 	}
 
+
 	public String getEmailid() {
 		return emailid;
 	}
+
 
 	public void setEmailid(String emailid) {
 		this.emailid = emailid;
 	}
 
+
 	public String getOfficialemail() {
 		return officialemail;
 	}
+
 
 	public void setOfficialemail(String officialemail) {
 		this.officialemail = officialemail;
 	}
 
+
 	public String getFirstname() {
 		return firstname;
 	}
+
 
 	public void setFirstname(String firstname) {
 		this.firstname = firstname;
 	}
 
+
 	public String getLastname() {
 		return lastname;
 	}
+
 
 	public void setLastname(String lastname) {
 		this.lastname = lastname;
 	}
 
+
 	public String getMobilenumber() {
 		return mobilenumber;
 	}
+
 
 	public void setMobilenumber(String mobilenumber) {
 		this.mobilenumber = mobilenumber;
 	}
 
+
 	public String getParentname() {
 		return parentname;
 	}
+
 
 	public void setParentname(String parentname) {
 		this.parentname = parentname;
 	}
 
+
 	public String getParentmobnum() {
 		return parentmobnum;
 	}
+
 
 	public void setParentmobnum(String parentmobnum) {
 		this.parentmobnum = parentmobnum;
 	}
 
+
 	public String getSpousename() {
 		return spousename;
 	}
+
 
 	public void setSpousename(String spousename) {
 		this.spousename = spousename;
 	}
 
+
 	public String getSpousemobnum() {
 		return spousemobnum;
 	}
+
 
 	public void setSpousemobnum(String spousemobnum) {
 		this.spousemobnum = spousemobnum;
 	}
 
+
 	public String getAadhaarnumber() {
 		return aadhaarnumber;
 	}
+
 
 	public void setAadhaarnumber(String aadhaarnumber) {
 		this.aadhaarnumber = aadhaarnumber;
 	}
 
+
 	public String getPannumber() {
 		return pannumber;
 	}
+
 
 	public void setPannumber(String pannumber) {
 		this.pannumber = pannumber;
 	}
 
+
 	public String getEntitycreflg() {
 		return entitycreflg;
 	}
+
 
 	public void setEntitycreflg(String entitycreflg) {
 		this.entitycreflg = entitycreflg;
 	}
 
+
 	public String getDelflg() {
 		return delflg;
 	}
+
 
 	public void setDelflg(String delflg) {
 		this.delflg = delflg;
 	}
 
+
 	public String getRcreuserid() {
 		return rcreuserid;
 	}
+
 
 	public void setRcreuserid(String rcreuserid) {
 		this.rcreuserid = rcreuserid;
 	}
 
+
 	public Date getRcretime() {
 		return rcretime;
 	}
+
 
 	public void setRcretime(Date rcretime) {
 		this.rcretime = rcretime;
 	}
 
+
 	public String getRmoduserid() {
 		return rmoduserid;
 	}
+
 
 	public void setRmoduserid(String rmoduserid) {
 		this.rmoduserid = rmoduserid;
 	}
 
+
 	public Date getRmodtime() {
 		return rmodtime;
 	}
+
 
 	public void setRmodtime(Date rmodtime) {
 		this.rmodtime = rmodtime;
 	}
 
+
 	public String getRvfyuserid() {
 		return rvfyuserid;
 	}
+
 
 	public void setRvfyuserid(String rvfyuserid) {
 		this.rvfyuserid = rvfyuserid;
 	}
 
+
 	public Date getRvfytime() {
 		return rvfytime;
 	}
+
 
 	public void setRvfytime(Date rvfytime) {
 		this.rvfytime = rvfytime;
 	}
 
+
 	public String getUannumber() {
 		return uannumber;
 	}
+
 
 	public void setUannumber(String uannumber) {
 		this.uannumber = uannumber;
 	}
 
-	@Override
-	public String toString() {
-		return "EmployeeProfileMod [userid=" + userid + ", empid=" + empid + ", employeename=" + employeename
-				+ ", dateofbirth=" + dateofbirth + ", bloodgroup=" + bloodgroup + ", emailid=" + emailid
-				+ ", officialemail=" + officialemail + ", firstname=" + firstname + ", lastname=" + lastname
-				+ ", mobilenumber=" + mobilenumber + ", parentname=" + parentname + ", parentmobnum=" + parentmobnum
-				+ ", spousename=" + spousename + ", spousemobnum=" + spousemobnum + ", aadhaarnumber=" + aadhaarnumber
-				+ ", pannumber=" + pannumber + ", entitycreflg=" + entitycreflg + ", delflg=" + delflg + ", rcreuserid="
-				+ rcreuserid + ", rcretime=" + rcretime + ", rmoduserid=" + rmoduserid + ", rmodtime=" + rmodtime
-				+ ", rvfyuserid=" + rvfyuserid + ", rvfytime=" + rvfytime + ", uannumber=" + uannumber
-				+ ", getUserid()=" + getUserid() + ", getEmpid()=" + getEmpid() + ", getEmployeename()="
-				+ getEmployeename() + ", getDateofbirth()=" + getDateofbirth() + ", getBloodgroup()=" + getBloodgroup()
-				+ ", getEmailid()=" + getEmailid() + ", getOfficialemail()=" + getOfficialemail() + ", getFirstname()="
-				+ getFirstname() + ", getLastname()=" + getLastname() + ", getMobilenumber()=" + getMobilenumber()
-				+ ", getParentname()=" + getParentname() + ", getParentmobnum()=" + getParentmobnum()
-				+ ", getSpousename()=" + getSpousename() + ", getSpousemobnum()=" + getSpousemobnum()
-				+ ", getAadhaarnumber()=" + getAadhaarnumber() + ", getPannumber()=" + getPannumber()
-				+ ", getEntitycreflg()=" + getEntitycreflg() + ", getDelflg()=" + getDelflg() + ", getRcreuserid()="
-				+ getRcreuserid() + ", getRcretime()=" + getRcretime() + ", getRmoduserid()=" + getRmoduserid()
-				+ ", getRmodtime()=" + getRmodtime() + ", getRvfyuserid()=" + getRvfyuserid() + ", getRvfytime()="
-				+ getRvfytime() + ", getUannumber()=" + getUannumber() + ", getClass()=" + getClass() + ", hashCode()="
-				+ hashCode() + ", toString()=" + super.toString() + "]";
+
+	public String getPhotoPath() {
+		return photoPath;
 	}
 
-	public EmployeeProfileMod(Long userid, String empid, String employeename, Date dateofbirth, String bloodgroup,
-			String emailid, String officialemail, String firstname, String lastname, String mobilenumber,
-			String parentname, String parentmobnum, String spousename, String spousemobnum, String aadhaarnumber,
-			String pannumber, String entitycreflg, String delflg, String rcreuserid, Date rcretime, String rmoduserid,
-			Date rmodtime, String rvfyuserid, Date rvfytime, String uannumber) {
-		super();
-		this.userid = userid;
-		this.empid = empid;
-		this.employeename = employeename;
-		this.dateofbirth = dateofbirth;
-		this.bloodgroup = bloodgroup;
-		this.emailid = emailid;
-		this.officialemail = officialemail;
-		this.firstname = firstname;
-		this.lastname = lastname;
-		this.mobilenumber = mobilenumber;
-		this.parentname = parentname;
-		this.parentmobnum = parentmobnum;
-		this.spousename = spousename;
-		this.spousemobnum = spousemobnum;
-		this.aadhaarnumber = aadhaarnumber;
-		this.pannumber = pannumber;
-		this.entitycreflg = entitycreflg;
-		this.delflg = delflg;
-		this.rcreuserid = rcreuserid;
-		this.rcretime = rcretime;
-		this.rmoduserid = rmoduserid;
-		this.rmodtime = rmodtime;
-		this.rvfyuserid = rvfyuserid;
-		this.rvfytime = rvfytime;
-		this.uannumber = uannumber;
+
+	public void setPhotoPath(String photoPath) {
+		this.photoPath = photoPath;
 	}
 
-	public EmployeeProfileMod() {
-		super();
-		// TODO Auto-generated constructor stub
+
+	public String getAadharPath() {
+		return aadharPath;
 	}
 
-	public Object getDepartment() {
-		// TODO Auto-generated method stub
-		return null;
+
+	public void setAadharPath(String aadharPath) {
+		this.aadharPath = aadharPath;
 	}
-      
+
+
+	public String getPanPath() {
+		return panPath;
+	}
+
+
+	public void setPanPath(String panPath) {
+		this.panPath = panPath;
+	}
+
+
+	public String getTenthPath() {
+		return tenthPath;
+	}
+
+
+	public void setTenthPath(String tenthPath) {
+		this.tenthPath = tenthPath;
+	}
+
+
+	public String getTwelfthPath() {
+		return twelfthPath;
+	}
+
+
+	public void setTwelfthPath(String twelfthPath) {
+		this.twelfthPath = twelfthPath;
+	}
+
+
+	public String getDegreePath() {
+		return degreePath;
+	}
+
+
+	public void setDegreePath(String degreePath) {
+		this.degreePath = degreePath;
+	}
+
+
+	public String getGender() {
+		return gender;
+	}
+
+
+	public void setGender(String gender) {
+		this.gender = gender;
+	}
+
+
+	public String getMaritalstatus() {
+		return maritalstatus;
+	}
+
+
+	public void setMaritalstatus(String maritalstatus) {
+		this.maritalstatus = maritalstatus;
+	}
+
+
+	public String getNationality() {
+		return nationality;
+	}
+
+
+	public void setNationality(String nationality) {
+		this.nationality = nationality;
+	}
+
+
+	public Date getDateofjoining() {
+		return dateofjoining;
+	}
+
+
+	public void setDateofjoining(Date dateofjoining) {
+		this.dateofjoining = dateofjoining;
+	}
+
+
+	public String getDesignation() {
+		return designation;
+	}
+
+
+	public void setDesignation(String designation) {
+		this.designation = designation;
+	}
+
+
+	public String getWorklocation() {
+		return worklocation;
+	}
+
+
+	public void setWorklocation(String worklocation) {
+		this.worklocation = worklocation;
+	}
+
+
+	public String getReportingmanager() {
+		return reportingmanager;
+	}
+
+
+	public void setReportingmanager(String reportingmanager) {
+		this.reportingmanager = reportingmanager;
+	}
+
+
+	public String getEmergencycontactname() {
+		return emergencycontactname;
+	}
+
+
+	public void setEmergencycontactname(String emergencycontactname) {
+		this.emergencycontactname = emergencycontactname;
+	}
+
+
+	public String getEmergencycontactnumber() {
+		return emergencycontactnumber;
+	}
+
+
+	public void setEmergencycontactnumber(String emergencycontactnumber) {
+		this.emergencycontactnumber = emergencycontactnumber;
+	}
+
+
+	public String getEmergencycontactrelation() {
+		return emergencycontactrelation;
+	}
+
+
+	public void setEmergencycontactrelation(String emergencycontactrelation) {
+		this.emergencycontactrelation = emergencycontactrelation;
+	}
+
+
+	public String getAlternatemobilenumber() {
+		return alternatemobilenumber;
+	}
+
+
+	public void setAlternatemobilenumber(String alternatemobilenumber) {
+		this.alternatemobilenumber = alternatemobilenumber;
+	}
+
+
+	public String getPassportnumber() {
+		return passportnumber;
+	}
+
+
+	public void setPassportnumber(String passportnumber) {
+		this.passportnumber = passportnumber;
+	}
+
+
+	public String getDrivinglicense() {
+		return drivinglicense;
+	}
+
+
+	public void setDrivinglicense(String drivinglicense) {
+		this.drivinglicense = drivinglicense;
+	}
+
+
+	public String getEsinumber() {
+		return esinumber;
+	}
+
+
+	public void setEsinumber(String esinumber) {
+		this.esinumber = esinumber;
+	}
+
+
+	public void setDepartment(String department) {
+		this.department = department;
+	}
+
+
+	public String getDepartment() {
+		return department;
+	}
+
+
+
 }

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import com.whitestone.entity.EmployeeAddressMod;
 
 @Repository
-public interface EmployeeAddressModRepository extends JpaRepository<EmployeeAddressMod, String> {
+public interface EmployeeAddressModRepository extends JpaRepository<EmployeeAddressMod, Long> {
+	void deleteByUserid(Long userid);
 	Optional<EmployeeAddressMod> findByUserid(Long userid);
 }

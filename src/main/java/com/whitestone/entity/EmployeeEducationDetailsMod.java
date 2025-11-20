@@ -43,7 +43,7 @@ public class EmployeeEducationDetailsMod {
     private String additionalnotes;
 
     @Column(name = "DURATION"  )
-    private Long duration;
+    private String duration;
 
     @Column(name = "DEL_FLG", length = 1)
     private String delflg;
@@ -141,11 +141,11 @@ public class EmployeeEducationDetailsMod {
 		this.additionalnotes = additionalnotes;
 	}
 
-	public Long getDuration() {
+	public String getDuration() {
 		return duration;
 	}
 
-	public void setDuration(Long duration) {
+	public void setDuration(String duration) {
 		this.duration = duration;
 	}
 
@@ -225,7 +225,7 @@ public class EmployeeEducationDetailsMod {
 
 	public EmployeeEducationDetailsMod(Long srlnum, Long userid, String regnum, String institution,
 			String qualification, String fieldofstudy, String percentage, String yearofgraduation,
-			String additionalnotes, Long duration, String delflg, String rcreuserid, Date rcretime, String rmoduserid,
+			String additionalnotes, String duration, String delflg, String rcreuserid, Date rcretime, String rmoduserid,
 			Date rmodtime, String rvfyuserid, Date rvfytime) {
 		super();
 		this.srlnum = srlnum;

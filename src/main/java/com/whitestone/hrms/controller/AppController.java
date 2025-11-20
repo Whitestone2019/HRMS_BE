@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -24,6 +25,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
@@ -73,6 +75,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -90,6 +93,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whitestone.entity.AdvancesDetailsMod;
@@ -193,6 +197,9 @@ public class AppController {
 
 	@Value("${PROFILE_UPLOAD_DIR}") // configure in application.properties
 	private String uploadDir;
+	
+	@Value("${DOC_UPLOAD_DIR}") // configure in application.properties
+	private static String docUploadDir;
 
 	@Value("${EXPENSE_UPLOAD_DIR}") // configure in application.properties
 	private String expenseUploadDir;
@@ -770,146 +777,274 @@ public class AppController {
 	}
 
 	@RestController
-	@RequestMapping(value = { "/onboard" }, method = RequestMethod.POST)
-	@ResponseBody
+	@RequestMapping("/onboard")
 	public class EmployeeController {
 
-		@Autowired
-		private EmployeeProfileModRepository employeeprofilemodrepository;
+	    @Autowired
+	    private EmployeeProfileModRepository employeeProfileModRepository;  // ← Fixed name!
 
-		@Autowired
-		private EmployeeAddressModRepository employeeAddressModRepository;
+	    @Autowired
+	    private EmployeeAddressModRepository employeeAddressModRepository;
 
-		@Autowired
-		private EmployeeEducationDetailsModRepository employeeEducationDetailsModRepository;
+	    @Autowired
+	    private EmployeeEducationDetailsModRepository employeeEducationDetailsModRepository;
 
-		@Autowired
-		private EmployeeProfessionalDetailsModRepository employeeProfessionalDetailsModRepository;
+	    @Autowired
+	    private EmployeeProfessionalDetailsModRepository employeeProfessionalDetailsModRepository;
 
-		@Autowired
-		private EmployeeSkillModRepository employeeSkillModRepository;
+	    @Autowired
+	    private EmployeeSkillModRepository employeeSkillModRepository;
 
-		@Autowired
-		private ErrorMessageService errorMessageService;
+	    @Autowired
+	    private ErrorMessageService errorMessageService;
 
-		@PostMapping
-		@Transactional
-		public ResponseEntity<String> addEmployee1(@RequestBody Map<String, Object> requestData) {
-			try {
-				// Extract employee data from request
-				EmployeeProfileMod employee = new ObjectMapper().convertValue(requestData, EmployeeProfileMod.class);
+	    private final String UPLOAD_BASE_DIR = docUploadDir;
 
-				// Check if employee ID already exists in the profile table
-				Optional<EmployeeProfileMod> existingEmployee = employeeprofilemodrepository
-						.findByEmpid(employee.getEmpid());
-				if (existingEmployee.isPresent()) {
-					String errorMessage = "Error: Employee ID " + employee.getEmpid() + " already exists.";
-					return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("{\"error\": \"" + errorMessage + "\"}");
-				}
+	    @PostMapping(consumes = "multipart/form-data")
+	    @Transactional(rollbackFor = Exception.class)
+	    public ResponseEntity<String> addOrUpdateEmployeeWithDocuments(
+	            @RequestParam("data") String dataJson,
+	            @RequestPart(value = "photo", required = false) MultipartFile photo,
+	            @RequestPart(value = "aadharDoc", required = false) MultipartFile aadharDoc,
+	            @RequestPart(value = "panDoc", required = false) MultipartFile panDoc,
+	            @RequestPart(value = "tenthMarksheet", required = false) MultipartFile tenthMarksheet,
+	            @RequestPart(value = "twelfthOrDiploma", required = false) MultipartFile twelfthOrDiploma,
+	            @RequestPart(value = "degreeCertificate", required = false) MultipartFile degreeCertificate
+	    ) {
+	        ObjectMapper mapper = new ObjectMapper();
+	        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-				// Save employee profile
-				employee.setRcretime(new Date());
-				employee.setRmodtime(new Date());
-				employee.setDelflg("N");
-				employee.setEntitycreflg("N");
-				employeeprofilemodrepository.save(employee);
+	        Path empDirectory = null;
+	        List<Path> savedFiles = new ArrayList<>();
 
-				// Parse and save Address, Education, Professional Details, and Skills
-				saveAddress(requestData.get("address"), employee);
-				saveEducationDetails(requestData.get("education"), employee);
-				saveProfessionalDetails(requestData.get("professional"), employee);
-				saveSkills(requestData.get("skillSet"), employee);
+	        try {
+	            Map<String, Object> requestData = mapper.readValue(dataJson, Map.class);
+	            String empId = (String) requestData.get("empid");
 
-				String successMessage = errorMessageService.getErrorMessage("ADD_EMP_SUCCESS", "en");
-				return ResponseEntity.status(HttpStatus.CREATED).body("{\"message\": \"" + successMessage + "\"}");
-			} catch (Exception e) {
-				e.printStackTrace();
-				String errorMessage = errorMessageService.getErrorMessage("ADD_EMP_ERROR", "en");
-				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-						.body("{\"error\": \"" + errorMessage + " - " + e.getMessage() + "\"}");
-			}
-		}
+	            if (empId == null || empId.trim().isEmpty()) {
+	                return ResponseEntity.badRequest()
+	                        .body("{\"error\": \"Employee ID is required\"}");
+	            }
 
-		private void saveAddress(Object addressObj, EmployeeProfileMod employee) {
-			if (addressObj instanceof Map) {
-				EmployeeAddressMod address = new ObjectMapper().convertValue(addressObj, EmployeeAddressMod.class);
-				address.setUserid(employee.getUserid());
-				address.setDelflg("N");
-				address.setRcreuserid(employee.getUserid().toString());
-				address.setRcretime(employee.getRcretime());
-				address.setRmoduserid(employee.getRmoduserid());
-				address.setRmodtime(employee.getRmodtime());
-				employeeAddressModRepository.save(address);
-			}
-		}
+	            // Fixed: Use correct repository variable name
+	            boolean isUpdate = employeeProfileModRepository.findByEmpid(empId).isPresent();
+	            EmployeeProfileMod employee;
 
-		private void saveEducationDetails(Object educationDetailsObj, EmployeeProfileMod employee) {
-			if (educationDetailsObj instanceof List) {
-				List<?> educationDetails = (List<?>) educationDetailsObj;
-				for (Object eduDetailObj : educationDetails) {
-					if (eduDetailObj instanceof Map) {
-						EmployeeEducationDetailsMod edu = new ObjectMapper().convertValue(eduDetailObj,
-								EmployeeEducationDetailsMod.class);
-						Long maxSrlNo = employeeEducationDetailsModRepository.findMaxSerialNumber(employee.getUserid());
-						edu.setSrlnum((maxSrlNo == null) ? 1L : maxSrlNo + 1);
-						edu.setUserid(employee.getUserid());
-						edu.setDelflg("N");
-						edu.setRcreuserid(employee.getUserid().toString());
-						edu.setRcretime(employee.getRcretime());
-						edu.setRmoduserid(employee.getRmoduserid());
-						edu.setRmodtime(employee.getRmodtime());
-						employeeEducationDetailsModRepository.save(edu);
-					}
-				}
-			}
-		}
+	            if (isUpdate) {
+	                employee = employeeProfileModRepository.findByEmpid(empId)
+	                        .orElseThrow(() -> new RuntimeException("Employee not found"));
+	            } else {
+	                employee = new EmployeeProfileMod();
+	                employee.setEmpid(empId);
+	            }
 
-		private void saveProfessionalDetails(Object professionalDetailsObj, EmployeeProfileMod employee) {
-			if (professionalDetailsObj instanceof List) {
-				List<?> professionalDetails = (List<?>) professionalDetailsObj;
-				for (Object profDetailObj : professionalDetails) {
-					if (profDetailObj instanceof Map) {
-						EmployeeProfessionalDetailsMod prof = new ObjectMapper().convertValue(profDetailObj,
-								EmployeeProfessionalDetailsMod.class);
-						Long maxSrlNo = employeeProfessionalDetailsModRepository
-								.findProfMaxSerialNumber(employee.getUserid());
-						prof.setSrlnum((maxSrlNo == null) ? 1L : maxSrlNo + 1);
-						prof.setUserid(employee.getUserid().toString());
-						prof.setDelflg("N");
-						prof.setRcreuserid(employee.getUserid().toString());
-						prof.setRcretime(employee.getRcretime());
-						prof.setRmoduserid(employee.getRmoduserid());
-						prof.setRmodtime(employee.getRmodtime());
-						prof.setOfferletter("SUBMITTED");
-						employeeProfessionalDetailsModRepository.save(prof);
-					}
-				}
-			}
-		}
+	            // Map JSON to entity (safe update)
+	            mapper.readerForUpdating(employee).readValue(dataJson);
 
-		private void saveSkills(Object skillsObj, EmployeeProfileMod employee) {
-			if (skillsObj instanceof List) {
-				List<?> skills = (List<?>) skillsObj;
-				for (Object skillObj : skills) {
-					if (skillObj instanceof Map) {
-						EmployeeSkillMod skillMod = new ObjectMapper().convertValue(skillObj, EmployeeSkillMod.class);
-						Long maxSrlNo = employeeSkillModRepository.findSkillMaxSerialNumber(employee.getUserid());
-						skillMod.setSrlnum((maxSrlNo == null) ? 1L : maxSrlNo + 1);
-						skillMod.setUserid(employee.getUserid());
-						skillMod.setDelflg("N");
-						skillMod.setRcreuserid(employee.getUserid().toString());
-						skillMod.setRcretime(employee.getRcretime());
-						skillMod.setRmoduserid(employee.getRmoduserid());
-						skillMod.setRmodtime(employee.getRmodtime());
-						skillMod.setYearsofexp("3");
-						skillMod.setLastupdated("11.12.2022");
-						employeeSkillModRepository.save(skillMod);
-					}
-				}
-			}
-		}
+	            Date now = new Date();
+	            if (!isUpdate) {
+	                employee.setRcretime(now);
+	                employee.setDelflg("N");
+	                employee.setEntitycreflg("N");
+	            }
+	            employee.setRmodtime(now);
+
+	            // Auto full name
+	            employee.setEmployeename(
+	                (employee.getFirstname() != null ? employee.getFirstname() : "") +
+	                (employee.getLastname() != null ? " " + employee.getLastname() : "")
+	            );
+
+	            employee.setGender(safeString(requestData, "gender"));
+	            employee.setMaritalstatus(safeString(requestData, "maritalstatus"));
+	            employee.setNationality(safeString(requestData, "nationality", "Indian"));
+	            employee.setUannumber(safeString(requestData, "uannumber"));
+	            employee.setPassportnumber(safeString(requestData, "passportnumber"));
+	            employee.setDrivinglicense(safeString(requestData, "drivinglicense"));
+	            employee.setEsinumber(safeString(requestData, "esinumber"));
+	            employee.setEmergencycontactname(safeString(requestData, "emergencycontactname"));
+	            employee.setEmergencycontactnumber(safeString(requestData, "emergencycontactnumber"));
+	            employee.setEmergencycontactrelation(safeString(requestData, "emergencycontactrelation"));
+	            employee.setAlternatemobilenumber(safeString(requestData, "alternatemobilenumber"));
+	            employee.setDateofjoining(toDate(requestData.get("dateofjoining")));
+	            employee.setDesignation(safeString(requestData, "designation"));
+	            employee.setDepartment(safeString(requestData, "department"));
+	            employee.setWorklocation(safeString(requestData, "worklocation"));
+	            employee.setReportingmanager(safeString(requestData, "reportingmanager"));
+
+	            // Save to generate userid (for new records)
+	            employeeProfileModRepository.save(employee);
+
+	            // Create employee folder
+	            empDirectory = Paths.get(UPLOAD_BASE_DIR + empId);
+	            Files.createDirectories(empDirectory);
+
+	            // Save files only if uploaded
+	            if (photo != null && !photo.isEmpty())
+	                employee.setPhotoPath(saveFile(photo, empId, "photo", empDirectory, savedFiles));
+	            if (aadharDoc != null && !aadharDoc.isEmpty())
+	                employee.setAadharPath(saveFile(aadharDoc, empId, "aadhar", empDirectory, savedFiles));
+	            if (panDoc != null && !panDoc.isEmpty())
+	                employee.setPanPath(saveFile(panDoc, empId, "pan", empDirectory, savedFiles));
+	            if (tenthMarksheet != null && !tenthMarksheet.isEmpty())
+	                employee.setTenthPath(saveFile(tenthMarksheet, empId, "10th", empDirectory, savedFiles));
+	            if (twelfthOrDiploma != null && !twelfthOrDiploma.isEmpty())
+	                employee.setTwelfthPath(saveFile(twelfthOrDiploma, empId, "12th", empDirectory, savedFiles));
+	            if (degreeCertificate != null && !degreeCertificate.isEmpty())
+	                employee.setDegreePath(saveFile(degreeCertificate, empId, "degree", empDirectory, savedFiles));
+
+	            employeeProfileModRepository.save(employee);
+
+	            // Delete old related records on update
+	            if (isUpdate && employee.getUserid() != null) {
+	                employeeAddressModRepository.deleteByUserid(employee.getUserid());
+	                employeeEducationDetailsModRepository.deleteByUserid(employee.getUserid());
+	                employeeSkillModRepository.deleteByUserid(employee.getUserid());
+
+	                // Professional uses String userid
+	                if (employee.getUserid() != null) {
+	                    employeeProfessionalDetailsModRepository.deleteByUserid(employee.getUserid().toString());
+	                }
+	            }
+
+	            // Save new related data
+	            saveAddress(requestData.get("address"), employee);
+	            saveEducationDetails(requestData.get("education"), employee);
+	            saveProfessionalDetails(requestData.get("professional"), employee);
+	            saveSkills(requestData.get("skillSet"), employee);
+
+	            String message = isUpdate ? "Employee updated successfully!" : "Employee added successfully!";
+	            return ResponseEntity.ok("{\"message\": \"" + message + "\"}");
+
+	        } catch (Exception e) {
+	            e.printStackTrace(); // For debugging
+
+	            // Cleanup uploaded files
+	            savedFiles.forEach(path -> {
+	                try { if (Files.exists(path)) Files.delete(path); } catch (Exception ignored) {}
+	            });
+
+	            String errorMsg = errorMessageService.getErrorMessage("ADD_EMP_ERROR", "en");
+	            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                    .body("{\"error\": \"" + errorMsg + " - " + e.getMessage() + "\"}");
+	        }
+	    }
+
+	    // Helper methods (no logging)
+	    private String safeString(Map<String, Object> map, String key) {
+	        Object val = map.get(key);
+	        return (val != null && !val.toString().trim().isEmpty()) ? val.toString().trim() : null;
+	    }
+
+	    private String safeString(Map<String, Object> map, String key, String defaultVal) {
+	        Object val = map.get(key);
+	        return (val != null && !val.toString().trim().isEmpty()) ? val.toString().trim() : defaultVal;
+	    }
+
+	    private Date toDate(Object obj) {
+	        if (obj instanceof String && !((String) obj).trim().isEmpty()) {
+	            try {
+	                return new SimpleDateFormat("yyyy-MM-dd").parse((String) obj);
+	            } catch (Exception e) {
+	                return null;
+	            }
+	        }
+	        return null;
+	    }
+
+	    private String saveFile(MultipartFile file, String empId, String type, Path dir, List<Path> track) throws IOException {
+	        if (file == null || file.isEmpty()) return null;
+
+	        String orig = file.getOriginalFilename();
+	        if (orig == null) orig = "document";
+	        orig = new File(orig).getName();
+
+	        String ext = "";
+	        int i = orig.lastIndexOf('.');
+	        if (i > 0) ext = orig.substring(i);
+
+	        Path path = dir.resolve(empId + "_" + type + ext);
+	        Files.copy(file.getInputStream(), path, StandardCopyOption.REPLACE_EXISTING);
+	        track.add(path);
+	        return path.toString();
+	    }
+
+	    // Save methods (unchanged)
+	    private void saveAddress(Object obj, EmployeeProfileMod emp) {
+	        if (obj instanceof Map) {
+	            EmployeeAddressMod addr = new ObjectMapper().convertValue(obj, EmployeeAddressMod.class);
+	            addr.setUserid(emp.getUserid());
+	            addr.setDelflg("N");
+	            addr.setRcreuserid(emp.getUserid().toString());
+	            addr.setRcretime(emp.getRcretime());
+	            addr.setRmoduserid(emp.getRmoduserid());
+	            addr.setRmodtime(emp.getRmodtime());
+	            employeeAddressModRepository.save(addr);
+	        }
+	    }
+
+	    private void saveEducationDetails(Object obj, EmployeeProfileMod emp) {
+	        if (obj instanceof List) {
+	            List<?> list = (List<?>) obj;
+	            for (Object item : list) {
+	                if (item instanceof Map) {
+	                    EmployeeEducationDetailsMod edu = new ObjectMapper().convertValue(item, EmployeeEducationDetailsMod.class);
+	                    Long max = employeeEducationDetailsModRepository.findMaxSerialNumber(emp.getUserid());
+	                    edu.setSrlnum(max == null ? 1L : max + 1);
+	                    edu.setUserid(emp.getUserid());
+	                    edu.setDelflg("N");
+	                    edu.setRcreuserid(emp.getUserid().toString());
+	                    edu.setRcretime(emp.getRcretime());
+	                    edu.setRmoduserid(emp.getRmoduserid());
+	                    edu.setRmodtime(emp.getRmodtime());
+	                    employeeEducationDetailsModRepository.save(edu);
+	                }
+	            }
+	        }
+	    }
+
+	    private void saveProfessionalDetails(Object obj, EmployeeProfileMod emp) {
+	        if (obj instanceof List) {
+	            List<?> list = (List<?>) obj;
+	            for (Object item : list) {
+	                if (item instanceof Map) {
+	                    EmployeeProfessionalDetailsMod prof = new ObjectMapper().convertValue(item, EmployeeProfessionalDetailsMod.class);
+	                    Long max = employeeProfessionalDetailsModRepository.findProfMaxSerialNumber(emp.getUserid());
+	                    prof.setSrlnum(max == null ? 1L : max + 1);
+	                    prof.setUserid(emp.getUserid().toString());
+	                    prof.setDelflg("N");
+	                    prof.setRcreuserid(emp.getUserid().toString());
+	                    prof.setRcretime(emp.getRcretime());
+	                    prof.setRmoduserid(emp.getRmoduserid());
+	                    prof.setRmodtime(emp.getRmodtime());
+	                    prof.setOfferletter("SUBMITTED");
+	                    employeeProfessionalDetailsModRepository.save(prof);
+	                }
+	            }
+	        }
+	    }
+
+	    private void saveSkills(Object obj, EmployeeProfileMod emp) {
+	        if (obj instanceof List) {
+	            List<?> list = (List<?>) obj;
+	            for (Object item : list) {
+	                if (item instanceof Map) {
+	                    EmployeeSkillMod skill = new ObjectMapper().convertValue(item, EmployeeSkillMod.class);
+	                    Long max = employeeSkillModRepository.findSkillMaxSerialNumber(emp.getUserid());
+	                    skill.setSrlnum(max == null ? 1L : max + 1);
+	                    skill.setUserid(emp.getUserid());
+	                    skill.setYearsofexp("2year");
+	                    skill.setDelflg("N");
+	                    skill.setRcreuserid(emp.getUserid().toString());
+	                    skill.setRcretime(emp.getRcretime());
+	                    skill.setRmoduserid(emp.getRmoduserid());
+	                    skill.setRmodtime(emp.getRmodtime());
+	                    employeeSkillModRepository.save(skill);
+	                }
+	            }
+	        }
+	    }
 	}
-
 	@RestController
 	@RequestMapping("/travel")
 	public class TravelController {
@@ -1208,149 +1343,175 @@ public class AppController {
 		}
 	}
 
-	@GetMapping(value = { "/employees/{empid}" })
-	public ResponseEntity<?> fetchEmployeeById(@PathVariable String empid) {
-		System.out.println("fetchEmployeeById : " + empid);
-		SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-		Map<String, String> response = new HashMap<>();
-		try {
-			// Fetch the employee profile using the provided empid
-			Optional<EmployeeProfileMod> employeeProfileModOptional = employeeProfilemodRepository.findByEmpid(empid);
+	
+	  private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
+	  @GetMapping("/employees/{empid}")
+	  public ResponseEntity<Map<String, Object>> fetchEmployeeById(@PathVariable String empid) {
+	      Map<String, Object> response = new HashMap<>();
 
-			if (!employeeProfileModOptional.isPresent()) {
-				// If employee not found, return 404 with error message
-				response.put("message", "FETCH_EMP_NOTFOUND");
-				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-			}
+	      try {
+	          Optional<EmployeeProfileMod> empOpt = employeeProfilemodRepository.findByEmpid(empid);
+	          if (!empOpt.isPresent()) {
+	              response.put("error", "Employee not found with ID: " + empid);
+	              return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+	          }
 
-			// Extract the employee profile details
-			EmployeeProfileMod employeeProfile = employeeProfileModOptional.get();
+	          EmployeeProfileMod emp = empOpt.get();
+	          Long userid = emp.getUserid();
+	          if (userid == null) {
+	              response.put("error", "Invalid employee data: USER_ID is missing");
+	              return ResponseEntity.badRequest().body(response);
+	          }
 
-			// Validate the userId from the EmployeeProfileMod entity
-			Long userid = employeeProfile.getUserid();
-			if (userid == null) {
-				response.put("message", "User ID is null for employee with empid: " + empid);
-				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-			}
+	          SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
 
-			// Fetch employee address
-			Optional<EmployeeAddressMod> employeeAddressModOptional = employeeAddressModRepository.findByUserid(userid);
+	          // === BASIC PERSONAL DETAILS ===
+	          response.put("empid", nullToEmpty(emp.getEmpid()));
+	          response.put("firstName", nullToEmpty(emp.getFirstname()));
+	          response.put("lastName", nullToEmpty(emp.getLastname()));
+	          response.put("emailid", nullToEmpty(emp.getEmailid()));
+	          response.put("mobileNumber", nullToEmpty(emp.getMobilenumber()));
+	          response.put("officialemail", nullToEmpty(emp.getOfficialemail()));
+	          response.put("dateofbirth", emp.getDateofbirth() != null ? DATE_FORMAT.format(emp.getDateofbirth()) : "");
+	          response.put("bloodgroup", nullToEmpty(emp.getBloodgroup()));
+	          response.put("aadhaarnumber", nullToEmpty(emp.getAadhaarnumber()));
+	          response.put("pannumber", nullToEmpty(emp.getPannumber()));
+	          response.put("uannumber", nullToEmpty(emp.getUannumber()));
 
-			// Fetch education details
-			List<EmployeeEducationDetailsMod> educationDetails = employeeEducationDetailsModRepository
-					.findByUserid(userid);
+	          // === NEW PERSONAL FIELDS ===
+	          response.put("gender", nullToEmpty(emp.getGender()));
+	          response.put("maritalstatus", nullToEmpty(emp.getMaritalstatus()));
+	          response.put("nationality", nullToEmpty(emp.getNationality()));
+	          response.put("alternatemobilenumber", nullToEmpty(emp.getAlternatemobilenumber()));
 
-			// Fetch professional details
-			List<EmployeeProfessionalDetailsMod> professionalDetails = employeeProfessionalDetailsModRepository
-					.findByUserid(String.valueOf(userid));
+	          // === EMERGENCY CONTACT ===
+	          response.put("emergencycontactname", nullToEmpty(emp.getEmergencycontactname()));
+	          response.put("emergencycontactnumber", nullToEmpty(emp.getEmergencycontactnumber()));
+	          response.put("emergencycontactrelation", nullToEmpty(emp.getEmergencycontactrelation()));
 
-			// Fetch skill details
-			List<EmployeeSkillMod> skillDetails = employeeSkillModRepository.findByUserid(userid);
+	          // === EMPLOYMENT DETAILS ===
+	          response.put("dateofjoining", emp.getDateofjoining() != null ? DATE_FORMAT.format(emp.getDateofjoining()) : "");
+	          response.put("designation", nullToEmpty(emp.getDesignation()));
+	          response.put("department", (emp.getDepartment()));
+	          response.put("worklocation", nullToEmpty(emp.getWorklocation()));
+	          response.put("reportingmanager", nullToEmpty(emp.getReportingmanager()));
 
-			// Prepare the response map
-			Map<String, Object> response1 = new HashMap<>();
-			response.put("empid", employeeProfile.getEmpid());
-			response.put("firstName", employeeProfile.getFirstname());
-			response.put("lastName", employeeProfile.getLastname());
-			response.put("emailid", employeeProfile.getEmailid());
-			response.put("mobileNumber", employeeProfile.getMobilenumber());
-			response.put("bloodgroup", employeeProfile.getBloodgroup());
-			response.put("parentmobnum", employeeProfile.getParentmobnum());
-			response.put("parentname", employeeProfile.getParentname());
-			response.put("pannumber", employeeProfile.getPannumber());
-			response.put("uannumber", employeeProfile.getUannumber());
-			response.put("aadhaarnumber", employeeProfile.getAadhaarnumber());
-			response.put("officialemail", employeeProfile.getOfficialemail());
-			String Dateofbirth = dateFormat.format(employeeProfile.getDateofbirth());
-			response.put("dateofbirth", Dateofbirth);
+	          // === OTHER IDs ===
+	          response.put("passportnumber", nullToEmpty(emp.getPassportnumber()));
+	          response.put("drivinglicense", nullToEmpty(emp.getDrivinglicense()));
+	          response.put("esinumber", nullToEmpty(emp.getEsinumber()));
 
-			// Add address details if available
-			employeeAddressModOptional.ifPresent(address -> {
-				response.put("presentaddressline1", address.getPresentaddressline1());
-				response.put("presentaddressline2", address.getPresentaddressline2());
-				response.put("presentcity", address.getPresentcity());
-				response.put("presentstate", address.getPresentstate());
-				response.put("presentpostalcode", address.getPresentpostalcode());
-				response.put("presentcountry", address.getPresentcountry());
-				response.put("permanentaddressline1", address.getPermanentaddressline1());
-				response.put("permanentaddressline2", address.getPermanentaddressline2());
-				response.put("permanentcity", address.getPermanentcity());
-				response.put("permanentstate", address.getPermanentstate());
-				response.put("permanentpostalcode", address.getPermanentpostalcode());
-				response.put("permanentcountry", address.getPermanentcountry());
-			});
+	          // === ADDRESS ===
+	          employeeAddressModRepository.findByUserid(userid).ifPresent(addr -> {
+	              response.put("presentaddressline1", nullToEmpty(addr.getPresentaddressline1()));
+	              response.put("presentaddressline2", nullToEmpty(addr.getPresentaddressline2()));
+	              response.put("presentcity", nullToEmpty(addr.getPresentcity()));
+	              response.put("presentstate", nullToEmpty(addr.getPresentstate()));
+	              response.put("presentpostalcode", nullToEmpty(addr.getPresentpostalcode()));
+	              response.put("presentcountry", nullToEmpty(addr.getPresentcountry()));
 
-			// Add education details if available
-			if (!educationDetails.isEmpty()) {
-				List<Map<String, Object>> educationList = new ArrayList<>();
-				for (EmployeeEducationDetailsMod edu : educationDetails) {
-					Map<String, Object> eduMap = new HashMap<>();
-					eduMap.put("qualification", edu.getQualification());
-					eduMap.put("institution", edu.getInstitution());
-					eduMap.put("regnum", edu.getRegnum());
-					eduMap.put("yearofgraduation", edu.getYearofgraduation());
-					eduMap.put("percentage", edu.getPercentage());
-					eduMap.put("duration", edu.getDuration());
-					eduMap.put("fieldofstudy", edu.getFieldofstudy());
-					eduMap.put("additionalnotes", edu.getAdditionalnotes());
-					educationList.add(eduMap);
-				}
-				response1.put("education", educationList);
-			}
+	              response.put("permanentaddressline1", nullToEmpty(addr.getPermanentaddressline1()));
+	              response.put("permanentaddressline2", nullToEmpty(addr.getPermanentaddressline2()));
+	              response.put("permanentcity", nullToEmpty(addr.getPermanentcity()));
+	              response.put("permanentstate", nullToEmpty(addr.getPermanentstate()));
+	              response.put("permanentpostalcode", nullToEmpty(addr.getPermanentpostalcode()));
+	              response.put("permanentcountry", nullToEmpty(addr.getPermanentcountry()));
+	          });
 
-			// Add professional details if available
-			if (!professionalDetails.isEmpty()) {
-				List<Map<String, Object>> professionalDetailsList = new ArrayList<>();
-				for (EmployeeProfessionalDetailsMod professionalDetails1 : professionalDetails) {
-					Map<String, Object> professionalMap = new HashMap<>();
-					professionalMap.put("organisation", professionalDetails1.getOrganisation());
-					professionalMap.put("location", professionalDetails1.getLocation());
-					professionalMap.put("orgempid", professionalDetails1.getOrgempid());
-					professionalMap.put("orgdept", professionalDetails1.getOrgdept());
-					professionalMap.put("orgrole", professionalDetails1.getOrgrole());
-					System.out.println("bRIT" + professionalDetails1.getJoiningdate());
-					String joindate = dateFormat.format(professionalDetails1.getJoiningdate());
-					System.out.println("vasanth" + joindate);
-					professionalMap.put("joiningdate", joindate);
-					String Relievingdate = dateFormat.format(professionalDetails1.getRelievingdate());
-					professionalMap.put("relievingdate", Relievingdate);
-					professionalMap.put("ctc", professionalDetails1.getCtc());
-					professionalMap.put("additionalinformation", professionalDetails1.getAdditionalinformation());
-					professionalDetailsList.add(professionalMap);
-				}
+	          // === EDUCATION ===
+	          response.put("education", employeeEducationDetailsModRepository.findByUserid(userid).stream()
+	                  .map(this::mapEducation)
+	                  .collect(Collectors.toList()));
 
-				response1.put("professional", professionalDetailsList);
-			}
+	          // === PROFESSIONAL EXPERIENCE ===
+	          response.put("professional", employeeProfessionalDetailsModRepository.findByUserid(String.valueOf(userid)).stream()
+	                  .map(this::mapProfessional)
+	                  .collect(Collectors.toList()));
 
-			// Add skill details if available
-			if (!skillDetails.isEmpty()) {
-				List<Map<String, Object>> skillList = new ArrayList<>();
-				for (EmployeeSkillMod skill : skillDetails) {
-					Map<String, Object> skillMap = new HashMap<>();
-					skillMap.put("skill", skill.getSkill());
-					skillMap.put("proficiencylevel", skill.getProficiencylevel());
-					skillMap.put("certification", skill.getCertification());
-					skillMap.put("yearsExperience", skill.getYearsofexp());
+	          // === SKILL SET ===
+	          response.put("skillSet", employeeSkillModRepository.findByUserid(userid).stream()
+	                  .map(this::mapSkill)
+	                  .collect(Collectors.toList()));
 
-					skillMap.put("lastupdated", skill.getLastupdated());
-					skillList.add(skillMap);
-				}
-				response1.put("skillSet", skillList);
-			}
+	          // === DOCUMENTS AS BASE64 WITH METADATA ===
+	          Map<String, Object> documents = new HashMap<>();
+	          addDocumentBlob(documents, "photo", emp.getPhotoPath(), "image/jpeg");
+	          addDocumentBlob(documents, "aadhar", emp.getAadharPath(), "application/pdf");
+	          addDocumentBlob(documents, "pan", emp.getPanPath(), "application/pdf");
+	          addDocumentBlob(documents, "tenth", emp.getTenthPath(), "application/pdf");
+	          addDocumentBlob(documents, "twelfth", emp.getTwelfthPath(), "application/pdf");
+	          addDocumentBlob(documents, "degree", emp.getDegreePath(), "application/pdf");
 
-			// Return the employee details as a successful response
-			return ResponseEntity.ok(response);
-		} catch (Exception e) {
-			// Log the exception
-			System.out.println("fetchEmployeeById : ERR - " + e.getMessage());
-			e.printStackTrace();
+	          response.put("documents", documents);
 
-			// Prepare error message and return as response
-			response.put("message", "ERR_NO_RECORD_FOUND");
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-		}
-	}
+	          return ResponseEntity.ok(response);
 
+	      } catch (Exception e) {
+	          e.printStackTrace();
+	          response.put("error", "Failed to fetch employee details: " + e.getMessage());
+	          return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+	      }
+	  }
+
+    private String nullToEmpty(String s) { return s != null ? s : ""; }
+
+    private void addDocumentBlob(Map<String, Object> docs, String key, String filePath, String defaultMime) {
+        if (filePath != null && !filePath.trim().isEmpty() && Files.exists(Paths.get(filePath))) {
+            try {
+                byte[] bytes = Files.readAllBytes(Paths.get(filePath));
+                String base64 = Base64.getEncoder().encodeToString(bytes);
+                String mime = Files.probeContentType(Paths.get(filePath));
+                if (mime == null) mime = defaultMime;
+
+                Map<String, String> doc = new HashMap<>();
+                doc.put("data", base64);
+                doc.put("mime", mime);
+                doc.put("name", Paths.get(filePath).getFileName().toString());
+                docs.put(key, doc);
+            } catch (Exception e) {
+                docs.put(key, null);
+            }
+        } else {
+            docs.put(key, null);
+        }
+    }
+
+    private Map<String, Object> mapEducation(EmployeeEducationDetailsMod e) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("qualification", nullToEmpty(e.getQualification()));
+        m.put("institution", nullToEmpty(e.getInstitution()));
+        m.put("regnum", nullToEmpty(e.getRegnum()));
+        m.put("percentage", nullToEmpty(e.getPercentage()));
+       m.put("duration", (e.getDuration()));
+        m.put("fieldofstudy", nullToEmpty(e.getFieldofstudy()));
+        m.put("yearofgraduation", nullToEmpty(e.getYearofgraduation()));
+        m.put("additionalnotes", nullToEmpty(e.getAdditionalnotes()));
+        return m;
+    }
+
+    private Map<String, Object> mapProfessional(EmployeeProfessionalDetailsMod p) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("organisation", nullToEmpty(p.getOrganisation()));
+        m.put("location", nullToEmpty(p.getLocation()));
+        m.put("orgempid", nullToEmpty(p.getOrgempid()));
+        m.put("orgdept", nullToEmpty(p.getOrgdept()));
+        m.put("orgrole", nullToEmpty(p.getOrgrole()));
+        m.put("joiningdate", p.getJoiningdate() != null ? DATE_FORMAT.format(p.getJoiningdate()) : "");
+        m.put("relievingdate", p.getRelievingdate() != null ? DATE_FORMAT.format(p.getRelievingdate()) : "");
+        m.put("ctc", nullToEmpty(p.getCtc()));
+        m.put("additionalinformation", nullToEmpty(p.getAdditionalinformation()));
+        return m;
+    }
+
+    private Map<String, Object> mapSkill(EmployeeSkillMod s) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("skill", nullToEmpty(s.getSkill()));
+        m.put("proficiencylevel", nullToEmpty(s.getProficiencylevel()));
+        m.put("certification", nullToEmpty(s.getCertification()));
+        m.put("yearsExperience", nullToEmpty(s.getYearsofexp()));
+        m.put("lastupdated", s.getLastupdated());
+        return m;
+    }
 	@Autowired
 	private OrganizationRepository organizationRepository;
 

@@ -22,4 +22,6 @@ Optional<EmployeeProfessionalDetailsMod> findByUserid(Long userId);
 List<EmployeeProfessionalDetailsMod> findAllByUserid(Long userId);
 
 List<EmployeeProfessionalDetailsMod> findByUserid(String valueOf);
+
+void deleteByUserid(String userid);
 }
