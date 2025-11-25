@@ -189,20 +189,11 @@ import io.jsonwebtoken.security.Keys;
 
 @EnableAutoConfiguration(exclude = ErrorMvcAutoConfiguration.class)
 @Controller
-
-@RestController
 @Service
-
 public class AppController {
 
-	@Value("${PROFILE_UPLOAD_DIR}") // configure in application.properties
-	private String uploadDir;
-
-	@Value("${DOC_UPLOAD_DIR}") // configure in application.properties
-	private String docUploadDir;
-
-	@Value("${EXPENSE_UPLOAD_DIR}") // configure in application.properties
-	private String euploadDir;
+	@Value("${file.upload.dir}")
+    private String docUploadDir;
 
 	private PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -798,8 +789,10 @@ public class AppController {
 		@Autowired
 		private ErrorMessageService errorMessageService;
 
-		private final String UPLOAD_BASE_DIR = docUploadDir;
 
+		@Value("${file.upload.dir}")
+	    private String docUploadDir;
+		
 		@PostMapping(consumes = "multipart/form-data")
 		@Transactional(rollbackFor = Exception.class)
 		public ResponseEntity<String> addOrUpdateEmployeeWithDocuments(@RequestParam("data") String dataJson,
@@ -871,7 +864,9 @@ public class AppController {
 				employeeProfileModRepository.save(employee);
 
 				// Create employee folder
-				empDirectory = Paths.get(UPLOAD_BASE_DIR +"/"+ empId);
+				System.out.println("empDirectorydocUploadDir::::::::   "+docUploadDir);
+				empDirectory = Paths.get(docUploadDir +"/emp_doc/"+ empId);
+				System.out.println("empDirectory::::::::   "+empDirectory);
 				Files.createDirectories(empDirectory);
 
 				// Save files only if uploaded
@@ -3007,7 +3002,7 @@ public class AppController {
 			if (receipt.isEmpty()) {
 				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("No file uploaded");
 			}
-			String uploadDir = euploadDir;
+			String uploadDir = docUploadDir + "/expense_bills";
 			// Create the directory if it doesn't exist
 			Path path = Paths.get(uploadDir);
 			System.out.println("File>>>" + path);
@@ -3892,8 +3887,9 @@ public class AppController {
 																													// String
 			@RequestPart("receipt") MultipartFile receipt) throws IOException {
 		Map<String, Object> response = new HashMap<>();
+		String uploadDir = docUploadDir + "/expense_bills";
 		try {
-			String uploadDir = euploadDir;
+			
 			Path path = Paths.get(uploadDir);
 			System.out.println("TEST_GJ");
 			// Deserialize JSON to your ExpenseDetailsMod object
@@ -7116,9 +7112,9 @@ public class AppController {
 
 			// Construct file name: EMPID_FIRSTNAME_DATE.jpg
 			String fileName = employeeId + "_" + firstName + "_" + currentDate + fileExtension;
-
+			String uploadDir = docUploadDir + "/profile_pic";
 			// Prepare file path: <uploadDir>/<fileName>
-			Path filePath = Paths.get(euploadDir, fileName);
+			Path filePath = Paths.get(uploadDir, fileName);
 
 			// Create directories if not exist
 			Files.createDirectories(filePath.getParent());
