@@ -199,7 +199,7 @@ public class AppController {
 	private String uploadDir;
 
 	@Value("${DOC_UPLOAD_DIR}") // configure in application.properties
-	private static String docUploadDir;
+	private String docUploadDir;
 
 	@Value("${EXPENSE_UPLOAD_DIR}") // configure in application.properties
 	private String expenseUploadDir;
