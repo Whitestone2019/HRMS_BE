@@ -202,7 +202,7 @@ public class AppController {
 	private String docUploadDir;
 
 	@Value("${EXPENSE_UPLOAD_DIR}") // configure in application.properties
-	private String expenseUploadDir;
+	private String euploadDir;
 
 	private PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -3007,7 +3007,7 @@ public class AppController {
 			if (receipt.isEmpty()) {
 				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("No file uploaded");
 			}
-			String uploadDir = "D:\\Sowmiya";
+			String uploadDir = euploadDir;
 			// Create the directory if it doesn't exist
 			Path path = Paths.get(uploadDir);
 			System.out.println("File>>>" + path);
@@ -3893,7 +3893,7 @@ public class AppController {
 			@RequestPart("receipt") MultipartFile receipt) throws IOException {
 		Map<String, Object> response = new HashMap<>();
 		try {
-			String uploadDir = "C:\\WSSL08\\dummy_file_save";
+			String uploadDir = euploadDir;
 			Path path = Paths.get(uploadDir);
 			System.out.println("TEST_GJ");
 			// Deserialize JSON to your ExpenseDetailsMod object
@@ -7118,7 +7118,7 @@ public class AppController {
 			String fileName = employeeId + "_" + firstName + "_" + currentDate + fileExtension;
 
 			// Prepare file path: <uploadDir>/<fileName>
-			Path filePath = Paths.get(uploadDir, fileName);
+			Path filePath = Paths.get(euploadDir, fileName);
 
 			// Create directories if not exist
 			Files.createDirectories(filePath.getParent());
