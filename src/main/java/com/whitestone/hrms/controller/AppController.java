@@ -871,7 +871,7 @@ public class AppController {
 				employeeProfileModRepository.save(employee);
 
 				// Create employee folder
-				empDirectory = Paths.get(UPLOAD_BASE_DIR + empId);
+				empDirectory = Paths.get(UPLOAD_BASE_DIR +"/"+ empId);
 				Files.createDirectories(empDirectory);
 
 				// Save files only if uploaded
