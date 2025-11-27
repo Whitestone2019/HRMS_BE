@@ -188,6 +188,7 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 
 @EnableAutoConfiguration(exclude = ErrorMvcAutoConfiguration.class)
+@RestController
 @Controller
 @Service
 public class AppController {
@@ -4232,6 +4233,9 @@ public class AppController {
 			return empMap;
 		}).collect(Collectors.toList());
 	}
+	
+	
+	
 
 	// total expense amount
 	@CrossOrigin(origins = "http://localhost:4200") // Allow frontend access
