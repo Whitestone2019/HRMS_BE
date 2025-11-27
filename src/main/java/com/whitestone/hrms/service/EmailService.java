@@ -1,5 +1,7 @@
 package com.whitestone.hrms.service;
 import java.math.BigDecimal;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 
 import javax.mail.MessagingException;
 import javax.mail.internet.MimeMessage;
@@ -7,13 +9,12 @@ import javax.mail.internet.MimeMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import com.whitestone.entity.ExpenseDetailsMod;
+import com.whitestone.entity.PayrollAdjustment;
 import com.whitestone.entity.usermaintenance;
 import com.whitestone.hrms.repo.ExpenseDetailsRepository;
 import com.whitestone.hrms.repo.usermaintenanceRepository;
@@ -147,5 +148,67 @@ public class EmailService {
             throw new RuntimeException("Failed to send email", e);
         }
     }
+    public void sendRejectionEmailToManager(PayrollAdjustment pa, String adminRemarks) {
+        try {
+            // Get Manager & Employee details
+            usermaintenance manager = usermaintenanceRepository.findByEmpid1(pa.getManagerId())
+                    .orElseThrow(() -> new RuntimeException("Manager not found: " + pa.getManagerId()));
 
+            usermaintenance employee = usermaintenanceRepository.findByEmpid1(pa.getEmpId())
+                    .orElseThrow(() -> new RuntimeException("Employee not found: " + pa.getEmpId()));
+
+            String fullName = employee.getFirstname() +
+                    (employee.getLastname() != null ? " " + employee.getLastname() : "");
+
+            String subject = "Payroll Adjustment REJECTED - " + fullName + " (" + pa.getEmpId() + ")";
+
+            // THIS IS THE KEY FIX: Never compare primitive double with null
+            double deductionAmount = pa.getOtherDeductions(); // It's double → always has a value
+            String deductionText = "₹" + String.format("%,.2f", deductionAmount);
+
+            // If you want to treat 0.0 as "no deduction", you can do:
+            if (deductionAmount == 0.0) {
+                deductionText = "₹0.00";
+            }
+
+            String body = "Dear " + manager.getFirstname() + ",\n\n" +
+                          "A payroll adjustment request has been REJECTED by HR/Admin.\n\n" +
+                          "Employee         : " + fullName + "\n" +
+                          "Employee ID      : " + pa.getEmpId() + "\n" +
+                          "Month            : " + formatMonth(pa.getMonth()) + "\n" +
+                          "LOP Days         : " + pa.getLopDays() + "\n" +
+                          "Other Deduction  : " + deductionText + "\n\n" +
+                          "Rejection Reason:\n" +
+                          (adminRemarks != null && !adminRemarks.trim().isEmpty()
+                              ? adminRemarks.trim()
+                              : "No remarks provided.") + "\n\n" +
+                          "Please contact HR if you need clarification or wish to resubmit the request.\n\n" +
+                          "Regards,\n" +
+                          "HR & Payroll System\n" +
+                          "Whitestones Solutions Pvt Ltd";
+
+            // Send Email
+            sendLeaveEmail(
+                "payroll@whitestones.in",
+                manager.getEmailid(),
+                subject,
+                body
+            );
+
+            System.out.println("Rejection email sent to: " + manager.getEmailid());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.out.println("Failed to send rejection email for adjustment ID: " + pa.getId());
+        }
+    }
+    private String formatMonth(String monthStr) {
+        if (monthStr == null) return "N/A";
+        try {
+            YearMonth ym = YearMonth.parse(monthStr.length() > 7 ? monthStr.substring(0, 7) : monthStr);
+            return ym.format(DateTimeFormatter.ofPattern("MMMM yyyy"));
+        } catch (Exception e) {
+            return monthStr;
+        }
+    }
 }

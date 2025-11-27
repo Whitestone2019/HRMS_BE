@@ -37,6 +37,7 @@ import com.whitestone.hrms.repo.EmployeeSalaryTblRepository;
 import com.whitestone.hrms.repo.PayrollAdjustmentRepository;
 import com.whitestone.hrms.repo.UserMasterAttendanceModRepository;
 import com.whitestone.hrms.repo.WsslCalendarModRepository;
+import com.whitestone.hrms.service.EmailService;
 
 @RestController
 @RequestMapping("/payroll-adjustments")
@@ -65,6 +66,8 @@ public class PayrollAdjustmentController {
 	@Autowired
 	UserMasterAttendanceModRepository usermasterattendancemodrepository;
 
+	@Autowired
+	private EmailService emailService;
 
     // Endpoint to generate draft adjustments for the current month
     @PostMapping("/generate")
@@ -250,5 +253,41 @@ public class PayrollAdjustmentController {
         pa.setApprovalStatus("REJECTED");
         pa.setUpdatedDate(LocalDateTime.now());
         return payrollAdjustmentRepository.save(pa);
+    }
+    @GetMapping("/all")
+    public List<PayrollAdjustment> getAllAdjustments() {
+        YearMonth current = YearMonth.now();
+        return payrollAdjustmentRepository.findByMonth(current.toString());
+    }
+
+    @PostMapping("/admin-approve/{id}")
+    public ResponseEntity<Map<String, String>> adminApprove(@PathVariable Long id) {
+        PayrollAdjustment pa = payrollAdjustmentRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Not found"));
+        pa.setApprovalStatus("APPROVED");
+        pa.setUpdatedDate(LocalDateTime.now());
+        payrollAdjustmentRepository.save(pa);
+
+        // Optional: Send email to manager
+        // sendEmail(pa.getManagerId(), "Adjustment Approved", pa.getEmployeeName() + " payroll adjustment approved by Admin");
+
+        return ResponseEntity.ok(Map.of("status", "Approved by Admin"));
+    }
+
+    @PostMapping("/admin-reject/{id}")
+    public ResponseEntity<Map<String, String>> adminReject(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        PayrollAdjustment pa = payrollAdjustmentRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Not found"));
+        
+        String remarks = body.get("remarks");
+        pa.setApprovalStatus("REJECTED");
+        pa.setPayrollRejectRemarks("REJECTED BY HR/ADMIN: " + remarks);
+        pa.setUpdatedDate(LocalDateTime.now());
+        payrollAdjustmentRepository.save(pa);
+
+        // Send Email to Manager
+        emailService.sendRejectionEmailToManager(pa, remarks);
+
+        return ResponseEntity.ok(Map.of("status", "Rejected and notified"));
     }
 }

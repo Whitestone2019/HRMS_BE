@@ -40,6 +40,9 @@ public class PayrollAdjustment {
     
     @Column(name = "other_deductions_remarks", length = 500)
     private String otherDeductionsRemarks = "";
+    
+    @Column(name = "payroll_reject_remarks", length = 500)
+    private String payrollRejectRemarks = "";
 
     @Column(name = "manager_id")
     private String managerId;
@@ -125,6 +128,14 @@ public class PayrollAdjustment {
 		this.otherDeductionsRemarks = otherDeductionsRemarks;
 	}
 
+	public String getPayrollRejectRemarks() {
+		return payrollRejectRemarks;
+	}
+
+	public void setPayrollRejectRemarks(String payrollRejectRemarks) {
+		this.payrollRejectRemarks = payrollRejectRemarks;
+	}
+
 	public String getManagerId() {
 		return managerId;
 	}
@@ -156,8 +167,6 @@ public class PayrollAdjustment {
 	public void setUpdatedDate(LocalDateTime updatedDate) {
 		this.updatedDate = updatedDate;
 	}
-
-	
 
 	
 }

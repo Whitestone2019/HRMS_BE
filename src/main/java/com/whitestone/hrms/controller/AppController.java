@@ -7839,5 +7839,23 @@ public class AppController {
 
 		return response;
 	}
+	
+//	 @Autowired
+//	    FingerprintService service;
+//
+//	    @GetMapping("/capture")
+//	    public Map<String, Object> capture() {
+//	        Map<String, Object> res = new HashMap<>();
+//
+//	        try {
+//	            String template = service.captureFinger();
+//	            res.put("status", "success");
+//	            res.put("template", template);
+//	        } catch (Exception e) {
+//	            res.put("status", "error");
+//	            res.put("message", e.getMessage());
+//	        }
+//	        return res;
+//	    }
 
 }
