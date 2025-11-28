@@ -6830,6 +6830,7 @@ public class AppController {
 		existingTrainee.setRoleid(updatedTrainee.getRoleid());
 		existingTrainee.setEmpType(updatedTrainee.getEmpType());
 		existingTrainee.setStatus(updatedTrainee.getStatus());
+		existingTrainee.setRepoteTo(updatedTrainee.getRepoteTo());
 		existingTrainee.setRmodtime(new Date());
 
 		TraineeMaster savedTrainee = traineemasterRepository.save(existingTrainee);
@@ -6849,7 +6850,7 @@ public class AppController {
 
 			// Email to Manager if repoteTo is set
 			if (savedTrainee.getRepoteTo() != null) {
-				TraineeMaster manager = traineemasterRepository.findByTrngidOrUserId(savedTrainee.getRepoteTo())
+				usermaintenance manager = usermaintenanceRepository.findByEmpIdOrUserId(savedTrainee.getRepoteTo())
 						.orElseThrow(() -> new RuntimeException("Manager not found"));
 				String subjectManager = "Trainee Profile Updated";
 				String bodyManager = String.format(
