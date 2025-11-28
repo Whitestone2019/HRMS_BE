@@ -7600,6 +7600,11 @@ public class AppController {
 					response.put("eligible", true);
 					response.put("message", "Eligible for check-in, but yesterday was marked as Absent.");
 				}
+				else if ("Week off".equalsIgnoreCase(status)) {
+					response.put("status", "success");
+					response.put("eligible", true);
+					response.put("message", "Eligible for check-in, but yesterday was marked as Week off.");
+				}
 
 				else if ("Public holiday".equalsIgnoreCase(status)) {
 					response.put("status", "success");
