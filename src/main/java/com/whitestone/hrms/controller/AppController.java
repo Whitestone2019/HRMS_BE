@@ -6734,7 +6734,10 @@ public class AppController {
 				.orElseThrow(() -> new RuntimeException("Trainee not found"));
 
 		// update fields
-		existingTrainee.setFirstname(updatedTrainee.getUsername());
+		existingTrainee.setTrngid(updatedTrainee.getTrngid());
+		existingTrainee.setFirstname(updatedTrainee.getFirstname());
+		existingTrainee.setLastname(updatedTrainee.getLastname());
+		existingTrainee.setUsername(updatedTrainee.getUsername());
 		existingTrainee.setEmailid(updatedTrainee.getEmailid());
 		existingTrainee.setPhonenumber(updatedTrainee.getPhonenumber());
 		existingTrainee.setRoleid(updatedTrainee.getRoleid());
