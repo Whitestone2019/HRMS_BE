@@ -352,7 +352,9 @@ public class AppController {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
 		}
 	}
-
+	
+	
+	
 	public String generateToken(String employeeId, String role) {
 		// Set expiration date for token (1 hour from now)
 		long expirationTime = 1000 * 60 * 60; // 1 hour in milliseconds
@@ -2410,98 +2412,7 @@ public class AppController {
 		emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
 	}
 
-//	@PutMapping("/updateEntityFlag")
-//	public ResponseEntity<?> updateEntityFlag(@RequestParam(name = "empid", required = false) String empid,
-//			@RequestParam(name = "leavereason", required = false) String leavereason) {
-//		try {
-//			System.out.println("Approved" + leavereason);
-//			// Retrieve entity by empid and leaveType
-//			EmployeeLeaveMasterTbl entity = employeeLeaveMasterRepository.findByEmpidAndLeavereason(empid, leavereason);
-//			// updateConsolidatedLeave(employeeLeaveMasterTbl);
-//			if (entity == null) {
-//				Map<String, String> errorResponse = new HashMap<>();
-//				errorResponse.put("status", "failure");
-//				errorResponse.put("message", "Employee not found");
-//				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
-//			}
-//			updateConsolidatedLeave(entity);
-//
-//			// Update the flag and status
-//			entity.setEntitycreflg("Y");
-//			entity.setStatus("Approved");
-//			employeeLeaveMasterRepository.save(entity);
-//
-//			// Copy entity to the mod table
-//			EmployeeLeaveModTbl modEntity = new EmployeeLeaveModTbl();
-//			modEntity.setSrlnum(entity.getSrlnum());
-//			modEntity.setEmpid(entity.getEmpid());
-//			modEntity.setLeavetype(entity.getLeavetype());
-//			modEntity.setStartdate(entity.getStartdate());
-//			modEntity.setEnddate(entity.getEnddate());
-//			modEntity.setTeamEmail(entity.getTeamemail());
-//			modEntity.setLeavereason(entity.getLeavereason());
-//			modEntity.setStatus(entity.getStatus());
-//			modEntity.setNoofdays(entity.getNoofdays());
-//			modEntity.setEntitycreflg(entity.getEntitycreflg());
-//			modEntity.setDelflg(entity.getDelflg());
-//			modEntity.setRcreuserid(entity.getRcreuserid());
-//			modEntity.setRcretime(entity.getRcretime());
-//			modEntity.setRmoduserid(entity.getRmoduserid());
-//			modEntity.setRmodtime(entity.getRmodtime());
-//			modEntity.setRvfyuserid(entity.getRvfyuserid());
-//			modEntity.setRvfytime(entity.getRvfytime());
-//			modEntity.setNoofbooked(entity.getNoofdays());
-//
-//			employeeLeaveModRepository.save(modEntity);
-//
-//			// Delete record from the master table
-//			employeeLeaveMasterRepository.delete(entity);
-//
-//			// --- Trigger email to employee notifying approval ---
-//			try {
-//				// Retrieve the employee details
-//				usermaintenance existingEmployee = usermaintenanceRepository.findByEmpIdOrUserId(empid)
-//						.orElseThrow(() -> new RuntimeException("Employee not found"));
-//				String employeeEmail = existingEmployee.getEmailid();
-//
-//				// Retrieve manager details using the employee's manager id (assumed to be
-//				// stored in repoteTo)
-//				String managerId = existingEmployee.getRepoteTo();
-//				usermaintenance manager = usermaintenanceRepository.findByEmpIdOrUserId(managerId)
-//						.orElseThrow(() -> new RuntimeException("Manager not found"));
-//
-//				if (employeeEmail != null && !employeeEmail.isEmpty()) {
-//					SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-//					String subject = "Leave Request Approved";
-//					String body = String.format(
-//							"Dear %s,\n\nYour leave request for %s from %s to %s has been approved by your manager, %s.\n\nRegards,\n"
-//									+ manager.getFirstname() + ",\nWhitestone Software Solution Pvt Ltd",
-//							existingEmployee.getFirstname(), entity.getLeavetype(), sdf.format(entity.getStartdate()),
-//							sdf.format(entity.getEnddate()), manager.getFirstname());
-//					// Replace "noreply@company.com" with your sender email as needed.
-//					emailService.sendLeaveEmail(manager.getEmailid(), employeeEmail, subject, body);
-//				}
-//			} catch (Exception e) {
-//				// Log the error but continue with the response
-//				e.printStackTrace();
-//			}
-//
-//			// Prepare and return success response
-//			Map<String, Object> successResponse = new HashMap<>();
-//			successResponse.put("status", "success");
-//			successResponse.put("message",
-//					"Entity flag updated, record copied to mod table, and deleted from master table");
-//			successResponse.put("empid", empid);
-//			return ResponseEntity.ok(successResponse);
-//
-//		} catch (Exception e) {
-//			// Handle and return error response
-//			Map<String, String> errorResponse = new HashMap<>();
-//			errorResponse.put("status", "error");
-//			errorResponse.put("message", e.getMessage());
-//			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-//		}
-//	}
+
 
 	@Autowired
 	private WsslCalendarModRepository wsslCalendarModRepository;
@@ -2565,110 +2476,81 @@ public class AppController {
 
 	@GetMapping("/leave/count")
 	public ResponseEntity<Map<String, Object>> getLeaveCounts(@RequestParam("empId") String empId) {
-		try {
-			int year = LocalDate.now().getYear();
-			LocalDate yearStart = LocalDate.of(year, 1, 1);
-			LocalDate yearEnd = LocalDate.of(year, 12, 31);
+	    try {
+	        int year = LocalDate.now().getYear();
 
-			// statuses to consider (change if you only want Approved)
-			List<String> statuses = Arrays.asList("Approved", "Pending");
+	        // 1. Fetch Approved + Pending leaves
+			/*
+			 * List<EmployeeLeaveMasterTbl> leaves = employeeLeaveMasterRepository
+			 * .findByEmpidAndStartdateBetweenAndStatusInIgnoreCase( empId,
+			 * Date.from(LocalDate.of(year, 1,
+			 * 1).atStartOfDay(ZoneId.systemDefault()).toInstant()),
+			 * Date.from(LocalDate.of(year, 12,
+			 * 31).atStartOfDay(ZoneId.systemDefault()).toInstant()),
+			 * Arrays.asList("Approved", "Pending") );
+			 */
+	        
+//	        Date start = Date.from(LocalDate.of(year, 1, 1).atStartOfDay(ZoneId.systemDefault()).toInstant());
+//	        Date end   = Date.from(LocalDate.of(year, 12, 31).atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant());
+//
+//	        List<EmployeeLeaveMasterTbl> leaves = employeeLeaveMasterRepository
+//	            .findApprovedAndPendingLeaves(empId, start, end);
+//
+//	        // 2. Sum total leave days (FIXED: use mapToFloat correctly)
+//	        float totalTaken = (float) leaves.stream()
+//	                .filter(l -> l.getNoofdays() != null)
+//	                .mapToDouble(l -> l.getNoofdays())  // Double stream
+//	                .sum();
 
-			// fetch master + mod leaves (ensure these repository methods exist)
-			List<EmployeeLeaveMasterTbl> masterLeaves = employeeLeaveMasterRepository
-					.findByEmpidAndStartdateBetweenAndStatusInIgnoreCase(empId,
-							Date.from(yearStart.atStartOfDay(ZoneId.systemDefault()).toInstant()),
-							Date.from(yearEnd.atStartOfDay(ZoneId.systemDefault()).toInstant()), statuses);
+	        // 3. Get Leave Summary from DB (Source of Truth)
+	        Optional<EmployeeLeaveSummary> summaryOpt = employeeLeaveSummaryRepository
+	                .findByEmpIdAndYear(empId, year);
 
-//	        List<EmployeeLeaveModTbl> modLeaves =
-//	            employeeLeaveModRepository.findByEmpidAndStartdateBetweenAndStatusIn(
-//	                empId,
-//	                Date.from(yearStart.atStartOfDay(ZoneId.systemDefault()).toInstant()),
-//	                Date.from(yearEnd.atStartOfDay(ZoneId.systemDefault()).toInstant()),
-//	                statuses);
+	        float casualBalance = 12.0f;
+	        float totalLop = 0f;
 
-			// sum noOfDays from both lists
-			float totalTaken = 0f;
-			if (masterLeaves != null) {
-				totalTaken += masterLeaves.stream().filter(l -> l.getNoofdays() != null)
-						.map(EmployeeLeaveMasterTbl::getNoofdays).reduce(0f, Float::sum);
-			}
-//	        if (modLeaves != null) {
-//	            totalTaken += modLeaves.stream()
-//	                        .filter(l -> l.getNoofdays() != null)
-//	                        .map(EmployeeLeaveModTbl::getNoofdays)
-//	                        .reduce(0f, Float::sum);
-//	        }
+	        if (summaryOpt.isPresent()) {
+	            EmployeeLeaveSummary s = summaryOpt.get();
+	           // casualBalance = safe(s.getCasualLeaveBalance());
 
-			// fetch summary (if exists) to read casual balance & monthly LOPs
-			Optional<EmployeeLeaveSummary> summaryOpt = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, year);
+	            totalLop = safe(s.getLopJan()) + safe(s.getLopFeb()) + safe(s.getLopMar())
+	                     + safe(s.getLopApr()) + safe(s.getLopMay()) + safe(s.getLopJun())
+	                     + safe(s.getLopJul()) + safe(s.getLopAug()) + safe(s.getLopSep())
+	                     + safe(s.getLopOct()) + safe(s.getLopNov()) + safe(s.getLopDec())
+	                     + safe(s.getLop());
+	        }
 
-			// default values if no summary
-			float casualBalance = 0f;
-			float summaryLopTotal = 0f; // total LOP recorded in summary (from months + lop field)
+	        // 4. Calculate CL Used & Remaining
+	        float clUsed = Math.max(summaryOpt.get().getLeaveTaken() - summaryOpt.get().getLop(), 0f);
+	        float clRemaining = Math.max(casualBalance - clUsed, 0f);
 
-			if (summaryOpt.isPresent()) {
-				EmployeeLeaveSummary summary = summaryOpt.get();
-				// casual leave balance from summary
-				casualBalance = (summary.getCasualLeaveBalance() != null) ? summary.getCasualLeaveBalance() : 0f;
+	        // 5. LWP = recorded LOP + extra days beyond CL
+	       // float lwp = totalLop + Math.max(totalTaken - (casualBalance + totalLop), 0f);
 
-				// sum monthly LOPs (ensure none null)
-				float lopSumMonths = safe(summary.getLopJan()) + safe(summary.getLopFeb()) + safe(summary.getLopMar())
-						+ safe(summary.getLopApr()) + safe(summary.getLopMay()) + safe(summary.getLopJun())
-						+ safe(summary.getLopJul()) + safe(summary.getLopAug()) + safe(summary.getLopSep())
-						+ safe(summary.getLopOct()) + safe(summary.getLopNov()) + safe(summary.getLopDec());
+	        // 6. Response
+	       // System.out.println("clsuse::"+clUsed +"totalTaken:::"+totalTaken);
+	        Map<String, Object> resp = new HashMap<>();
+	        resp.put("empId", empId);
+	        resp.put("year", year);
+	       // resp.put("totalTakenLeave", Math.round(totalTaken));
+	        resp.put("casualUsed", clUsed);           // Booked
+	        resp.put("casualRemaining", Math.round(clRemaining)); // Available
+	       // resp.put("leavewithoutpay", Math.round(lwp));
+	        resp.put("rawCasualBalance", Math.round(casualBalance));
 
-				// summary.getLop() may be used as an overall LOP field — include it as well
-				summaryLopTotal = lopSumMonths + safe(summary.getLop());
-			}
+	        return ResponseEntity.ok(resp);
 
-			// Calculate CL used and remaining:
-			// CL used = totalTaken - totalLOP (can't be negative)
-			float clUsed = Math.max(totalTaken - summaryLopTotal, 0f);
-
-			// Remaining CL = casualBalance - clUsed (but not negative)
-			float remainingCL = Math.max(casualBalance - clUsed, 0f);
-
-			// If employee took NO leaves at all, return zeros (you requested this behavior)
-			if ((masterLeaves == null || masterLeaves.isEmpty())) {
-
-				Map<String, Object> zeroResp = new HashMap<>();
-				zeroResp.put("empId", empId);
-				zeroResp.put("year", year);
-				zeroResp.put("totalTakenLeave", 0L);
-				zeroResp.put("casualUsed", 0L);
-				zeroResp.put("casualRemaining", 0L);
-				zeroResp.put("leavewithoutpay", 0L);
-				zeroResp.put("rawCasualBalance", (long) casualBalance); // optional: show stored balance
-				return ResponseEntity.ok(zeroResp);
-			}
-
-			// Build response
-			Map<String, Object> resp = new HashMap<>();
-			resp.put("empId", empId);
-			resp.put("year", year);
-			resp.put("totalTakenLeave", (long) Math.ceil(totalTaken)); // total days taken
-			resp.put("casualUsed", (long) Math.ceil(clUsed)); // CL consumed from totalTaken
-			resp.put("casualRemaining", (long) Math.floor(remainingCL)); // remaining casual balance
-			resp.put("leavewithoutpay",
-					(long) Math.ceil(summaryLopTotal + Math.max(totalTaken - (clUsed + summaryLopTotal), 0)));
-			// The above leavewithoutpay returns total LOP recorded in summary plus any
-			// extra beyond clUsed (keeps consistent)
-			resp.put("rawCasualBalance", (long) Math.floor(casualBalance)); // optional: original summary balance
-
-			return ResponseEntity.ok(resp);
-
-		} catch (Exception e) {
-			e.printStackTrace();
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-					.body(Map.of("error", "Failed to fetch leave counts", "message", e.getMessage()));
-		}
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                .body(Map.of("error", "Failed to fetch leave counts", "message", e.getMessage()));
+	    }
 	}
 
-	// small helper to guard null Floats
-	private float safe(Float f) {
-		return (f == null) ? 0f : f.floatValue();
+	// Safe null check for Float
+	private float safe(Float value) {
+	    return value == null ? 0f : value;
 	}
-
 	// Controller
 	@PostMapping("/leaveRequest")
 	public ResponseEntity<?> leaveRequest(@RequestBody EmployeeLeaveMasterTbl employeeLeaveMasterTbl) {
@@ -6830,6 +6712,7 @@ public class AppController {
 		existingTrainee.setRoleid(updatedTrainee.getRoleid());
 		existingTrainee.setEmpType(updatedTrainee.getEmpType());
 		existingTrainee.setStatus(updatedTrainee.getStatus());
+		existingTrainee.setRepoteTo(updatedTrainee.getRepoteTo());
 		existingTrainee.setRmodtime(new Date());
 
 		TraineeMaster savedTrainee = traineemasterRepository.save(existingTrainee);
@@ -6849,7 +6732,7 @@ public class AppController {
 
 			// Email to Manager if repoteTo is set
 			if (savedTrainee.getRepoteTo() != null) {
-				TraineeMaster manager = traineemasterRepository.findByTrngidOrUserId(savedTrainee.getRepoteTo())
+				usermaintenance manager = usermaintenanceRepository.findByEmpIdOrUserId(savedTrainee.getRepoteTo())
 						.orElseThrow(() -> new RuntimeException("Manager not found"));
 				String subjectManager = "Trainee Profile Updated";
 				String bodyManager = String.format(
@@ -7599,6 +7482,11 @@ public class AppController {
 					response.put("status", "success");
 					response.put("eligible", true);
 					response.put("message", "Eligible for check-in, but yesterday was marked as Absent.");
+				}
+				else if ("Week off".equalsIgnoreCase(status)) {
+					response.put("status", "success");
+					response.put("eligible", true);
+					response.put("message", "Eligible for check-in, but yesterday was marked as Week off.");
 				}
 
 				else if ("Public holiday".equalsIgnoreCase(status)) {

@@ -124,7 +124,13 @@
 			<artifactId>itextpdf</artifactId>
 			<version>5.5.13.2</version>
 		</dependency>
-
+<!--<dependency>
+    <groupId>com.mantra</groupId>
+    <artifactId>Morfin_Auth</artifactId>
+    <version>1.0.0.19</version>
+    <scope>system</scope>
+    <systemPath>E:/FINGERPRINT/Morfin_Auth_Linux_Win_Java_1.0.0.19/Libs/Morfin_Auth.jar</systemPath>
+</dependency>-->
 		<!-- JSP and JSTL -->
 		<dependency>
 			<groupId>org.apache.tomcat.embed</groupId>

@@ -57,6 +57,17 @@ public interface EmployeeLeaveMasterTblRepository extends JpaRepository<Employee
 	Optional<EmployeeLeaveMasterTbl> findByEmpidAndStartdate(
 	        @Param("empId") String empId,
 	        @Param("attendanceDate") Date attendanceDate);
+	
+	@Query("SELECT l FROM EmployeeLeaveMasterTbl l " +
+		       "WHERE l.empid = :empId " +
+		       "AND l.startdate BETWEEN :startDate AND :endDate " +
+		       "AND UPPER(l.status) IN ('APPROVED', 'PENDING') " +
+		       "AND (l.delflg IS NULL OR l.delflg != 'Y')")
+		List<EmployeeLeaveMasterTbl> findApprovedAndPendingLeaves(
+		    @Param("empId") String empId,
+		    @Param("startDate") Date startDate,
+		    @Param("endDate") Date endDate
+		);
 
 
 	
