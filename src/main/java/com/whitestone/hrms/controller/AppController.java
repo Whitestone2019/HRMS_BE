@@ -6906,7 +6906,7 @@ public class AppController {
 
 			// ---------- Email to Manager ----------
 			if (savedUser.getRepoteTo() != null) {
-				TraineeMaster manager = traineemasterRepository.findByTrngidOrUserId(savedUser.getRepoteTo())
+				usermaintenance manager = usermaintenanceRepository.findByEmpid1(savedUser.getRepoteTo())
 						.orElseThrow(() -> new RuntimeException("Manager not found"));
 				String subjectManager = "New Junior Associate Assigned to You";
 				String bodyManager = String.format(
