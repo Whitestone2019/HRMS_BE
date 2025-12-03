@@ -10,7 +10,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @Entity
-@Table(name = "EMPLOYEE_EDUCATION_DETAILS_MOD_TBL", schema = "HRMSUSER")
+@Table(name = "EMPLOYEE_EDUCATION_DETAILS_MOD", schema = "HRMSUSER")
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class EmployeeEducationDetailsMod {
     @Id
@@ -42,7 +42,7 @@ public class EmployeeEducationDetailsMod {
     @Column(name = "ADDITIONAL_NOTES", length = 100)
     private String additionalnotes;
 
-    @Column(name = "DURATION"  )
+    @Column(name = "DURATION", length = 20)
     private String duration;
 
     @Column(name = "DEL_FLG", length = 1)
