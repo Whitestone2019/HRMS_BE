@@ -2521,7 +2521,7 @@ public class AppController {
 	        }
 
 	        // 4. Calculate CL Used & Remaining
-	        float clUsed = Math.max(summaryOpt.get().getLeaveTaken() - summaryOpt.get().getLop(), 0f);
+	        float clUsed = Math.max(summaryOpt.get().getLeaveTaken() - totalLop, 0f);
 	        float clRemaining = Math.max(casualBalance - clUsed, 0f);
 
 	        // 5. LWP = recorded LOP + extra days beyond CL
