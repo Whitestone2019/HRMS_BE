@@ -47,7 +47,7 @@ public class EmployeeSalaryTbl {
     private String emailid;
 
     @Column(name = "MOBILE_NUMBER")
-    private String mobilenumber;
+    private String phonenumber;
 
     @Column(name = "LOCATION_TYPE")
     private String locationType;
@@ -145,12 +145,12 @@ public class EmployeeSalaryTbl {
 		this.emailid = emailid;
 	}
 
-	public String getMobilenumber() {
-		return mobilenumber;
+	public String getPhonenumber() {
+		return phonenumber;
 	}
 
-	public void setMobilenumber(String mobilenumber) {
-		this.mobilenumber = mobilenumber;
+	public void setPhonenumber(String phonenumber) {
+		this.phonenumber = phonenumber;
 	}
 
 	public String getLocationType() {
@@ -233,56 +233,7 @@ public class EmployeeSalaryTbl {
 		this.modifiedAt = modifiedAt;
 	}
 
-	@Override
-	public String toString() {
-		return "EmployeeSalaryTbl [id=" + id + ", empid=" + empid + ", firstname=" + firstname + ", lastname="
-				+ lastname + ", dateofbirth=" + dateofbirth + ", dateOfJoin=" + dateOfJoin + ", officialemail="
-				+ officialemail + ", emailid=" + emailid + ", mobilenumber=" + mobilenumber + ", locationType="
-				+ locationType + ", department=" + department + ", annualCTC=" + annualCTC + ", earnings=" + earnings
-				+ ", deductions=" + deductions + ", bankName=" + bankName + ", accountNumber=" + accountNumber
-				+ ", ifscCode=" + ifscCode + ", modifiedBy=" + modifiedBy + ", modifiedAt=" + modifiedAt + ", getId()="
-				+ getId() + ", getEmpid()=" + getEmpid() + ", getFirstname()=" + getFirstname() + ", getLastname()="
-				+ getLastname() + ", getDateofbirth()=" + getDateofbirth() + ", getDateOfJoin()=" + getDateOfJoin()
-				+ ", getOfficialemail()=" + getOfficialemail() + ", getEmailid()=" + getEmailid()
-				+ ", getMobilenumber()=" + getMobilenumber() + ", getLocationType()=" + getLocationType()
-				+ ", getDepartment()=" + getDepartment() + ", getAnnualCTC()=" + getAnnualCTC() + ", getEarnings()="
-				+ getEarnings() + ", getDeductions()=" + getDeductions() + ", getBankName()=" + getBankName()
-				+ ", getAccountNumber()=" + getAccountNumber() + ", getIfscCode()=" + getIfscCode()
-				+ ", getModifiedBy()=" + getModifiedBy() + ", getModifiedAt()=" + getModifiedAt() + ", getClass()="
-				+ getClass() + ", hashCode()=" + hashCode() + ", toString()=" + super.toString() + "]";
-	}
-
-	public EmployeeSalaryTbl(Long id, String empid, String firstname, String lastname, LocalDate dateofbirth,
-			LocalDate dateOfJoin, String officialemail, String emailid, String mobilenumber, String locationType,
-			String department, Double annualCTC, String earnings, String deductions, String bankName,
-			String accountNumber, String ifscCode, String modifiedBy, LocalDateTime modifiedAt) {
-		super();
-		this.id = id;
-		this.empid = empid;
-		this.firstname = firstname;
-		this.lastname = lastname;
-		this.dateofbirth = dateofbirth;
-		this.dateOfJoin = dateOfJoin;
-		this.officialemail = officialemail;
-		this.emailid = emailid;
-		this.mobilenumber = mobilenumber;
-		this.locationType = locationType;
-		this.department = department;
-		this.annualCTC = annualCTC;
-		this.earnings = earnings;
-		this.deductions = deductions;
-		this.bankName = bankName;
-		this.accountNumber = accountNumber;
-		this.ifscCode = ifscCode;
-		this.modifiedBy = modifiedBy;
-		this.modifiedAt = modifiedAt;
-	}
-
-	public EmployeeSalaryTbl() {
-		super();
-		// TODO Auto-generated constructor stub
-	}
-
+	
 	
     
     

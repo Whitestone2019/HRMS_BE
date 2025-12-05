@@ -2431,46 +2431,155 @@ public class AppController {
 
 	@PostMapping("/rejectLeaveRequest")
 	public ResponseEntity<Map<String, String>> rejectLeaveRequest(@RequestBody Map<String, String> requestData) {
-		String empid = requestData.get("empid");
-		String leavereason = requestData.get("leavereason");
-		System.out.println("Received empid: " + empid);
-		EmployeeLeaveMasterTbl leaveRequest = employeeLeaveMasterRepository.findByEmpidAndLeavereason(empid,
-				leavereason);
-		Map<String, String> response = new HashMap<>();
-		if (leaveRequest != null) {
-			leaveRequest.setDelflg("Y");
-			leaveRequest.setStatus("Rejected");
-			employeeLeaveMasterRepository.save(leaveRequest);
-			try {
-				usermaintenance existingEmployee = usermaintenanceRepository.findByEmpIdOrUserId(empid)
-						.orElseThrow(() -> new RuntimeException("Employee not found"));
-				String employeeEmail = existingEmployee.getEmailid();
-				String managerId = existingEmployee.getRepoteTo();
-				usermaintenance manager = usermaintenanceRepository.findByEmpIdOrUserId(managerId)
-						.orElseThrow(() -> new RuntimeException("Manager not found"));
+	    String empid = requestData.get("empid");
+	    String leavereason = requestData.get("leavereason");
 
-				if (employeeEmail != null && !employeeEmail.isEmpty()) {
-					String subject = "Leave Request Rejected";
-					String body = String.format(
-							"Dear %s,\n\nYour leave request for %s has been rejected. Please contact your manager, %s, for further details.\n\nRegards,\n"
-									+ manager.getFirstname() + ",\nWhitestone Software Solution Pvt Ltd.",
-							existingEmployee.getFirstname(), leaveRequest.getLeavetype(), manager.getFirstname());
-					emailService.sendLeaveEmail(manager.getEmailid(), employeeEmail, subject, body);
-				}
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-			response.put("status", "success");
-			response.put("message", "Leave request rejected successfully.");
-			return ResponseEntity.ok(response);
-		} else {
-			System.out.println("Leave request not found for empid: " + empid);
-			response.put("status", "failure");
-			response.put("message", "Leave request not found.");
-			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-		}
+	    EmployeeLeaveMasterTbl leaveRequest = employeeLeaveMasterRepository
+	            .findByEmpidAndLeavereason(empid, leavereason);
+
+	    Map<String, String> response = new HashMap<>();
+
+	    if (leaveRequest != null && "N".equals(leaveRequest.getDelflg())) {
+	        // Step 1: Mark as rejected
+	        leaveRequest.setDelflg("Y");
+	        leaveRequest.setStatus("Rejected");
+	        employeeLeaveMasterRepository.save(leaveRequest);
+
+	        // Step 2: REVERSE THE LEAVE BALANCE DEDUCTION
+	        reverseConsolidatedLeave(leaveRequest);
+
+	        // Step 3: Send rejection email
+	        try {
+	            usermaintenance employee = usermaintenanceRepository.findByEmpIdOrUserId(empid)
+	                    .orElseThrow(() -> new RuntimeException("Employee not found"));
+
+	            String managerId = employee.getRepoteTo();
+	            usermaintenance manager = usermaintenanceRepository.findByEmpIdOrUserId(managerId)
+	                    .orElseThrow(() -> new RuntimeException("Manager not found"));
+
+	            if (employee.getEmailid() != null && !employee.getEmailid().isEmpty()) {
+	                String subject = "Your Leave Request Has Been Rejected";
+	                String body = String.format(
+	                    "Dear %s,\n\n" +
+	                    "Your leave request from %s to %s (%s) has been rejected.\n\n" +
+	                    "Reason: %s\n\n" +
+	                    "Please contact your manager (%s) for more details.\n\n" +
+	                    "Regards,\nHR Team\nWhitestone Software Solution Pvt Ltd.",
+	                    employee.getFirstname(),
+	                    new SimpleDateFormat("dd-MM-yyyy").format(leaveRequest.getStartdate()),
+	                    new SimpleDateFormat("dd-MM-yyyy").format(leaveRequest.getEnddate()),
+	                    leaveRequest.getLeavetype(),
+	                    leaveRequest.getLeavereason(),
+	                    manager.getFirstname()
+	                );
+
+	                emailService.sendLeaveEmail(manager.getEmailid(), employee.getEmailid(), subject, body);
+	            }
+	        } catch (Exception e) {
+	            e.printStackTrace();
+	        }
+
+	        response.put("status", "success");
+	        response.put("message", "Leave request rejected and balance restored.");
+	        return ResponseEntity.ok(response);
+
+	    } else {
+	        response.put("status", "failure");
+	        response.put("message", "Leave request not found or already processed.");
+	        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+	    }
+	}
+	
+	
+	public void reverseConsolidatedLeave(EmployeeLeaveMasterTbl rejectedLeave) {
+	    String empId = rejectedLeave.getEmpid();
+	    LocalDate requestDate = rejectedLeave.getStartdate().toInstant()
+	            .atZone(ZoneId.systemDefault()).toLocalDate();
+	    int year = requestDate.getYear();
+	    int month = requestDate.getMonthValue();
+	    Float rejectedDays = rejectedLeave.getNoofdays();
+
+	    EmployeeLeaveSummary summary = employeeLeaveSummaryRepository
+	            .findByEmpIdAndYear(empId, year)
+	            .orElse(null);
+
+	    if (summary == null) {
+	        // No summary means no deduction was made → nothing to reverse
+	        return;
+	    }
+
+	    // Step 1: Revert CL Used → Add back to balance
+	    // We assume: CL was used first, then LOP
+	    Float currentCLBalance = summary.getCasualLeaveBalance() != null ? summary.getCasualLeaveBalance() : 0f;
+	    Float totalLeaveTaken = summary.getLeaveTaken() != null ? summary.getLeaveTaken() : 0f;
+
+	    // Reduce total leave taken
+	    summary.setLeaveTaken(Math.max(0, totalLeaveTaken - rejectedDays));
+
+	    // Step 2: Revert LOP (from the specific month)
+	    Float currentLopInMonth = getMonthlyLop(summary, month);
+	    Float newLopInMonth = Math.max(0, currentLopInMonth - rejectedDays);
+	    setMonthlyLop(summary, month, newLopInMonth);
+
+	    // Also reduce total LOP
+	    Float totalLop = summary.getLop() != null ? summary.getLop() : 0f;
+	    summary.setLop(Math.max(0, totalLop - rejectedDays));
+
+	    // Step 3: Restore CL balance
+	    // Max possible CL per year = 12
+	    Float restoredCL = Math.min(rejectedDays, 12f - currentCLBalance);
+	    summary.setCasualLeaveBalance(currentCLBalance + restoredCL);
+
+	    // Optional: If more days were rejected than available CL → means LOP was applied → already reverted above
+
+	    summary.setUpdatedAt(LocalDateTime.now());
+	    employeeLeaveSummaryRepository.save(summary);
+
+	    System.out.println("Reverted leave balance for rejected request: " + rejectedDays + " days restored.");
+	}
+	
+	private Float getMonthlyLop(EmployeeLeaveSummary summary, int month) {
+	    if (summary == null) return 0f;
+
+	    switch (month) {
+	        case 1:  return safe(summary.getLopJan());
+	        case 2:  return safe(summary.getLopFeb());
+	        case 3:  return safe(summary.getLopMar());
+	        case 4:  return safe(summary.getLopApr());
+	        case 5:  return safe(summary.getLopMay());
+	        case 6:  return safe(summary.getLopJun());
+	        case 7:  return safe(summary.getLopJul());
+	        case 8:  return safe(summary.getLopAug());
+	        case 9:  return safe(summary.getLopSep());
+	        case 10: return safe(summary.getLopOct());
+	        case 11: return safe(summary.getLopNov());
+	        case 12: return safe(summary.getLopDec());
+	        default: return 0f;
+	    }
 	}
 
+	private void setMonthlyLop(EmployeeLeaveSummary summary, int month, Float value) {
+	    if (summary == null) return;
+
+	    switch (month) {
+	        case 1:  summary.setLopJan(value);  break;
+	        case 2:  summary.setLopFeb(value);  break;
+	        case 3:  summary.setLopMar(value);  break;
+	        case 4:  summary.setLopApr(value);  break;
+	        case 5:  summary.setLopMay(value);  break;
+	        case 6:  summary.setLopJun(value);  break;
+	        case 7:  summary.setLopJul(value);  break;
+	        case 8:  summary.setLopAug(value);  break;
+	        case 9:  summary.setLopSep(value);  break;
+	        case 10: summary.setLopOct(value);  break;
+	        case 11: summary.setLopNov(value);  break;
+	        case 12: summary.setLopDec(value);  break;
+	    }
+	}
+
+
+	
+	
 	@Autowired
 	private EmployeeLeaveModTblRepository leaveRepository;
 
@@ -2478,31 +2587,6 @@ public class AppController {
 	public ResponseEntity<Map<String, Object>> getLeaveCounts(@RequestParam("empId") String empId) {
 	    try {
 	        int year = LocalDate.now().getYear();
-
-	        // 1. Fetch Approved + Pending leaves
-			/*
-			 * List<EmployeeLeaveMasterTbl> leaves = employeeLeaveMasterRepository
-			 * .findByEmpidAndStartdateBetweenAndStatusInIgnoreCase( empId,
-			 * Date.from(LocalDate.of(year, 1,
-			 * 1).atStartOfDay(ZoneId.systemDefault()).toInstant()),
-			 * Date.from(LocalDate.of(year, 12,
-			 * 31).atStartOfDay(ZoneId.systemDefault()).toInstant()),
-			 * Arrays.asList("Approved", "Pending") );
-			 */
-	        
-//	        Date start = Date.from(LocalDate.of(year, 1, 1).atStartOfDay(ZoneId.systemDefault()).toInstant());
-//	        Date end   = Date.from(LocalDate.of(year, 12, 31).atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant());
-//
-//	        List<EmployeeLeaveMasterTbl> leaves = employeeLeaveMasterRepository
-//	            .findApprovedAndPendingLeaves(empId, start, end);
-//
-//	        // 2. Sum total leave days (FIXED: use mapToFloat correctly)
-//	        float totalTaken = (float) leaves.stream()
-//	                .filter(l -> l.getNoofdays() != null)
-//	                .mapToDouble(l -> l.getNoofdays())  // Double stream
-//	                .sum();
-
-	        // 3. Get Leave Summary from DB (Source of Truth)
 	        Optional<EmployeeLeaveSummary> summaryOpt = employeeLeaveSummaryRepository
 	                .findByEmpIdAndYear(empId, year);
 
@@ -2521,21 +2605,13 @@ public class AppController {
 	        }
 
 	        // 4. Calculate CL Used & Remaining
-	        float clUsed = Math.max(summaryOpt.get().getLeaveTaken() - summaryOpt.get().getLop(), 0f);
+	        float clUsed = Math.max(summaryOpt.get().getLeaveTaken() - totalLop, 0f);
 	        float clRemaining = Math.max(casualBalance - clUsed, 0f);
-
-	        // 5. LWP = recorded LOP + extra days beyond CL
-	       // float lwp = totalLop + Math.max(totalTaken - (casualBalance + totalLop), 0f);
-
-	        // 6. Response
-	       // System.out.println("clsuse::"+clUsed +"totalTaken:::"+totalTaken);
 	        Map<String, Object> resp = new HashMap<>();
 	        resp.put("empId", empId);
 	        resp.put("year", year);
-	       // resp.put("totalTakenLeave", Math.round(totalTaken));
 	        resp.put("casualUsed", clUsed);           // Booked
-	        resp.put("casualRemaining", Math.round(clRemaining)); // Available
-	       // resp.put("leavewithoutpay", Math.round(lwp));
+	        resp.put("casualRemaining", Math.round(clRemaining));
 	        resp.put("rawCasualBalance", Math.round(casualBalance));
 
 	        return ResponseEntity.ok(resp);
@@ -4448,7 +4524,7 @@ public class AppController {
 				history.setDateOfJoin(existingSalary.getDateOfJoin());
 				history.setOfficialEmail(existingSalary.getOfficialemail());
 				history.setEmailId(existingSalary.getEmailid());
-				history.setMobileNumber(existingSalary.getMobilenumber());
+				history.setPhonenumber(existingSalary.getPhonenumber());
 				history.setLocationType(existingSalary.getLocationType());
 				history.setDepartment(existingSalary.getDepartment());
 				history.setAnnualCTC(existingSalary.getAnnualCTC());
@@ -4678,7 +4754,7 @@ public class AppController {
 				payroll.setBeneAccNo(empSalary.getAccountNumber());
 				payroll.setBeneIfsc(empSalary.getIfscCode());
 				payroll.setEmailId(empSalary.getEmailid());
-				payroll.setMobileNum(empSalary.getMobilenumber());
+				payroll.setMobileNum(empSalary.getPhonenumber());
 				payroll.setDebitAccNo("611905056804");
 				payroll.setCreditNarr("NA");
 				payroll.setDebitNarr("NA");
@@ -5363,7 +5439,7 @@ public class AppController {
 	    List<Map<String, Object>> timesheetData = new ArrayList<>();
 	    
 	    List<usermaintenance> employees = (repoteTo == null || repoteTo.isBlank()) 
-	        ? usermaintenanceRepository.findAll()
+	        ? usermaintenanceRepository.findByStatusIgnoreCase("Active")
 	        : new ArrayList<>(usermaintenanceRepository.findByRepoteTo(repoteTo));
 
 	    usermaintenanceRepository.findByEmpid1(repoteTo).ifPresent(employees::add);
@@ -7340,10 +7416,15 @@ public class AppController {
 				// ✅ Default Check-in / Check-out
 				LocalDateTime checkInTime = attendanceDate.atTime(9, 0);
 				LocalDateTime checkOutTime = attendanceDate.atTime(18, 0);
-
+				if("Absent".equalsIgnoreCase(request.getRequestedStatus())) {
+					attendance.setCheckintime(new Date());
+					attendance.setCheckouttime(new Date());
+					attendance.setTotalhoursworked("0:00");
+				}else {
 				attendance.setCheckintime(Date.from(checkInTime.atZone(ZoneId.systemDefault()).toInstant()));
 				attendance.setCheckouttime(Date.from(checkOutTime.atZone(ZoneId.systemDefault()).toInstant()));
 				attendance.setTotalhoursworked("9:00");
+				}
 				attendance.setCheckinstatus("On-Time");
 				attendance.setCheckoutstatus("Completed");
 				attendance.setRcreuserid(request.getEmployeeId());
@@ -7379,70 +7460,85 @@ public class AppController {
 
 	@PostMapping("/attendance/requestChange")
 	public ResponseEntity<Map<String, Object>> requestAttendanceChange(@RequestBody AttendanceChangeRequest request) {
-		Map<String, Object> response = new HashMap<>();
+	    Map<String, Object> response = new HashMap<>();
 
-		try {
-			System.out.println("DATEEEEEE>>>>>>>>>> " + request.getAttendanceDate());
+	    try {
+	        System.out.println("DATEEEEEE>>>>>>>>>> " + request.getAttendanceDate());
 
-			// ✅ Step 1: Check if request already exists for same employee/trainee & date
-			boolean exists = attendanceChangeRequestRepository
-					.existsByEmployeeIdAndAttendanceDate(request.getEmployeeId(), request.getAttendanceDate());
+	        String empId = request.getEmployeeId();
+	        LocalDate attDate = request.getAttendanceDate();
 
-			if (exists) {
-				response.put("status", "error");
-				response.put("message", "A request for this date already exists and cannot be submitted again.");
-				return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
-			}
+	        // KEY FIX: Only block if there's a PENDING or APPROVED request
+	        boolean alreadyHasActiveRequest = attendanceChangeRequestRepository
+	                .existsByEmployeeIdAndAttendanceDateAndStatusIn(
+	                    empId, 
+	                    attDate, 
+	                    Arrays.asList("Pending", "Approved")  // Only these block new request
+	                );
 
-			// ✅ Step 2: Save new request
-			request.setStatus("Pending");
-			request.setCreatedAt(new Date());
-			attendanceChangeRequestRepository.save(request);
+	        if (alreadyHasActiveRequest) {
+	            response.put("status", "error");
+	            response.put("message", "You already have a Pending or Approved attendance change request for this date.");
+	            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+	        }
 
-			// ✅ Step 3: Identify whether it's an Employee or Trainee
-			usermaintenance emp = usermaintenanceRepository.findByEmpid(request.getEmployeeId());
-			TraineeMaster trainee = null;
-			usermaintenance manager = null;
+	        // Optional: Clean up old rejected requests (keep only latest one)
+	        // This prevents 100 rejected requests piling up
+	        // Save new request
+	        request.setStatus("Pending");
+	        request.setCreatedAt(new Date());
+	        AttendanceChangeRequest savedRequest = attendanceChangeRequestRepository.save(request);
 
-			if (emp == null) {
-				trainee = traineemasterRepository.findByTrngid(request.getEmployeeId());
-			}
+	        // Fetch employee/trainee details
+	        usermaintenance emp = usermaintenanceRepository.findByEmpid(empId);
+	        TraineeMaster trainee = null;
+	        if (emp == null) {
+	            trainee = traineemasterRepository.findByTrngid(empId);
+	        }
 
-			// ✅ Step 4: Fetch Manager / Mentor
-			if (emp != null && emp.getRepoteTo() != null) {
-				manager = usermaintenanceRepository.findByEmpid(emp.getRepoteTo());
-			} else if (trainee != null && trainee.getRepoteTo() != null) {
-				manager = usermaintenanceRepository.findByEmpid(trainee.getRepoteTo());
-			}
+	        // Fetch manager/mentor
+	        usermaintenance manager = null;
+	        String managerId = emp != null ? emp.getRepoteTo() : (trainee != null ? trainee.getRepoteTo() : null);
 
-			// ✅ Step 5: Send email notification if manager found
-			if (manager != null) {
-				String subject = "New Attendance Change Request";
+	        if (managerId != null) {
+	            manager = usermaintenanceRepository.findByEmpid(managerId);
+	        }
 
-				String empName = (emp != null ? emp.getFirstname() : trainee.getFirstname());
-				String empEmail = (emp != null ? emp.getEmailid() : trainee.getEmailid());
+	        // Send email to manager
+	        if (manager != null) {
+	            String empName = emp != null ? emp.getFirstname() : trainee.getFirstname();
+	            String empEmail = emp != null ? emp.getEmailid() : trainee.getEmailid();
 
-				String body = String.format(
-						"Dear %s,\n\n%s has submitted an attendance change request for %s with requested status: %s.\n\nRemarks: %s\n\nPlease review and approve/reject it.\n\nBest Regards,\nWhitestone Software Solutions",
-						manager.getFirstname(), empName, request.getAttendanceDate(), request.getRequestedStatus(),
-						request.getRemarks());
+	            String body = String.format(
+	                "Dear %s,\n\n" +
+	                "%s has submitted an attendance change request for date: %s\n\n" +
+	                "Requested Status: %s\n" +
+	                "Remarks: %s\n\n" +
+	                "Please login to the portal to Approve or Reject this request.\n\n" +
+	                "Best Regards,\nWhitestone Software Solutions",
+	                manager.getFirstname(),
+	                empName,
+	                attDate.format(DateTimeFormatter.ofPattern("dd-MMM-yyyy")),
+	                request.getRequestedStatus(),
+	                request.getRemarks()
+	            );
 
-				// from, to, subject, body
-				emailService.sendLeaveEmail(empEmail, manager.getEmailid(), subject, body);
-			}
+	            emailService.sendLeaveEmail(empEmail, manager.getEmailid(), 
+	                "New Attendance Correction Request - " + empName, body);
+	        }
 
-			response.put("status", "success");
-			response.put("message", "Attendance change request submitted successfully.");
-			return ResponseEntity.ok(response);
+	        response.put("status", "success");
+	        response.put("message", "Attendance change request submitted successfully.");
+	        response.put("requestId", savedRequest.getId()); // Optional: return ID
+	        return ResponseEntity.ok(response);
 
-		} catch (Exception e) {
-			e.printStackTrace();
-			response.put("status", "error");
-			response.put("message", "An unexpected error occurred while submitting the request: " + e.getMessage());
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-		}
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        response.put("status", "error");
+	        response.put("message", "Failed to submit request: " + e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+	    }
 	}
-
 	@GetMapping("/attendance/checkin/eligibility/{employeeId}")
 	public ResponseEntity<Map<String, Object>> checkCheckInEligibility(@PathVariable String employeeId) {
 		Map<String, Object> response = new HashMap<>();

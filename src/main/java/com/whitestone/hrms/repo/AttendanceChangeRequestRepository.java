@@ -15,4 +15,10 @@ public interface AttendanceChangeRequestRepository extends JpaRepository<Attenda
     
     Optional<AttendanceChangeRequest> findByEmployeeIdAndAttendanceDateAndStatus(String employeeId, LocalDate attendanceDate, String status);
 
+
+    boolean existsByEmployeeIdAndAttendanceDateAndStatusIn(
+            String employeeId, 
+            LocalDate attendanceDate, 
+            List<String> statuses
+        );
 }

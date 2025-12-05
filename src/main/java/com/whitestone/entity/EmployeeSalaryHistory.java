@@ -47,7 +47,7 @@ public class EmployeeSalaryHistory {
     private String emailId;
 
     @Column(name = "MOBILE_NUMBER")
-    private String mobileNumber;
+    private String phonenumber;
 
     @Column(name = "LOCATION_TYPE")
     private String locationType;
@@ -145,12 +145,12 @@ public class EmployeeSalaryHistory {
 		this.emailId = emailId;
 	}
 
-	public String getMobileNumber() {
-		return mobileNumber;
+	public String getPhonenumber() {
+		return phonenumber;
 	}
 
-	public void setMobileNumber(String mobileNumber) {
-		this.mobileNumber = mobileNumber;
+	public void setPhonenumber(String phonenumber) {
+		this.phonenumber = phonenumber;
 	}
 
 	public String getLocationType() {
@@ -233,56 +233,5 @@ public class EmployeeSalaryHistory {
 		this.modifiedAt = modifiedAt;
 	}
 
-	@Override
-	public String toString() {
-		return "EmployeeSalaryHistory [historyId=" + historyId + ", empId=" + empId + ", firstName=" + firstName
-				+ ", lastName=" + lastName + ", dateOfBirth=" + dateOfBirth + ", dateOfJoin=" + dateOfJoin
-				+ ", officialEmail=" + officialEmail + ", emailId=" + emailId + ", mobileNumber=" + mobileNumber
-				+ ", locationType=" + locationType + ", department=" + department + ", annualCTC=" + annualCTC
-				+ ", earnings=" + earnings + ", deductions=" + deductions + ", bankName=" + bankName
-				+ ", accountNumber=" + accountNumber + ", ifscCode=" + ifscCode + ", modifiedBy=" + modifiedBy
-				+ ", modifiedAt=" + modifiedAt + ", getHistoryId()=" + getHistoryId() + ", getEmpId()=" + getEmpId()
-				+ ", getFirstName()=" + getFirstName() + ", getLastName()=" + getLastName() + ", getDateOfBirth()="
-				+ getDateOfBirth() + ", getDateOfJoin()=" + getDateOfJoin() + ", getOfficialEmail()="
-				+ getOfficialEmail() + ", getEmailId()=" + getEmailId() + ", getMobileNumber()=" + getMobileNumber()
-				+ ", getLocationType()=" + getLocationType() + ", getDepartment()=" + getDepartment()
-				+ ", getAnnualCTC()=" + getAnnualCTC() + ", getEarnings()=" + getEarnings() + ", getDeductions()="
-				+ getDeductions() + ", getBankName()=" + getBankName() + ", getAccountNumber()=" + getAccountNumber()
-				+ ", getIfscCode()=" + getIfscCode() + ", getModifiedBy()=" + getModifiedBy() + ", getModifiedAt()="
-				+ getModifiedAt() + ", getClass()=" + getClass() + ", hashCode()=" + hashCode() + ", toString()="
-				+ super.toString() + "]";
-	}
-
-	public EmployeeSalaryHistory(Long historyId, String empId, String firstName, String lastName, LocalDate dateOfBirth,
-			LocalDate dateOfJoin, String officialEmail, String emailId, String mobileNumber, String locationType,
-			String department, Double annualCTC, String earnings, String deductions, String bankName,
-			String accountNumber, String ifscCode, String modifiedBy, LocalDateTime modifiedAt) {
-		super();
-		this.historyId = historyId;
-		this.empId = empId;
-		this.firstName = firstName;
-		this.lastName = lastName;
-		this.dateOfBirth = dateOfBirth;
-		this.dateOfJoin = dateOfJoin;
-		this.officialEmail = officialEmail;
-		this.emailId = emailId;
-		this.mobileNumber = mobileNumber;
-		this.locationType = locationType;
-		this.department = department;
-		this.annualCTC = annualCTC;
-		this.earnings = earnings;
-		this.deductions = deductions;
-		this.bankName = bankName;
-		this.accountNumber = accountNumber;
-		this.ifscCode = ifscCode;
-		this.modifiedBy = modifiedBy;
-		this.modifiedAt = modifiedAt;
-	}
-
-	public EmployeeSalaryHistory() {
-		super();
-		// TODO Auto-generated constructor stub
-	}
-    
-    
+	   
 }
