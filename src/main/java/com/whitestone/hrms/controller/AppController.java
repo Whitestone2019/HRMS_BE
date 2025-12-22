@@ -775,279 +775,287 @@ public class AppController {
 	@RequestMapping("/onboard")
 	public class EmployeeController {
 
-		@Autowired
-		private EmployeeProfileModRepository employeeProfileModRepository; // ← Fixed name!
+	    @Autowired
+	    private EmployeeProfileModRepository employeeProfileModRepository;
 
-		@Autowired
-		private EmployeeAddressModRepository employeeAddressModRepository;
+	    @Autowired
+	    private EmployeeAddressModRepository employeeAddressModRepository;
 
-		@Autowired
-		private EmployeeEducationDetailsModRepository employeeEducationDetailsModRepository;
+	    @Autowired
+	    private EmployeeEducationDetailsModRepository employeeEducationDetailsModRepository;
 
-		@Autowired
-		private EmployeeProfessionalDetailsModRepository employeeProfessionalDetailsModRepository;
+	    @Autowired
+	    private EmployeeProfessionalDetailsModRepository employeeProfessionalDetailsModRepository;
 
-		@Autowired
-		private EmployeeSkillModRepository employeeSkillModRepository;
+	    @Autowired
+	    private EmployeeSkillModRepository employeeSkillModRepository;
 
-		@Autowired
-		private ErrorMessageService errorMessageService;
+	    @Autowired
+	    private ErrorMessageService errorMessageService;
 
-
-		@Value("${file.upload.dir}")
+	    @Value("${file.upload.dir}")
 	    private String docUploadDir;
-		
-		@PostMapping(consumes = "multipart/form-data")
-		@Transactional(rollbackFor = Exception.class)
-		public ResponseEntity<String> addOrUpdateEmployeeWithDocuments(@RequestParam("data") String dataJson,
-				@RequestPart(value = "photo", required = false) MultipartFile photo,
-				@RequestPart(value = "aadharDoc", required = false) MultipartFile aadharDoc,
-				@RequestPart(value = "panDoc", required = false) MultipartFile panDoc,
-				@RequestPart(value = "tenthMarksheet", required = false) MultipartFile tenthMarksheet,
-				@RequestPart(value = "twelfthOrDiploma", required = false) MultipartFile twelfthOrDiploma,
-				@RequestPart(value = "degreeCertificate", required = false) MultipartFile degreeCertificate) {
-			ObjectMapper mapper = new ObjectMapper();
-			mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-			Path empDirectory = null;
-			List<Path> savedFiles = new ArrayList<>();
+	    @PostMapping(consumes = "multipart/form-data")
+	    @Transactional(rollbackFor = Exception.class)
+	    public ResponseEntity<String> addOrUpdateEmployeeWithDocuments(
+	            @RequestParam("data") String dataJson,
+	            @RequestPart(value = "photo", required = false) MultipartFile photo,
+	            @RequestPart(value = "aadharDoc", required = false) MultipartFile aadharDoc,
+	            @RequestPart(value = "panDoc", required = false) MultipartFile panDoc,
+	            @RequestPart(value = "tenthMarksheet", required = false) MultipartFile tenthMarksheet,
+	            @RequestPart(value = "twelfthOrDiploma", required = false) MultipartFile twelfthOrDiploma,
+	            @RequestPart(value = "degreeCertificate", required = false) MultipartFile degreeCertificate) {
 
-			try {
-				Map<String, Object> requestData = mapper.readValue(dataJson, Map.class);
-				String empId = (String) requestData.get("empid");
+	        ObjectMapper mapper = new ObjectMapper();
+	        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-				if (empId == null || empId.trim().isEmpty()) {
-					return ResponseEntity.badRequest().body("{\"error\": \"Employee ID is required\"}");
-				}
+	        Path empDirectory = null;
+	        List<Path> savedFiles = new ArrayList<>();
 
-				// Fixed: Use correct repository variable name
-				boolean isUpdate = employeeProfileModRepository.findByEmpid(empId).isPresent();
-				EmployeeProfileMod employee;
+	        try {
+	            Map<String, Object> requestData = mapper.readValue(dataJson, Map.class);
+	            String empId = (String) requestData.get("empid");
 
-				if (isUpdate) {
-					employee = employeeProfileModRepository.findByEmpid(empId)
-							.orElseThrow(() -> new RuntimeException("Employee not found"));
-				} else {
-					employee = new EmployeeProfileMod();
-					employee.setEmpid(empId);
-				}
+	            if (empId == null || empId.trim().isEmpty()) {
+	                return ResponseEntity.badRequest().body("{\"error\": \"Employee ID is required\"}");
+	            }
 
-				// Map JSON to entity (safe update)
-				mapper.readerForUpdating(employee).readValue(dataJson);
+	            boolean isUpdate = employeeProfileModRepository.findByEmpid(empId).isPresent();
+	            EmployeeProfileMod employee;
 
-				Date now = new Date();
-				if (!isUpdate) {
-					employee.setRcretime(now);
-					employee.setDelflg("N");
-					employee.setEntitycreflg("N");
-				}
-				employee.setRmodtime(now);
+	            if (isUpdate) {
+	                employee = employeeProfileModRepository.findByEmpid(empId)
+	                        .orElseThrow(() -> new RuntimeException("Employee not found"));
+	            } else {
+	                employee = new EmployeeProfileMod();
+	                employee.setEmpid(empId);
+	            }
 
-				// Auto full name
-				employee.setEmployeename((employee.getFirstname() != null ? employee.getFirstname() : "")
-						+ (employee.getLastname() != null ? " " + employee.getLastname() : ""));
+	            mapper.readerForUpdating(employee).readValue(dataJson);
 
-				employee.setGender(safeString(requestData, "gender"));
-				employee.setMaritalstatus(safeString(requestData, "maritalstatus"));
-				employee.setNationality(safeString(requestData, "nationality", "Indian"));
-				employee.setUannumber(safeString(requestData, "uannumber"));
-				employee.setPassportnumber(safeString(requestData, "passportnumber"));
-				employee.setDrivinglicense(safeString(requestData, "drivinglicense"));
-				employee.setEsinumber(safeString(requestData, "esinumber"));
-				employee.setEmergencycontactname(safeString(requestData, "emergencycontactname"));
-				employee.setEmergencycontactnumber(safeString(requestData, "emergencycontactnumber"));
-				employee.setEmergencycontactrelation(safeString(requestData, "emergencycontactrelation"));
-				employee.setAlternatemobilenumber(safeString(requestData, "alternatemobilenumber"));
-				employee.setDateofjoining(toDate(requestData.get("dateofjoining")));
-				employee.setDesignation(safeString(requestData, "designation"));
-				employee.setDepartment(safeString(requestData, "department"));
-				employee.setWorklocation(safeString(requestData, "worklocation"));
-				employee.setReportingmanager(safeString(requestData, "reportingmanager"));
+	            Date now = new Date();
+	            if (!isUpdate) {
+	                employee.setRcretime(now);
+	                employee.setDelflg("N");
+	                employee.setEntitycreflg("N");
+	            }
+	            employee.setRmodtime(now);
 
-				// Save to generate userid (for new records)
-				employeeProfileModRepository.save(employee);
+	            employee.setEmployeename(
+	                    (employee.getFirstname() != null ? employee.getFirstname().trim() : "") +
+	                    (employee.getLastname() != null ? " " + employee.getLastname().trim() : "")
+	            );
 
-				// Create employee folder
-				System.out.println("empDirectorydocUploadDir::::::::   "+docUploadDir);
-				empDirectory = Paths.get(docUploadDir +"/emp_doc/"+ empId);
-				System.out.println("empDirectory::::::::   "+empDirectory);
-				Files.createDirectories(empDirectory);
+	            employee.setGender(safeString(requestData, "gender"));
+	            employee.setMaritalstatus(safeString(requestData, "maritalstatus"));
+	            employee.setNationality(safeString(requestData, "nationality", "Indian"));
+	            employee.setUannumber(safeString(requestData, "uannumber"));
+	            employee.setPassportnumber(safeString(requestData, "passportnumber"));
+	            employee.setDrivinglicense(safeString(requestData, "drivinglicense"));
+	            employee.setEsinumber(safeString(requestData, "esinumber"));
+	            employee.setEmergencycontactname(safeString(requestData, "emergencycontactname"));
+	            employee.setEmergencycontactnumber(safeString(requestData, "emergencycontactnumber"));
+	            employee.setEmergencycontactrelation(safeString(requestData, "emergencycontactrelation"));
+	            employee.setAlternatemobilenumber(safeString(requestData, "alternatemobilenumber"));
+	            employee.setDateofjoining(toDate(requestData.get("dateofjoining")));
+	            employee.setDesignation(safeString(requestData, "designation"));
+	            employee.setDepartment(safeString(requestData, "department"));
+	            employee.setWorklocation(safeString(requestData, "worklocation"));
+	            employee.setReportingmanager(safeString(requestData, "reportingmanager"));
 
-				// Save files only if uploaded
-				if (photo != null && !photo.isEmpty())
-					employee.setPhotoPath(saveFile(photo, empId, "photo", empDirectory, savedFiles));
-				if (aadharDoc != null && !aadharDoc.isEmpty())
-					employee.setAadharPath(saveFile(aadharDoc, empId, "aadhar", empDirectory, savedFiles));
-				if (panDoc != null && !panDoc.isEmpty())
-					employee.setPanPath(saveFile(panDoc, empId, "pan", empDirectory, savedFiles));
-				if (tenthMarksheet != null && !tenthMarksheet.isEmpty())
-					employee.setTenthPath(saveFile(tenthMarksheet, empId, "10th", empDirectory, savedFiles));
-				if (twelfthOrDiploma != null && !twelfthOrDiploma.isEmpty())
-					employee.setTwelfthPath(saveFile(twelfthOrDiploma, empId, "12th", empDirectory, savedFiles));
-				if (degreeCertificate != null && !degreeCertificate.isEmpty())
-					employee.setDegreePath(saveFile(degreeCertificate, empId, "degree", empDirectory, savedFiles));
+	            employeeProfileModRepository.save(employee);
 
-				employeeProfileModRepository.save(employee);
+	            empDirectory = Paths.get(docUploadDir + "/emp_doc/" + empId);
+	            Files.createDirectories(empDirectory);
 
-				// Delete old related records on update
-				if (isUpdate && employee.getUserid() != null) {
-					employeeAddressModRepository.deleteByUserid(employee.getUserid());
-					employeeEducationDetailsModRepository.deleteByUserid(employee.getUserid());
-					employeeSkillModRepository.deleteByUserid(employee.getUserid());
+	            if (photo != null && !photo.isEmpty())
+	                employee.setPhotoPath(saveFile(photo, empId, "photo", empDirectory, savedFiles));
+	            if (aadharDoc != null && !aadharDoc.isEmpty())
+	                employee.setAadharPath(saveFile(aadharDoc, empId, "aadhar", empDirectory, savedFiles));
+	            if (panDoc != null && !panDoc.isEmpty())
+	                employee.setPanPath(saveFile(panDoc, empId, "pan", empDirectory, savedFiles));
+	            if (tenthMarksheet != null && !tenthMarksheet.isEmpty())
+	                employee.setTenthPath(saveFile(tenthMarksheet, empId, "10th", empDirectory, savedFiles));
+	            if (twelfthOrDiploma != null && !twelfthOrDiploma.isEmpty())
+	                employee.setTwelfthPath(saveFile(twelfthOrDiploma, empId, "12th", empDirectory, savedFiles));
+	            if (degreeCertificate != null && !degreeCertificate.isEmpty())
+	                employee.setDegreePath(saveFile(degreeCertificate, empId, "degree", empDirectory, savedFiles));
 
-					// Professional uses String userid
-					if (employee.getUserid() != null) {
-						employeeProfessionalDetailsModRepository.deleteByUserid(employee.getUserid().toString());
-					}
-				}
+	            employeeProfileModRepository.save(employee);
 
-				// Save new related data
-				saveAddress(requestData.get("address"), employee);
-				saveEducationDetails(requestData.get("education"), employee);
-				saveProfessionalDetails(requestData.get("professional"), employee);
-				saveSkills(requestData.get("skillSet"), employee);
+	            // === FIXED: Use @Modifying delete queries ===
+	            if (isUpdate && employee.getUserid() != null) {
+	                employeeAddressModRepository.deleteAllByUserid(employee.getUserid());
+	                employeeEducationDetailsModRepository.deleteAllByUserid(employee.getUserid());
+	                employeeSkillModRepository.deleteAllByUserid(employee.getUserid());
+	                employeeProfessionalDetailsModRepository.deleteAllByUserid(employee.getUserid().toString());
+	            }
 
-				String message = isUpdate ? "Employee updated successfully!" : "Employee added successfully!";
-				return ResponseEntity.ok("{\"message\": \"" + message + "\"}");
+	            // === Save new data with fresh srlnum ===
+	            saveAddress(requestData.get("address"), employee);
+	            saveEducationDetails(requestData.get("education"), employee);
+	            saveProfessionalDetails(requestData.get("professional"), employee);
+	            saveSkills(requestData.get("skillSet"), employee);
 
-			} catch (Exception e) {
-				e.printStackTrace(); // For debugging
+	            String message = isUpdate ? "Employee updated successfully!" : "Employee added successfully!";
+	            return ResponseEntity.ok("{\"message\": \"" + message + "\"}");
 
-				// Cleanup uploaded files
-				savedFiles.forEach(path -> {
-					try {
-						if (Files.exists(path))
-							Files.delete(path);
-					} catch (Exception ignored) {
-					}
-				});
+	        } catch (Exception e) {
+	            e.printStackTrace();
+	            savedFiles.forEach(path -> {
+	                try { if (Files.exists(path)) Files.delete(path); } catch (Exception ignored) {}
+	            });
+	            String errorMsg = errorMessageService.getErrorMessage("ADD_EMP_ERROR", "en");
+	            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                    .body("{\"error\": \"" + errorMsg + " - " + e.getMessage() + "\"}");
+	        }
+	    }
 
-				String errorMsg = errorMessageService.getErrorMessage("ADD_EMP_ERROR", "en");
-				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-						.body("{\"error\": \"" + errorMsg + " - " + e.getMessage() + "\"}");
-			}
-		}
+	    // === All helper methods remain exactly the same ===
+	    private String safeString(Map<String, Object> map, String key) {
+	        Object val = map.get(key);
+	        return (val != null && !val.toString().trim().isEmpty()) ? val.toString().trim() : null;
+	    }
 
-		// Helper methods (no logging)
-		private String safeString(Map<String, Object> map, String key) {
-			Object val = map.get(key);
-			return (val != null && !val.toString().trim().isEmpty()) ? val.toString().trim() : null;
-		}
+	    private String safeString(Map<String, Object> map, String key, String defaultVal) {
+	        Object val = map.get(key);
+	        return (val != null && !val.toString().trim().isEmpty()) ? val.toString().trim() : defaultVal;
+	    }
 
-		private String safeString(Map<String, Object> map, String key, String defaultVal) {
-			Object val = map.get(key);
-			return (val != null && !val.toString().trim().isEmpty()) ? val.toString().trim() : defaultVal;
-		}
+	    private Date toDate(Object obj) {
+	        if (obj instanceof String && !((String) obj).trim().isEmpty()) {
+	            try {
+	                return new SimpleDateFormat("yyyy-MM-dd").parse((String) obj);
+	            } catch (Exception e) {
+	                return null;
+	            }
+	        }
+	        return null;
+	    }
 
-		private Date toDate(Object obj) {
-			if (obj instanceof String && !((String) obj).trim().isEmpty()) {
-				try {
-					return new SimpleDateFormat("yyyy-MM-dd").parse((String) obj);
-				} catch (Exception e) {
-					return null;
-				}
-			}
-			return null;
-		}
+	    private String saveFile(MultipartFile file, String empId, String type, Path dir, List<Path> track) throws IOException {
+	        if (file == null || file.isEmpty()) return null;
+	        String orig = file.getOriginalFilename() != null ? file.getOriginalFilename() : "document";
+	        orig = new File(orig).getName();
+	        String ext = "";
+	        int i = orig.lastIndexOf('.');
+	        if (i > 0) ext = orig.substring(i);
+	        Path path = dir.resolve(empId + "_" + type + ext);
+	        Files.copy(file.getInputStream(), path, StandardCopyOption.REPLACE_EXISTING);
+	        track.add(path);
+	        return path.toString();
+	    }
 
-		private String saveFile(MultipartFile file, String empId, String type, Path dir, List<Path> track)
-				throws IOException {
-			if (file == null || file.isEmpty())
-				return null;
+	    private void saveAddress(Object obj, EmployeeProfileMod emp) {
+	        if (obj instanceof Map && !((Map<?, ?>) obj).isEmpty()) {
+	            EmployeeAddressMod addr = new ObjectMapper().convertValue(obj, EmployeeAddressMod.class);
+	            addr.setUserid(emp.getUserid());
+	            addr.setDelflg("N");
+	            addr.setRcreuserid(emp.getUserid().toString());
+	            addr.setRcretime(emp.getRcretime() != null ? emp.getRcretime() : new Date());
+	            addr.setRmoduserid(emp.getUserid().toString());
+	            addr.setRmodtime(new Date());
+	            employeeAddressModRepository.save(addr);
+	        }
+	    }
 
-			String orig = file.getOriginalFilename();
-			if (orig == null)
-				orig = "document";
-			orig = new File(orig).getName();
+	    private void saveEducationDetails(Object obj, EmployeeProfileMod emp) {
+	        if (!(obj instanceof List)) return;
+	        List<?> list = (List<?>) obj;
+	        if (list.isEmpty()) return;
 
-			String ext = "";
-			int i = orig.lastIndexOf('.');
-			if (i > 0)
-				ext = orig.substring(i);
+	        Long serial = 1L;
+	        for (Object item : list) {
+	            if (item instanceof Map) {
+	                Map<String, Object> map = (Map<String, Object>) item;
+	                if (isEmptyEducation(map)) continue;
 
-			Path path = dir.resolve(empId + "_" + type + ext);
-			Files.copy(file.getInputStream(), path, StandardCopyOption.REPLACE_EXISTING);
-			track.add(path);
-			return path.toString();
-		}
+	                EmployeeEducationDetailsMod edu = new ObjectMapper().convertValue(item, EmployeeEducationDetailsMod.class);
+	                edu.setSrlnum(serial++);
+	                edu.setUserid(emp.getUserid());
+	                edu.setDelflg("N");
+	                edu.setRcreuserid(emp.getUserid().toString());
+	                edu.setRcretime(emp.getRcretime() != null ? emp.getRcretime() : new Date());
+	                edu.setRmoduserid(emp.getUserid().toString());
+	                edu.setRmodtime(new Date());
+	                employeeEducationDetailsModRepository.save(edu);
+	            }
+	        }
+	    }
 
-		// Save methods (unchanged)
-		private void saveAddress(Object obj, EmployeeProfileMod emp) {
-			if (obj instanceof Map) {
-				EmployeeAddressMod addr = new ObjectMapper().convertValue(obj, EmployeeAddressMod.class);
-				addr.setUserid(emp.getUserid());
-				addr.setDelflg("N");
-				addr.setRcreuserid(emp.getUserid().toString());
-				addr.setRcretime(emp.getRcretime());
-				addr.setRmoduserid(emp.getRmoduserid());
-				addr.setRmodtime(emp.getRmodtime());
-				employeeAddressModRepository.save(addr);
-			}
-		}
+	    private void saveProfessionalDetails(Object obj, EmployeeProfileMod emp) {
+	        if (!(obj instanceof List)) return;
+	        List<?> list = (List<?>) obj;
+	        if (list.isEmpty()) return;
 
-		private void saveEducationDetails(Object obj, EmployeeProfileMod emp) {
-			if (obj instanceof List) {
-				List<?> list = (List<?>) obj;
-				for (Object item : list) {
-					if (item instanceof Map) {
-						EmployeeEducationDetailsMod edu = new ObjectMapper().convertValue(item,
-								EmployeeEducationDetailsMod.class);
-						Long max = employeeEducationDetailsModRepository.findMaxSerialNumber(emp.getUserid());
-						edu.setSrlnum(max == null ? 1L : max + 1);
-						edu.setUserid(emp.getUserid());
-						edu.setDelflg("N");
-						edu.setRcreuserid(emp.getUserid().toString());
-						edu.setRcretime(emp.getRcretime());
-						edu.setRmoduserid(emp.getRmoduserid());
-						edu.setRmodtime(emp.getRmodtime());
-						employeeEducationDetailsModRepository.save(edu);
-					}
-				}
-			}
-		}
+	        Long serial = 1L;
+	        for (Object item : list) {
+	            if (item instanceof Map) {
+	                Map<String, Object> map = (Map<String, Object>) item;
+	                if (isEmptyProfessional(map)) continue;
 
-		private void saveProfessionalDetails(Object obj, EmployeeProfileMod emp) {
-			if (obj instanceof List) {
-				List<?> list = (List<?>) obj;
-				for (Object item : list) {
-					if (item instanceof Map) {
-						EmployeeProfessionalDetailsMod prof = new ObjectMapper().convertValue(item,
-								EmployeeProfessionalDetailsMod.class);
-						Long max = employeeProfessionalDetailsModRepository.findProfMaxSerialNumber(emp.getUserid());
-						prof.setSrlnum(max == null ? 1L : max + 1);
-						prof.setUserid(emp.getUserid().toString());
-						prof.setDelflg("N");
-						prof.setRcreuserid(emp.getUserid().toString());
-						prof.setRcretime(emp.getRcretime());
-						prof.setRmoduserid(emp.getRmoduserid());
-						prof.setRmodtime(emp.getRmodtime());
-						prof.setOfferletter("SUBMITTED");
-						employeeProfessionalDetailsModRepository.save(prof);
-					}
-				}
-			}
-		}
+	                EmployeeProfessionalDetailsMod prof = new ObjectMapper().convertValue(item, EmployeeProfessionalDetailsMod.class);
+	                prof.setSrlnum(serial++);
+	                prof.setUserid(emp.getUserid().toString());
+	                prof.setDelflg("N");
+	                prof.setRcreuserid(emp.getUserid().toString());
+	                prof.setRcretime(emp.getRcretime() != null ? emp.getRcretime() : new Date());
+	                prof.setRmoduserid(emp.getUserid().toString());
+	                prof.setRmodtime(new Date());
+	                prof.setOfferletter("SUBMITTED");
+	                employeeProfessionalDetailsModRepository.save(prof);
+	            }
+	        }
+	    }
 
-		private void saveSkills(Object obj, EmployeeProfileMod emp) {
-			if (obj instanceof List) {
-				List<?> list = (List<?>) obj;
-				for (Object item : list) {
-					if (item instanceof Map) {
-						EmployeeSkillMod skill = new ObjectMapper().convertValue(item, EmployeeSkillMod.class);
-						Long max = employeeSkillModRepository.findSkillMaxSerialNumber(emp.getUserid());
-						skill.setSrlnum(max == null ? 1L : max + 1);
-						skill.setUserid(emp.getUserid());
-						skill.setYearsofexp("2year");
-						skill.setDelflg("N");
-						skill.setRcreuserid(emp.getUserid().toString());
-						skill.setRcretime(emp.getRcretime());
-						skill.setRmoduserid(emp.getRmoduserid());
-						skill.setRmodtime(emp.getRmodtime());
-						employeeSkillModRepository.save(skill);
-					}
-				}
-			}
-		}
+	    private void saveSkills(Object obj, EmployeeProfileMod emp) {
+	        if (!(obj instanceof List)) return;
+	        List<?> list = (List<?>) obj;
+	        if (list.isEmpty()) return;
+
+	        Long serial = 1L;
+	        for (Object item : list) {
+	            if (item instanceof Map) {
+	                Map<String, Object> map = (Map<String, Object>) item;
+	                if (isEmptySkill(map)) continue;
+
+	                EmployeeSkillMod skill = new ObjectMapper().convertValue(item, EmployeeSkillMod.class);
+	                Object yearsExpObj = map.get("yearsExperience");
+	                if (yearsExpObj != null) {
+	                    skill.setYearsofexp(yearsExpObj.toString().trim());
+	                }
+	                if (skill.getYearsofexp() == null || skill.getYearsofexp().isEmpty()) {
+	                    skill.setYearsofexp("N/A");  // safety fallback
+	                }
+	                skill.setSrlnum(serial++);
+	                skill.setUserid(emp.getUserid());
+	                skill.setDelflg("N");
+	                skill.setRcreuserid(emp.getUserid().toString());
+	                skill.setRcretime(emp.getRcretime() != null ? emp.getRcretime() : new Date());
+	                skill.setRmoduserid(emp.getUserid().toString());
+	                skill.setRmodtime(new Date());
+	                employeeSkillModRepository.save(skill);
+	            }
+	        }
+	    }
+
+	    private boolean isEmptyEducation(Map<String, Object> map) {
+	        return isBlank(map.get("institution")) && isBlank(map.get("qualification"));
+	    }
+
+	    private boolean isEmptyProfessional(Map<String, Object> map) {
+	        return isBlank(map.get("organisation")) && isBlank(map.get("orgrole"));
+	    }
+
+	    private boolean isEmptySkill(Map<String, Object> map) {
+	        Object skill = map.get("skill");
+	        return skill == null || skill.toString().trim().isEmpty();
+	    }
+
+	    private boolean isBlank(Object obj) {
+	        return obj == null || obj.toString().trim().isEmpty();
+	    }
 	}
 
 	@RestController
@@ -1328,7 +1336,7 @@ public class AppController {
 				Map<String, Object> response = new HashMap<>();
 				response.put("empid", employeeProfile.getEmpid());
 				response.put("firstName", employeeProfile.getFirstname());
-				response.put("email", employeeProfile.getOfficialemail());
+				response.put("email", employeeProfile.getEmailid());
 				response.put("department", employeeProfile.getDepartment()); // Assuming `getDepartment()` exists
 				response.put("lastName", employeeProfile.getLastname());
 				response.put("officialEmail", employeeProfile.getOfficialemail());
