@@ -32,4 +32,9 @@ public interface EmployeeLeaveModTblRepository extends JpaRepository<EmployeeLea
             List<String> statuses
     );
 
+	long countByEmpidInAndStatusIn(List<String> empIds, List<String> statuses);
+	
+	// In EmployeeLeaveModRepository.java
+	@Query("SELECT e FROM EmployeeLeaveModTbl e WHERE e.empid = :empid AND e.srlnum = :srlnum")
+	EmployeeLeaveModTbl findByEmpidAndSrlnum(@Param("empid") String empid, @Param("srlnum") Long srlnum);
 }

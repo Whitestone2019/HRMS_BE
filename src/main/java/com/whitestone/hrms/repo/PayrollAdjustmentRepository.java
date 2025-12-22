@@ -13,4 +13,6 @@ public interface PayrollAdjustmentRepository extends JpaRepository<PayrollAdjust
     List<PayrollAdjustment> findByManagerIdAndMonth(String managerId, String month);
 
 	List<PayrollAdjustment> findByMonth(String month);
+	
+	long countByManagerIdAndMonthAndApprovalStatus(String managerId, String month, String approvalStatus);
 }

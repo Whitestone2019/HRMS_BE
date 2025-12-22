@@ -3,6 +3,7 @@ package com.whitestone.hrms.repo;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -25,5 +26,8 @@ public interface EmployeePermissionMasterRepository extends JpaRepository<Employ
     
     
     List<EmployeePermissionMasterTbl> findByEmpidInAndEntitycreflgIn(List<String> empIds, List<String> entitycreflgs);
+
+    long countByEmpidInAndStatusIn(List<String> empIds, List<String> statuses);
+    
 
 }

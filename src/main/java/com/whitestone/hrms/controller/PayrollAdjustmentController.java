@@ -29,6 +29,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whitestone.entity.EmployeeLeaveSummary;
 import com.whitestone.entity.EmployeeSalaryTbl;
 import com.whitestone.entity.PayrollAdjustment;
+import com.whitestone.entity.TraineeMaster;
 import com.whitestone.entity.UserMasterAttendanceMod;
 import com.whitestone.entity.WsslCalendarMod;
 import com.whitestone.entity.usermaintenance;
@@ -290,4 +291,5 @@ public class PayrollAdjustmentController {
 
         return ResponseEntity.ok(Map.of("status", "Rejected and notified"));
     }
+   
 }

@@ -4,6 +4,7 @@ import java.sql.Timestamp;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -68,6 +69,10 @@ public interface EmployeeLeaveMasterTblRepository extends JpaRepository<Employee
 		    @Param("startDate") Date startDate,
 		    @Param("endDate") Date endDate
 		);
+	long countByEmpidInAndStatusIn(List<String> allIdList, List<String> statuses);
+	
+	List<EmployeeLeaveMasterTbl> findByEmpidAndStatusIgnoreCase(String empId, String status);
+
 
 
 	

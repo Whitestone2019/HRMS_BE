@@ -21,4 +21,6 @@ public interface AttendanceChangeRequestRepository extends JpaRepository<Attenda
             LocalDate attendanceDate, 
             List<String> statuses
         );
+    
+    long countByStatusAndEmployeeIdIn(String status, List<String> employeeIds);
 }
