@@ -5437,59 +5437,77 @@ public class AppController {
 
 	@GetMapping("/data")
 	public ResponseEntity<?> getTimesheetData(
-	    @RequestParam int year, 
-	    @RequestParam int month,
-	    @RequestParam(required = false) String repoteTo) {
+	        @RequestParam int year,
+	        @RequestParam int month,
+	        @RequestParam(required = false) String repoteTo) {
 
 	    if (year < 2000 || month < 1 || month > 12) {
-	        return ResponseEntity.badRequest().body(Map.of("error", "Invalid year or month"));
+	        return ResponseEntity.badRequest()
+	                .body(Map.of("error", "Invalid year or month"));
 	    }
 
 	    List<Map<String, Object>> timesheetData = new ArrayList<>();
-	    
-	    List<usermaintenance> employees = (repoteTo == null || repoteTo.isBlank()) 
-	        ? usermaintenanceRepository.findByStatusIgnoreCase("Active")
-	        : new ArrayList<>(usermaintenanceRepository.findByRepoteTo(repoteTo));
+
+	    // Fetch employees
+	    List<usermaintenance> employees = (repoteTo == null || repoteTo.isBlank())
+	            ? usermaintenanceRepository.findByStatusIgnoreCase("Active")
+	            : new ArrayList<>(usermaintenanceRepository.findByRepoteTo(repoteTo));
 
 	    usermaintenanceRepository.findByEmpid1(repoteTo).ifPresent(employees::add);
 
 	    if (employees.isEmpty()) {
 	        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-	            .body(Map.of("error", "No employees found" + (repoteTo != null ? " for " + repoteTo : "")));
+	                .body(Map.of("error", "No employees found" + (repoteTo != null ? " for " + repoteTo : "")));
 	    }
 
-	    // Date range: 27th of previous month to 26th of current month
+	    // ================================
+	    // Date Range Logic
+	    // ================================
 	    Calendar startCal = Calendar.getInstance();
-	    startCal.set(year, month - 1, 27);
-	    clearTime(startCal);
+	    Calendar endCal = Calendar.getInstance();
 
-	    Calendar endCal = (Calendar) startCal.clone();
-	    endCal.add(Calendar.MONTH, 1);
-	    endCal.set(Calendar.DAY_OF_MONTH, 26);
+	    // Special case: When user requests January 2026 → force Dec 27, 2025 – Jan 26, 2026
+	    if (year == 2026 && month == 1) {
+	        startCal.set(2025, Calendar.DECEMBER, 27);
+	        endCal.set(2026, Calendar.JANUARY, 26);
+	    } else {
+	        // Standard rule for all other months: 27th of previous month → 26th of current month
+	        startCal.set(year, month - 1 - 1, 27); // previous month
+	        endCal.set(year, month - 1, 26);       // current month
+	    }
+
+	    clearTime(startCal);
 	    clearTime(endCal);
 
 	    Date startDate = startCal.getTime();
 	    Date endDate = endCal.getTime();
 
-	    Calendar today = Calendar.getInstance();
-	    clearTime(today);
-	    Date attendanceEndDate = endDate.after(today.getTime()) ? today.getTime() : endDate;
+	    Calendar todayCal = Calendar.getInstance();
+	    clearTime(todayCal);
+	    Date today = todayCal.getTime();
+
+	    // Attendance only up to today if the cycle is ongoing
+	    Date attendanceEndDate = endDate.after(today) ? today : endDate;
 
 	    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
 	    dateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
 
-	    // Fetch Weekoffs & Holidays
-	    Set<String> weekOffSet = calculateWeekOffsForPreviousAndCurrentMonth(year, month).stream()
-	        .map(dateFormat::format)
-	        .collect(Collectors.toSet());
+	    // Weekoffs: Use the year/month of the start date (covers previous + current month correctly)
+	    int weekOffYear = startCal.get(Calendar.YEAR);
+	    int weekOffMonth = startCal.get(Calendar.MONTH) + 1; // 1-based for your method
+	    Set<String> weekOffSet = calculateWeekOffsForPreviousAndCurrentMonth(weekOffYear, weekOffMonth)
+	            .stream()
+	            .map(dateFormat::format)
+	            .collect(Collectors.toSet());
 
+	    // Holidays
 	    Map<String, WsslCalendarMod> holidayMap = wsslCalendarModRepository
-	        .findByEventDateBetween(startDate, attendanceEndDate).stream()
-	        .collect(Collectors.toMap(
-	            h -> dateFormat.format(h.getEventDate()), 
-	            h -> h, 
-	            (v1, v2) -> v1
-	        ));
+	            .findByEventDateBetween(startDate, attendanceEndDate)
+	            .stream()
+	            .collect(Collectors.toMap(
+	                    h -> dateFormat.format(h.getEventDate()),
+	                    h -> h,
+	                    (v1, v2) -> v1));
 
 	    int sno = 1;
 
@@ -5499,32 +5517,29 @@ public class AppController {
 	        data.put("employeeId", emp.getEmpid());
 	        data.put("members", (emp.getFirstname() + " " + emp.getLastname()).trim());
 
-	        // Fetch attendance
+	        // Attendance map
 	        Map<String, String> attendanceMap = usermasterattendancemodrepository
-	            .findByAttendanceidAndDateRange(emp.getEmpid(), startDate, attendanceEndDate).stream()
-	            .collect(Collectors.toMap(
-	                ar -> dateFormat.format(removeTime(ar.getAttendancedate())),
-	                ar -> ar.getStatus(),
-	                (v1, v2) -> v1
-	            ));
+	                .findByAttendanceidAndDateRange(emp.getEmpid(), startDate, attendanceEndDate)
+	                .stream()
+	                .collect(Collectors.toMap(
+	                        ar -> dateFormat.format(removeTime(ar.getAttendancedate())),
+	                        ar -> ar.getStatus(),
+	                        (v1, v2) -> v1));
 
 	        double present = 0, absent = 0, missPunch = 0;
 	        int effectiveWorkingDays = 0;
 	        int od = 0, compoff = 0, holiday = 0, weekoff = 0;
 
 	        Calendar loopCal = (Calendar) startCal.clone();
-
 	        while (!loopCal.getTime().after(attendanceEndDate)) {
 	            String dateStr = dateFormat.format(loopCal.getTime());
 	            String status = attendanceMap.get(dateStr);
 	            boolean isHoliday = holidayMap.containsKey(dateStr);
 	            boolean isWeekOff = weekOffSet.contains(dateStr);
 
-	            // Always count holidays and weekoffs (even if user came)
 	            if (isHoliday) holiday++;
 	            if (isWeekOff) weekoff++;
 
-	            // Only normal working days count toward effectiveWorkingDays
 	            if (!isHoliday && !isWeekOff) {
 	                effectiveWorkingDays++;
 
@@ -5546,36 +5561,33 @@ public class AppController {
 	                            break;
 	                        case "OD":
 	                            od++;
-	                            present += 1.0; // OD counts as present
+	                            present += 1.0;
 	                            break;
 	                        case "COMP OFF":
 	                            compoff++;
-	                            present += 1.0; // Comp-Off counts as present
+	                            present += 1.0;
 	                            break;
 	                        case "MISS PUNCH":
 	                            missPunch++;
 	                            break;
 	                        default:
-	                            // Optional: log unknown status
+	                            // Ignore unknown statuses
 	                            break;
 	                    }
 	                }
-	            } else {
-	                // It's Holiday or WeekOff → check if user marked attendance (bonus)
-	                if (status != null && !status.isBlank()) {
-	                    String upperStatus = status.trim().toUpperCase();
-	                    if (upperStatus.contains("PRESENT") || upperStatus.contains("OD") || upperStatus.contains("COMP")) {
-	                        present += 1.0; // Optional: give credit for coming on off day
-	                    }
+	            } else if (status != null && !status.isBlank()) {
+	                // Optional: Bonus credit for working on holiday/weekoff
+	                String upperStatus = status.trim().toUpperCase();
+	                if (upperStatus.contains("PRESENT") || upperStatus.contains("OD") || upperStatus.contains("COMP")) {
+	                    present += 1.0;
 	                }
 	            }
 
 	            loopCal.add(Calendar.DAY_OF_MONTH, 1);
 	        }
 
-	        // Final values
 	        data.put("effectiveWorkingDays", effectiveWorkingDays);
-	        data.put("present",present);
+	        data.put("present", present);
 	        data.put("absent", absent);
 	        data.put("missPunch", missPunch);
 	        data.put("od", od);
@@ -5589,19 +5601,19 @@ public class AppController {
 	    return ResponseEntity.ok(timesheetData);
 	}
 
-	// Utility Method: Remove Time
+	// Utility methods remain unchanged
 	private Date removeTime(Date date) {
-		Calendar cal = Calendar.getInstance();
-		cal.setTime(date);
-		clearTime(cal);
-		return cal.getTime();
+	    Calendar cal = Calendar.getInstance();
+	    cal.setTime(date);
+	    clearTime(cal);
+	    return cal.getTime();
 	}
 
 	private void clearTime(Calendar cal) {
-		cal.set(Calendar.HOUR_OF_DAY, 0);
-		cal.set(Calendar.MINUTE, 0);
-		cal.set(Calendar.SECOND, 0);
-		cal.set(Calendar.MILLISECOND, 0);
+	    cal.set(Calendar.HOUR_OF_DAY, 0);
+	    cal.set(Calendar.MINUTE, 0);
+	    cal.set(Calendar.SECOND, 0);
+	    cal.set(Calendar.MILLISECOND, 0);
 	}
 
 	@GetMapping("/events/{employeeId}")
