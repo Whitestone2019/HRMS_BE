@@ -24,7 +24,7 @@ public class EmployeeLeaveSummary {
     private int year;
 
     @Column(name = "casual_leave_balance", nullable = false)
-    private Float casualLeaveBalance = 12.0f;  // Default 12 casual leaves
+    private Float casualLeaveBalance = 18.0f;  // Default 12 casual leaves
 
     @Column(name = "leave_taken", nullable = false)
     private Float leaveTaken = 0.0f;
