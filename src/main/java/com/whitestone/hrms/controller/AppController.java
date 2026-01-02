@@ -2762,53 +2762,57 @@ public class AppController {
 	private EmployeeLeaveSummaryRepository employeeLeaveSummaryRepository;
 
 	public void updateConsolidatedLeave(EmployeeLeaveMasterTbl leaveRequest) {
-		String empId = leaveRequest.getEmpid();
-		LocalDate requestDate = leaveRequest.getStartdate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-		int year = requestDate.getYear();
-		int currentMonth = requestDate.getMonthValue();
-		Float requestedDays = leaveRequest.getNoofdays();
+	    String empId = leaveRequest.getEmpid();
+	    LocalDate requestDate = leaveRequest.getStartdate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+	    int year = requestDate.getYear();
+	    int currentMonth = requestDate.getMonthValue();
+	    Float requestedDays = leaveRequest.getNoofdays();
 
-		// Fetch leave summary or initialize if not present
-		EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, year)
-				.orElseGet(() -> {
-					EmployeeLeaveSummary newSummary = new EmployeeLeaveSummary();
-					newSummary.setEmpId(empId);
-					newSummary.setYear(year);
-					return newSummary;
-				});
+	    // Fetch leave summary or initialize if not present
+	    EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, year)
+	            .orElseGet(() -> {
+	                EmployeeLeaveSummary newSummary = new EmployeeLeaveSummary();
+	                newSummary.setEmpId(empId);
+	                newSummary.setYear(year);
+	                return newSummary;
+	            });
 
-		// Fetch previous month’s unutilized CL and carry it forward
-		Float previousCarryForwardCL = (currentMonth > 1) ? getPreviousMonthCL(leaveSummary, currentMonth) : 0;
-		Float carryForwardCL = leaveSummary.getCasualLeaveBalance() + previousCarryForwardCL;
+	    // Fetch previous month’s unutilized CL and carry it forward
+	    Float previousCarryForwardCL = (currentMonth > 1) ? getPreviousMonthCL(leaveSummary, currentMonth) : 0.0f;
+	    Float carryForwardCL = leaveSummary.getCasualLeaveBalance() + previousCarryForwardCL;
 
-		// Max CL accrued up to the current month
-		long maxAccruedCL = currentMonth;
-		Float availableCL = Math.min(carryForwardCL + 1, maxAccruedCL);
+	    // Max CL accrued up to the current month: 1.5 days per month → max 18 per year
+	    float maxAccruedCL = currentMonth * 1.5f;  // Changed from currentMonth to currentMonth * 1.5f
+	    Float availableCL = Math.min(carryForwardCL + 1.5f, maxAccruedCL);  // +1.5f for current month's accrual
 
-		// Apply CL first, then LOP
-		Float clUsed = Math.min(requestedDays, availableCL);
-		Float lopDays = requestedDays - clUsed;
+	    // Apply CL first, then LOP
+	    Float clUsed = Math.min(requestedDays, availableCL);
+	    Float lopDays = requestedDays - clUsed;
 
-		// ✅ Add any remaining LOP from the previous month
-		Float previousLopBalance = getPreviousMonthLop(leaveSummary, currentMonth);
-		lopDays += previousLopBalance;
+	    // Add any remaining LOP from the previous month
+	    Float previousLopBalance = getPreviousMonthLop(leaveSummary, currentMonth);
+	    lopDays += previousLopBalance;
 
-		// Update leave summary
-		leaveSummary.setCasualLeaveBalance(availableCL - clUsed);
-		leaveSummary.setLeaveTaken(leaveSummary.getLeaveTaken() + requestedDays);
-		leaveSummary.setLop(leaveSummary.getLop() + lopDays);
+	    // Update leave summary
+	    leaveSummary.setCasualLeaveBalance(availableCL - clUsed);
+	    leaveSummary.setLeaveTaken(leaveSummary.getLeaveTaken() + requestedDays);
+	    leaveSummary.setLop(leaveSummary.getLop() + lopDays);
 
-		// ✅ Update Monthly LOP with carry-forward logic
-		updateMonthlyLop(leaveSummary, currentMonth, lopDays);
+	    // Update Monthly LOP with carry-forward logic
+	    updateMonthlyLop(leaveSummary, currentMonth, lopDays);
 
-		// Update timestamp
-		leaveSummary.setUpdatedAt(LocalDateTime.now());
+	    // Update timestamp
+	    leaveSummary.setUpdatedAt(LocalDateTime.now());
 
-		// Save updated record
-		employeeLeaveSummaryRepository.save(leaveSummary);
+	    // Save updated record
+	    employeeLeaveSummaryRepository.save(leaveSummary);
 
-		System.out.println("Month: " + currentMonth + " | Applied Leave: " + requestedDays + " | CL Used: " + clUsed
-				+ " | LOP (With Carry Forward): " + lopDays);
+	    System.out.println("Month: " + currentMonth + 
+	                       " | Applied Leave: " + requestedDays + 
+	                       " | CL Used: " + clUsed +
+	                       " | LOP (With Carry Forward): " + lopDays +
+	                       " | Max Accrued CL: " + maxAccruedCL +
+	                       " | Available CL: " + availableCL);
 	}
 
 	// ✅ Helper method to get CL balance from the previous month
