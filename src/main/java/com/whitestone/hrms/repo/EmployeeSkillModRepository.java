@@ -17,8 +17,7 @@ public interface EmployeeSkillModRepository extends JpaRepository<EmployeeSkillM
     @Query(value = "SELECT COALESCE(MAX(e.SRL_NUM), 0) FROM HRMSUSER.EMPLOYEE_SKILL_MOD_TABLE e WHERE e.user_id = ?1", nativeQuery = true)
     Long findSkillMaxSerialNumber(Long userId);
 
-    // JPA Query to find skills by userId (use entity name, not table name)
-    @Query("SELECT e FROM EmployeeSkillMod e WHERE e.userid = :userid")
+    @Query(value = "SELECT * FROM HRMSUSER.EMPLOYEE_SKILL_MOD_TABLE e WHERE e.user_id = :userid AND e.DEL_FLG = 'N'", nativeQuery = true)
     List<EmployeeSkillMod> findByUserid(@Param("userid") Long userid);
     
     void deleteByUserid(Long userid);
