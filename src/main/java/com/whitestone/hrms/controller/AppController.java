@@ -2502,8 +2502,10 @@ public class AppController {
 	
 	public void reverseConsolidatedLeave(EmployeeLeaveMasterTbl rejectedLeave) {
 	    String empId = rejectedLeave.getEmpid();
-	    LocalDate requestDate = rejectedLeave.getStartdate().toInstant()
-	            .atZone(ZoneId.systemDefault()).toLocalDate();
+	    LocalDate requestDate = rejectedLeave.getStartdate()
+	            .toInstant()
+	            .atZone(ZoneId.systemDefault())
+	            .toLocalDate();
 	    int year = requestDate.getYear();
 	    int month = requestDate.getMonthValue();
 	    Float rejectedDays = rejectedLeave.getNoofdays();
@@ -2513,38 +2515,55 @@ public class AppController {
 	            .orElse(null);
 
 	    if (summary == null) {
-	        // No summary means no deduction was made → nothing to reverse
+	        // No summary → no deduction was made → nothing to reverse
 	        return;
 	    }
 
-	    // Step 1: Revert CL Used → Add back to balance
-	    // We assume: CL was used first, then LOP
-	    Float currentCLBalance = summary.getCasualLeaveBalance() != null ? summary.getCasualLeaveBalance() : 0f;
-	    Float totalLeaveTaken = summary.getLeaveTaken() != null ? summary.getLeaveTaken() : 0f;
+	    // --- Step 1: Recalculate how much CL and LOP were originally applied ---
+	    // Carry forward from previous months = current stored balance (before reversal)
+	    Float carryForwardFromPrevious = (month == 1) ? 0.0f :
+	            (summary.getCasualLeaveBalance() != null ? summary.getCasualLeaveBalance() : 0.0f);
+
+	    // Max accrued CL up to this month: 1.5 days per month
+	    float maxAccruedCL = month * 1.5f;
+
+	    // Available CL at the time the leave was applied
+	    Float availableCLAtTime = Math.min(carryForwardFromPrevious + 1.5f, maxAccruedCL);
+
+	    // How much CL was actually used for this leave
+	    Float clUsedOriginally = Math.min(rejectedDays, availableCLAtTime);
+	    Float lopUsedOriginally = rejectedDays - clUsedOriginally;
+
+	    // --- Step 2: Reverse the deductions ---
+
+	    // Restore Casual Leave balance
+	    Float currentCL = summary.getCasualLeaveBalance() != null ? summary.getCasualLeaveBalance() : 0.0f;
+	    summary.setCasualLeaveBalance(currentCL + clUsedOriginally);
 
 	    // Reduce total leave taken
-	    summary.setLeaveTaken(Math.max(0, totalLeaveTaken - rejectedDays));
+	    Float currentLeaveTaken = summary.getLeaveTaken() != null ? summary.getLeaveTaken() : 0.0f;
+	    summary.setLeaveTaken(Math.max(0.0f, currentLeaveTaken - rejectedDays));
 
-	    // Step 2: Revert LOP (from the specific month)
-	    Float currentLopInMonth = getMonthlyLop(summary, month);
-	    Float newLopInMonth = Math.max(0, currentLopInMonth - rejectedDays);
-	    setMonthlyLop(summary, month, newLopInMonth);
+	    // Reduce total LOP
+	    Float currentTotalLop = summary.getLop() != null ? summary.getLop() : 0.0f;
+	    summary.setLop(Math.max(0.0f, currentTotalLop - lopUsedOriginally));
 
-	    // Also reduce total LOP
-	    Float totalLop = summary.getLop() != null ? summary.getLop() : 0f;
-	    summary.setLop(Math.max(0, totalLop - rejectedDays));
+	    // Reduce monthly LOP for this specific month
+	    Float currentMonthlyLop = getMonthlyLop(summary, month);
+	    Float newMonthlyLop = Math.max(0.0f, currentMonthlyLop - lopUsedOriginally);
+	    setMonthlyLop(summary, month, newMonthlyLop);
 
-	    // Step 3: Restore CL balance
-	    // Max possible CL per year = 12
-	    Float restoredCL = Math.min(rejectedDays, 12f - currentCLBalance);
-	    summary.setCasualLeaveBalance(currentCLBalance + restoredCL);
-
-	    // Optional: If more days were rejected than available CL → means LOP was applied → already reverted above
-
+	    // Update timestamp
 	    summary.setUpdatedAt(LocalDateTime.now());
+
+	    // Save
 	    employeeLeaveSummaryRepository.save(summary);
 
-	    System.out.println("Reverted leave balance for rejected request: " + rejectedDays + " days restored.");
+	    System.out.println("Reverted rejected leave - Emp: " + empId +
+	                       " | Month: " + month +
+	                       " | Days: " + rejectedDays +
+	                       " | CL Restored: " + clUsedOriginally +
+	                       " | LOP Reverted: " + lopUsedOriginally);
 	}
 	
 	private Float getMonthlyLop(EmployeeLeaveSummary summary, int month) {
@@ -8126,75 +8145,108 @@ public class AppController {
 
 	private void revertConsolidatedLeave(EmployeeLeaveMasterTbl leaveRequest) {
 	    String empId = leaveRequest.getEmpid();
-	    LocalDate requestDate = leaveRequest.getStartdate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+	    LocalDate requestDate = leaveRequest.getStartdate()
+	            .toInstant()
+	            .atZone(ZoneId.systemDefault())
+	            .toLocalDate();
 	    int year = requestDate.getYear();
 	    int currentMonth = requestDate.getMonthValue();
 	    Float requestedDays = leaveRequest.getNoofdays();
-	    
+
 	    // Fetch leave summary
-	    EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, year)
+	    EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository
+	            .findByEmpIdAndYear(empId, year)
 	            .orElse(null);
-	    
+
 	    if (leaveSummary == null) {
-	        return; // No summary found, nothing to revert
+	        return; // Nothing to revert
 	    }
-	    
-	    // Calculate CL and LOP that were deducted
-	    Float previousCarryForwardCL = (currentMonth > 1) ? getPreviousMonthCL(leaveSummary, currentMonth) : 0;
-	    Float carryForwardCL = leaveSummary.getCasualLeaveBalance() + previousCarryForwardCL;
-	    long maxAccruedCL = currentMonth;
-	    Float availableCL = Math.min(carryForwardCL + 1, maxAccruedCL);
+
+	    // --- Recalculate how much CL and LOP were originally deducted ---
+	    // Carry forward from previous months = current stored balance (before this leave was applied)
+	    Float carryForwardFromPrevious = (currentMonth == 1) ? 0.0f : 
+	            (leaveSummary.getCasualLeaveBalance() != null ? leaveSummary.getCasualLeaveBalance() : 0.0f);
+
+	    // Max accrued CL up to this month: 1.5 per month
+	    float maxAccruedCL = currentMonth * 1.5f;
+
+	    // Available CL at the time of leave application
+	    Float availableCL = Math.min(carryForwardFromPrevious + 1.5f, maxAccruedCL);
+
+	    // How much CL was used for this leave request
 	    Float clUsed = Math.min(requestedDays, availableCL);
 	    Float lopDays = requestedDays - clUsed;
-	    
-	    // Revert the deductions
-	    leaveSummary.setCasualLeaveBalance(leaveSummary.getCasualLeaveBalance() + clUsed);
-	    leaveSummary.setLeaveTaken(leaveSummary.getLeaveTaken() - requestedDays);
-	    leaveSummary.setLop(Math.max(0, leaveSummary.getLop() - lopDays));
-	    
-	    // Revert monthly LOP
+
+	    // --- Now REVERT the changes ---
+	    Float currentBalance = leaveSummary.getCasualLeaveBalance() != null ? leaveSummary.getCasualLeaveBalance() : 0.0f;
+	    leaveSummary.setCasualLeaveBalance(currentBalance + clUsed);
+
+	    Float currentLeaveTaken = leaveSummary.getLeaveTaken() != null ? leaveSummary.getLeaveTaken() : 0.0f;
+	    leaveSummary.setLeaveTaken(currentLeaveTaken - requestedDays);
+
+	    Float currentLop = leaveSummary.getLop() != null ? leaveSummary.getLop() : 0.0f;
+	    leaveSummary.setLop(Math.max(0.0f, currentLop - lopDays));
+
+	    // Revert the monthly LOP entry
 	    revertMonthlyLop(leaveSummary, currentMonth, lopDays);
-	    
-	    // Save updated record
+
+	    // Save
 	    employeeLeaveSummaryRepository.save(leaveSummary);
-	    
-	    System.out.println("Reverted Leave: " + requestedDays + " | CL Restored: " + clUsed + " | LOP Reverted: " + lopDays);
+
+	    System.out.println("Reverted Leave Request - Emp: " + empId +
+	                       " | Month: " + currentMonth +
+	                       " | Days: " + requestedDays +
+	                       " | CL Restored: " + clUsed +
+	                       " | LOP Reverted: " + lopDays);
 	}
 
 	private void revertConsolidatedLeaveFromMod(EmployeeLeaveModTbl leaveRequest) {
+	    // Same logic as above — just different entity
 	    String empId = leaveRequest.getEmpid();
-	    LocalDate requestDate = leaveRequest.getStartdate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+	    LocalDate requestDate = leaveRequest.getStartdate()
+	            .toInstant()
+	            .atZone(ZoneId.systemDefault())
+	            .toLocalDate();
 	    int year = requestDate.getYear();
 	    int currentMonth = requestDate.getMonthValue();
 	    Float requestedDays = leaveRequest.getNoofdays();
-	    
-	    // Fetch leave summary
-	    EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, year)
+
+	    EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository
+	            .findByEmpIdAndYear(empId, year)
 	            .orElse(null);
-	    
+
 	    if (leaveSummary == null) {
 	        return;
 	    }
-	    
-	    // Restore CL and LOP
-	    Float previousCarryForwardCL = (currentMonth > 1) ? getPreviousMonthCL(leaveSummary, currentMonth) : 0;
-	    Float carryForwardCL = leaveSummary.getCasualLeaveBalance() + previousCarryForwardCL;
-	    long maxAccruedCL = currentMonth;
-	    Float availableCL = Math.min(carryForwardCL + 1, maxAccruedCL);
+
+	    Float carryForwardFromPrevious = (currentMonth == 1) ? 0.0f : 
+	            (leaveSummary.getCasualLeaveBalance() != null ? leaveSummary.getCasualLeaveBalance() : 0.0f);
+
+	    float maxAccruedCL = currentMonth * 1.5f;
+	    Float availableCL = Math.min(carryForwardFromPrevious + 1.5f, maxAccruedCL);
+
 	    Float clUsed = Math.min(requestedDays, availableCL);
 	    Float lopDays = requestedDays - clUsed;
-	    
+
 	    // Restore values
-	    leaveSummary.setCasualLeaveBalance(leaveSummary.getCasualLeaveBalance() + clUsed);
-	    leaveSummary.setLeaveTaken(leaveSummary.getLeaveTaken() - requestedDays);
-	    leaveSummary.setLop(Math.max(0, leaveSummary.getLop() - lopDays));
-	    
-	    // Restore monthly LOP
+	    Float currentBalance = leaveSummary.getCasualLeaveBalance() != null ? leaveSummary.getCasualLeaveBalance() : 0.0f;
+	    leaveSummary.setCasualLeaveBalance(currentBalance + clUsed);
+
+	    Float currentLeaveTaken = leaveSummary.getLeaveTaken() != null ? leaveSummary.getLeaveTaken() : 0.0f;
+	    leaveSummary.setLeaveTaken(currentLeaveTaken - requestedDays);
+
+	    Float currentLop = leaveSummary.getLop() != null ? leaveSummary.getLop() : 0.0f;
+	    leaveSummary.setLop(Math.max(0.0f, currentLop - lopDays));
+
 	    revertMonthlyLop(leaveSummary, currentMonth, lopDays);
-	    
+
 	    employeeLeaveSummaryRepository.save(leaveSummary);
-	    
-	    System.out.println("Reverted Approved Leave: " + requestedDays + " | CL Restored: " + clUsed + " | LOP Reverted: " + lopDays);
+
+	    System.out.println("Reverted Modified/Approved Leave - Emp: " + empId +
+	                       " | Month: " + currentMonth +
+	                       " | Days: " + requestedDays +
+	                       " | CL Restored: " + clUsed +
+	                       " | LOP Reverted: " + lopDays);
 	}
 
 	private void revertMonthlyLop(EmployeeLeaveSummary leaveSummary, int month, Float lopDays) {
