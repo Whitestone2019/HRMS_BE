@@ -2797,12 +2797,11 @@ public class AppController {
 	            });
 
 	    // Fetch previous month’s unutilized CL and carry it forward
-	    Float previousCarryForwardCL = (currentMonth > 1) ? getPreviousMonthCL(leaveSummary, currentMonth) : 0.0f;
-	    Float carryForwardCL = leaveSummary.getCasualLeaveBalance() + previousCarryForwardCL;
+	   Float carryForwardCL = (currentMonth == 1) ? 0.0f : 
+	        (leaveSummary.getCasualLeaveBalance() != null ? leaveSummary.getCasualLeaveBalance() : 0.0f);
 
-	    // Max CL accrued up to the current month: 1.5 days per month → max 18 per year
-	    float maxAccruedCL = currentMonth * 1.5f;  // Changed from currentMonth to currentMonth * 1.5f
-	    Float availableCL = Math.min(carryForwardCL + 1.5f, maxAccruedCL);  // +1.5f for current month's accrual
+	    float maxAccruedCL = currentMonth * 1.5f;
+	    Float availableCL = Math.min(carryForwardCL + 1.5f, maxAccruedCL);
 
 	    // Apply CL first, then LOP
 	    Float clUsed = Math.min(requestedDays, availableCL);
