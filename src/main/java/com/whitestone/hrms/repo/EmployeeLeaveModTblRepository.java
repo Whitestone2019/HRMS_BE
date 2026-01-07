@@ -37,4 +37,20 @@ public interface EmployeeLeaveModTblRepository extends JpaRepository<EmployeeLea
 	// In EmployeeLeaveModRepository.java
 	@Query("SELECT e FROM EmployeeLeaveModTbl e WHERE e.empid = :empid AND e.srlnum = :srlnum")
 	EmployeeLeaveModTbl findByEmpidAndSrlnum(@Param("empid") String empid, @Param("srlnum") Long srlnum);
+	
+	// Helper methods (add these to your EmployeeLeaveModRepository)
+	@Query("SELECT e FROM EmployeeLeaveModTbl e WHERE e.empid = :empid " +
+	       "AND YEAR(e.startdate) = :year AND MONTH(e.startdate) = :month")
+	List<EmployeeLeaveModTbl> findAllLeavesForMonth(
+	    @Param("empid") String empid, 
+	    @Param("year") int year, 
+	    @Param("month") int month);
+	
+	@Query("SELECT e FROM EmployeeLeaveModTbl e WHERE e.empid = :empid " +
+		       "AND YEAR(e.startdate) = :year AND MONTH(e.startdate) = :month " +
+		       "AND e.status != 'Withdrawn'")
+		List<EmployeeLeaveModTbl> findAllActiveLeavesForMonth(
+		    @Param("empid") String empid, 
+		    @Param("year") int year, 
+		    @Param("month") int month);
 }
