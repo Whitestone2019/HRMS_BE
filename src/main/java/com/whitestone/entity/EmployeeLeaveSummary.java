@@ -1,4 +1,5 @@
 package com.whitestone.entity;
+
 import java.time.LocalDateTime;
 
 import javax.persistence.Column;
@@ -23,49 +24,53 @@ public class EmployeeLeaveSummary {
     @Column(nullable = false)
     private int year;
 
-    @Column(name = "casual_leave_balance", nullable = false)
-    private Float casualLeaveBalance = 18.0f;  // Default 12 casual leaves
+    // CHANGED: Added columnDefinition to ensure DECIMAL(5,1) in database
+    @Column(name = "casual_leave_balance", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 18.0")
+    private Float casualLeaveBalance = 18.0f;  // Default 18 casual leaves
 
-    @Column(name = "leave_taken", nullable = false)
+    // CHANGED: Added columnDefinition
+    @Column(name = "leave_taken", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float leaveTaken = 0.0f;
 
-    @Column(nullable = false)
+    // CHANGED: Added columnDefinition
+    @Column(nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lop = 0.0f; // Total Loss of Pay (LOP)
 
-    @Column(name = "lop_jan", nullable = false)
+    // CHANGED: Added columnDefinition to all LOP fields
+    @Column(name = "lop_jan", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lopJan = 0.0f;
 
-    @Column(name = "lop_feb", nullable = false)
+    @Column(name = "lop_feb", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lopFeb = 0.0f;
 
-    @Column(name = "lop_mar", nullable = false)
+    @Column(name = "lop_mar", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lopMar = 0.0f;
 
-    @Column(name = "lop_apr", nullable = false)
+    @Column(name = "lop_apr", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lopApr = 0.0f;
 
-    @Column(name = "lop_may", nullable = false)
+    @Column(name = "lop_may", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lopMay = 0.0f;
 
-    @Column(name = "lop_jun", nullable = false)
+    @Column(name = "lop_jun", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lopJun = 0.0f;
 
-    @Column(name = "lop_jul", nullable = false)
+    @Column(name = "lop_jul", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lopJul = 0.0f;
 
-    @Column(name = "lop_aug", nullable = false)
+    @Column(name = "lop_aug", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lopAug = 0.0f;
 
-    @Column(name = "lop_sep", nullable = false)
+    @Column(name = "lop_sep", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lopSep = 0.0f;
 
-    @Column(name = "lop_oct", nullable = false)
+    @Column(name = "lop_oct", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lopOct = 0.0f;
 
-    @Column(name = "lop_nov", nullable = false)
+    @Column(name = "lop_nov", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lopNov = 0.0f;
 
-    @Column(name = "lop_dec", nullable = false)
+    @Column(name = "lop_dec", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lopDec = 0.0f;
 
     @Column(name = "created_at", updatable = false)
@@ -74,164 +79,171 @@ public class EmployeeLeaveSummary {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt = LocalDateTime.now();
 
-	public Long getId() {
-		return id;
-	}
+    // Helper method to format float to 1 decimal place
+    private Float formatToOneDecimal(Float value) {
+        if (value == null) return 0.0f;
+        return Math.round(value * 10) / 10.0f;
+    }
 
-	public void setId(Long id) {
-		this.id = id;
-	}
+    // Override setters to ensure 1 decimal precision
+    public void setCasualLeaveBalance(Float casualLeaveBalance) {
+        this.casualLeaveBalance = formatToOneDecimal(casualLeaveBalance);
+    }
 
-	public String getEmpId() {
-		return empId;
-	}
+    public void setLeaveTaken(Float leaveTaken) {
+        this.leaveTaken = formatToOneDecimal(leaveTaken);
+    }
 
-	public void setEmpId(String empId) {
-		this.empId = empId;
-	}
+    public void setLop(Float lop) {
+        this.lop = formatToOneDecimal(lop);
+    }
 
-	public int getYear() {
-		return year;
-	}
+    public void setLopJan(Float lopJan) {
+        this.lopJan = formatToOneDecimal(lopJan);
+    }
 
-	public void setYear(int year) {
-		this.year = year;
-	}
+    public void setLopFeb(Float lopFeb) {
+        this.lopFeb = formatToOneDecimal(lopFeb);
+    }
 
-	public Float getCasualLeaveBalance() {
-		return casualLeaveBalance;
-	}
+    public void setLopMar(Float lopMar) {
+        this.lopMar = formatToOneDecimal(lopMar);
+    }
 
-	public void setCasualLeaveBalance(Float casualLeaveBalance) {
-		this.casualLeaveBalance = casualLeaveBalance;
-	}
+    public void setLopApr(Float lopApr) {
+        this.lopApr = formatToOneDecimal(lopApr);
+    }
 
-	public Float getLeaveTaken() {
-		return leaveTaken;
-	}
+    public void setLopMay(Float lopMay) {
+        this.lopMay = formatToOneDecimal(lopMay);
+    }
 
-	public void setLeaveTaken(Float leaveTaken) {
-		this.leaveTaken = leaveTaken;
-	}
+    public void setLopJun(Float lopJun) {
+        this.lopJun = formatToOneDecimal(lopJun);
+    }
 
-	public Float getLop() {
-		return lop;
-	}
+    public void setLopJul(Float lopJul) {
+        this.lopJul = formatToOneDecimal(lopJul);
+    }
 
-	public void setLop(Float lop) {
-		this.lop = lop;
-	}
+    public void setLopAug(Float lopAug) {
+        this.lopAug = formatToOneDecimal(lopAug);
+    }
 
-	public Float getLopJan() {
-		return lopJan;
-	}
+    public void setLopSep(Float lopSep) {
+        this.lopSep = formatToOneDecimal(lopSep);
+    }
 
-	public void setLopJan(Float lopJan) {
-		this.lopJan = lopJan;
-	}
+    public void setLopOct(Float lopOct) {
+        this.lopOct = formatToOneDecimal(lopOct);
+    }
 
-	public Float getLopFeb() {
-		return lopFeb;
-	}
+    public void setLopNov(Float lopNov) {
+        this.lopNov = formatToOneDecimal(lopNov);
+    }
 
-	public void setLopFeb(Float lopFeb) {
-		this.lopFeb = lopFeb;
-	}
+    public void setLopDec(Float lopDec) {
+        this.lopDec = formatToOneDecimal(lopDec);
+    }
 
-	public Float getLopMar() {
-		return lopMar;
-	}
+    // Getters remain the same
+    public Long getId() {
+        return id;
+    }
 
-	public void setLopMar(Float lopMar) {
-		this.lopMar = lopMar;
-	}
+    public void setId(Long id) {
+        this.id = id;
+    }
 
-	public Float getLopApr() {
-		return lopApr;
-	}
+    public String getEmpId() {
+        return empId;
+    }
 
-	public void setLopApr(Float lopApr) {
-		this.lopApr = lopApr;
-	}
+    public void setEmpId(String empId) {
+        this.empId = empId;
+    }
 
-	public Float getLopMay() {
-		return lopMay;
-	}
+    public int getYear() {
+        return year;
+    }
 
-	public void setLopMay(Float lopMay) {
-		this.lopMay = lopMay;
-	}
+    public void setYear(int year) {
+        this.year = year;
+    }
 
-	public Float getLopJun() {
-		return lopJun;
-	}
+    public Float getCasualLeaveBalance() {
+        return casualLeaveBalance;
+    }
 
-	public void setLopJun(Float lopJun) {
-		this.lopJun = lopJun;
-	}
+    public Float getLeaveTaken() {
+        return leaveTaken;
+    }
 
-	public Float getLopJul() {
-		return lopJul;
-	}
+    public Float getLop() {
+        return lop;
+    }
 
-	public void setLopJul(Float lopJul) {
-		this.lopJul = lopJul;
-	}
+    public Float getLopJan() {
+        return lopJan;
+    }
 
-	public Float getLopAug() {
-		return lopAug;
-	}
+    public Float getLopFeb() {
+        return lopFeb;
+    }
 
-	public void setLopAug(Float lopAug) {
-		this.lopAug = lopAug;
-	}
+    public Float getLopMar() {
+        return lopMar;
+    }
 
-	public Float getLopSep() {
-		return lopSep;
-	}
+    public Float getLopApr() {
+        return lopApr;
+    }
 
-	public void setLopSep(Float lopSep) {
-		this.lopSep = lopSep;
-	}
+    public Float getLopMay() {
+        return lopMay;
+    }
 
-	public Float getLopOct() {
-		return lopOct;
-	}
+    public Float getLopJun() {
+        return lopJun;
+    }
 
-	public void setLopOct(Float lopOct) {
-		this.lopOct = lopOct;
-	}
+    public Float getLopJul() {
+        return lopJul;
+    }
 
-	public Float getLopNov() {
-		return lopNov;
-	}
+    public Float getLopAug() {
+        return lopAug;
+    }
 
-	public void setLopNov(Float lopNov) {
-		this.lopNov = lopNov;
-	}
+    public Float getLopSep() {
+        return lopSep;
+    }
 
-	public Float getLopDec() {
-		return lopDec;
-	}
+    public Float getLopOct() {
+        return lopOct;
+    }
 
-	public void setLopDec(Float lopDec) {
-		this.lopDec = lopDec;
-	}
+    public Float getLopNov() {
+        return lopNov;
+    }
 
-	public LocalDateTime getCreatedAt() {
-		return createdAt;
-	}
+    public Float getLopDec() {
+        return lopDec;
+    }
 
-	public void setCreatedAt(LocalDateTime createdAt) {
-		this.createdAt = createdAt;
-	}
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
 
-	public LocalDateTime getUpdatedAt() {
-		return updatedAt;
-	}
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
 
-	public void setUpdatedAt(LocalDateTime updatedAt) {
-		this.updatedAt = updatedAt;
-	}
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
 
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
 }

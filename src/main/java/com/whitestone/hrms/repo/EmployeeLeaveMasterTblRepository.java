@@ -74,6 +74,30 @@ public interface EmployeeLeaveMasterTblRepository extends JpaRepository<Employee
 	List<EmployeeLeaveMasterTbl> findByEmpidAndStatusIgnoreCase(String empId, String status);
 
 
-
+	 // NEW METHOD: Find by empid and exact startdate (not date range)
+    @Query(value = "SELECT * FROM EMPLOYEE_LEAVE_MASTER_TBL e " +
+    	       "WHERE e.EMP_ID = :empid " +
+    	       "AND TRUNC(e.START_DATE) = TRUNC(:startDate) " +
+    	       "AND e.DEL_FLG = 'N' " +
+    	       "AND e.STATUS = 'Pending'", nativeQuery = true)
+    	Optional<EmployeeLeaveMasterTbl> findByEmpidAndStartDate(
+    	    @Param("empid") String empid, 
+    	    @Param("startDate") Date startDate);
+    
+ // Repository method - add to EmployeeLeaveMasterRepository
+ 	@Query("SELECT e FROM EmployeeLeaveMasterTbl e WHERE e.empid = :empid " +
+ 	       "AND YEAR(e.startdate) = :year AND MONTH(e.startdate) = :month")
+ 	List<EmployeeLeaveMasterTbl> findAllLeavesForMonth(
+ 	    @Param("empid") String empid, 
+ 	    @Param("year") int year, 
+ 	    @Param("month") int month);
+ 	
+ 	@Query("SELECT e FROM EmployeeLeaveMasterTbl e WHERE e.empid = :empid " +
+ 	       "AND YEAR(e.startdate) = :year AND MONTH(e.startdate) = :month " +
+ 	       "AND e.delflg = 'N'")
+ 	List<EmployeeLeaveMasterTbl> findAllActiveLeavesForMonth(
+ 	    @Param("empid") String empid, 
+ 	    @Param("year") int year, 
+ 	    @Param("month") int month);
 	
 }
