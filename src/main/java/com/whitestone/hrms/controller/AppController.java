@@ -7659,62 +7659,96 @@ public class AppController {
 
 	@PostMapping("/upload")
 	public ResponseEntity<?> uploadPhoto(@RequestParam("employeeId") String employeeId,
-			@RequestParam("file") MultipartFile file) {
-		try {
-			// Check if the employee already uploaded a photo
-			if (employeerepository.findByEmployeeId(employeeId).isPresent()) {
-				return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", "Photo already uploaded"));
-			}
+	        @RequestParam("file") MultipartFile file,
+	        @RequestParam(value = "isUpdate", required = false) String isUpdateParam) { // Change to String
+	    try {
+	        // Check if the employee already uploaded a photo
+	        Optional<EmployeePhoto> existingPhoto = employeerepository.findByEmployeeId(employeeId);
+	        
+	        // Convert isUpdate parameter to boolean
+	        boolean isUpdate = "true".equalsIgnoreCase(isUpdateParam);
+	        
+	        if (existingPhoto.isPresent() && !isUpdate) {
+	            // If photo exists and it's not an update request
+	            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", "Photo already uploaded"));
+	        }
 
-			// File size validation (10 MB)
-			if (file.getSize() > 10 * 1024 * 1024) {
-				return ResponseEntity.badRequest().body(Map.of("message", "File size exceeds 10 MB limit"));
-			}
+	        // File size validation (10 MB)
+	        if (file.getSize() > 10 * 1024 * 1024) {
+	            return ResponseEntity.badRequest().body(Map.of("message", "File size exceeds 10 MB limit"));
+	        }
 
-			// Fetch employee first name from usermaintenance table
-			Optional<usermaintenance> employeeOpt = usermaintenanceRepository.findByEmpid1(employeeId);
-			if (employeeOpt.isEmpty()) {
-				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Employee not found"));
-			}
+	        // Fetch employee first name from usermaintenance table
+	        Optional<usermaintenance> employeeOpt = usermaintenanceRepository.findByEmpid1(employeeId);
+	        if (employeeOpt.isEmpty()) {
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Employee not found"));
+	        }
 
-			String firstName = employeeOpt.get().getFirstname(); // assuming field name is firstname
+	        String firstName = employeeOpt.get().getFirstname(); // assuming field name is firstname
 
-			// Format date (e.g. 2025-10-23)
-			String currentDate = java.time.LocalDate.now().toString();
+	        // Format date (e.g. 2025-10-23)
+	        String currentDate = java.time.LocalDate.now().toString();
 
-			// Extract file extension safely
-			String originalFileName = file.getOriginalFilename();
-			String fileExtension = "";
-			if (originalFileName != null && originalFileName.contains(".")) {
-				fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
-			}
+	        // Extract file extension safely
+	        String originalFileName = file.getOriginalFilename();
+	        String fileExtension = "";
+	        if (originalFileName != null && originalFileName.contains(".")) {
+	            fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
+	        }
 
-			// Construct file name: EMPID_FIRSTNAME_DATE.jpg
-			String fileName = employeeId + "_" + firstName + "_" + currentDate + fileExtension;
-			String uploadDir = docUploadDir + "/profile_pic";
-			// Prepare file path: <uploadDir>/<fileName>
-			Path filePath = Paths.get(uploadDir, fileName);
+	        // Construct file name: EMPID_FIRSTNAME_DATE.jpg
+	        String fileName = employeeId + "_" + firstName + "_" + currentDate + fileExtension;
+	        String uploadDir = docUploadDir + "/profile_pic";
+	        // Prepare file path: <uploadDir>/<fileName>
+	        Path filePath = Paths.get(uploadDir, fileName);
 
-			// Create directories if not exist
-			Files.createDirectories(filePath.getParent());
+	        // Create directories if not exist
+	        Files.createDirectories(filePath.getParent());
 
-			// Save file to server
-			Files.write(filePath, file.getBytes());
+	        // If updating, delete the old file first
+	        if (existingPhoto.isPresent()) {
+	            try {
+	                // Delete old file from server
+	                Path oldFilePath = Paths.get(existingPhoto.get().getFileUrl());
+	                Files.deleteIfExists(oldFilePath);
+	                
+	                // Update existing record
+	                EmployeePhoto photo = existingPhoto.get();
+	                photo.setFileName(fileName);
+	                photo.setFileUrl(filePath.toString());
+	                photo.setFileType(file.getContentType());
+//	                photo.setUpdatedAt(new java.util.Date()); // Add this field to track updates
+	                
+	                employeerepository.save(photo);
+	                
+	                // Save new file to server
+	                Files.write(filePath, file.getBytes());
+	                
+	                return ResponseEntity.ok(Map.of("message", "Photo updated successfully", "fileUrl", photo.getFileUrl()));
+	                
+	            } catch (IOException e) {
+	                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "Failed to delete old photo"));
+	            }
+	        } else {
+	            // Save file to server for new upload
+	            Files.write(filePath, file.getBytes());
 
-			// Save record in DB
-			EmployeePhoto photo = new EmployeePhoto();
-			photo.setEmployeeId(employeeId);
-			photo.setFileName(fileName);
-			photo.setFileUrl(filePath.toString());
-			photo.setFileType(file.getContentType());
+	            // Save record in DB
+	            EmployeePhoto photo = new EmployeePhoto();
+	            photo.setEmployeeId(employeeId);
+	            photo.setFileName(fileName);
+	            photo.setFileUrl(filePath.toString());
+	            photo.setFileType(file.getContentType());
+//	            photo.setCreatedAt(new java.util.Date());
 
-			employeerepository.save(photo);
+	            employeerepository.save(photo);
 
-			return ResponseEntity.ok(Map.of("message", "Photo uploaded successfully", "fileUrl", photo.getFileUrl()));
+	            return ResponseEntity.ok(Map.of("message", "Photo uploaded successfully", "fileUrl", photo.getFileUrl()));
+	        }
 
-		} catch (IOException e) {
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "Upload failed"));
-		}
+	    } catch (IOException e) {
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "Upload failed"));
+	    }
 	}
 
 	@GetMapping("/photo/{employeeId}")
