@@ -4614,57 +4614,103 @@ public class AppController {
 	private SalaryTemplateComponentRepository salaryTemplateComponentRepository;
 
 	@PostMapping("/salary-template/save")
+
 	public ResponseEntity<?> saveSalaryTemplate(@RequestBody SalaryTemplatePayload payload) {
+
 		try {
+
 			// Print the whole payload object for debugging
+
 			ObjectMapper objectMapper = new ObjectMapper();
-
+ 
 			// Convert payload to JSON string and print for debugging
+
 			String payloadJson = objectMapper.writeValueAsString(payload);
+
 			System.out.println("Received Payload JSON: " + payloadJson);
+
 			// Extract and map template details
+
 			SalaryTemplate salaryTemplate = new SalaryTemplate();
+
 			salaryTemplate.setTemplateName(payload.getTemplate().getTemplateName());
+
 			salaryTemplate.setDescription(payload.getTemplate().getDescription());
+
 			salaryTemplate.setAnnualCTC(payload.getTemplate().getAnnualCTC());
+
 			salaryTemplate.setRcreuserid(payload.getTemplate().getRcreuserid());
+
 			salaryTemplate.setDelflg("N");
+
 			salaryTemplate.setRcretime(new Date());
+
 			salaryTemplate.setEntitycreflg("Y");
-
+ 
 			// Save salary template
+
 			SalaryTemplate savedTemplate = salaryTemplateRepository.save(salaryTemplate);
-
+ 
 			// Process and save each component
+
 			for (SalaryTemplatePayload.Component componentPayload : payload.getComponents()) {
+
 				// Print the details of each component for debugging
+
 				System.out.println("Component: " + componentPayload.toString());
-
+ 
 				System.out.println("EARNING >>>>>>   " + componentPayload.isEarning());
+
 				SalaryTemplateComponent component = new SalaryTemplateComponent();
+
 				component.setComponentName(componentPayload.getComponentName());
+
 				component.setCalculationType(componentPayload.getCalculationType());
+
 				component.setValue(componentPayload.getValue());
+
 				component.setMonthlyAmount(componentPayload.getMonthlyAmount());
+
 				component.setAnnualAmount(componentPayload.getAnnualAmount());
+
 				component.setIsEarning(componentPayload.isEarning());
+
+				component.setIsPayrollDeduction(componentPayload.isPayrollDeduction());
+
+				component.setIsOtherAllowanceFlag(componentPayload.isOtherAllowanceFlag());
+
+				component.setIsDeductionFlag(componentPayload.isDeductionFlag());
+
 				component.setSalaryTemplate(savedTemplate); // Associate with saved template
+
 				component.setRcreuserid(payload.getTemplate().getRcreuserid());
+
 				component.setDelflg("N");
+
 				component.setRcretime(new Date());
+
 				component.setEntitycreflg("Y");
-
+ 
 				// Save the component
-				salaryTemplateComponentRepository.save(component);
-			}
 
+				salaryTemplateComponentRepository.save(component);
+
+			}
+ 
 			return ResponseEntity.ok(savedTemplate);
+
 		} catch (Exception e) {
+
 			// Handle errors gracefully and return a response
+
 			return ResponseEntity.status(500)
+
 					.body("An error occurred while saving the salary template: " + e.getMessage());
+
 		}
+
 	}
+ 
 
 	// Get all templates
 	@GetMapping("/templates")
@@ -5181,202 +5227,342 @@ public class AppController {
 	@Autowired
 	private PayrollAdjustmentRepository payrollAdjustmentRepository;
 
-	/** ✅ 1️⃣ RUN PAYROLL — Generate payroll for current month */
 	@PostMapping("/Payroll")
+
 	public ResponseEntity<Map<String, Object>> saveOrUpdatePayroll() {
+
 		Map<String, Object> response = new HashMap<>();
+
 		List<Payroll> payrollList = new ArrayList<>();
-
+ 
 		YearMonth currentMonth = YearMonth.now();
+
 		YearMonth previousMonth = currentMonth.minusMonths(1);
+
 		LocalDate lastDayOfMonth = currentMonth.atEndOfMonth();
+
 		ObjectMapper objectMapper = new ObjectMapper();
-
+ 
 		try {
+
 			// STEP 0: CRITICAL CHECK - Are all adjustments APPROVED?
+
 			List<PayrollAdjustment> allAdjustments = payrollAdjustmentRepository.findByMonth(currentMonth.toString());
-
+ 
 			if (allAdjustments.isEmpty()) {
+
 				response.put("status", "Payroll blocked: Adjustments not generated yet. Please run /generate first.");
+
 				response.put("error",
+
 						"Payroll blocked: Adjustments not generated yet. Please run /generate first. " + currentMonth);
+
 				return ResponseEntity.badRequest().body(response);
-			}
 
+			}
+ 
 			boolean allApproved = allAdjustments.stream().allMatch(adj -> "APPROVED".equals(adj.getApprovalStatus()));
-
+ 
 			if (!allApproved) {
+
 				long pendingCount = allAdjustments.stream().filter(adj -> !"APPROVED".equals(adj.getApprovalStatus()))
+
 						.count();
-
+ 
 				response.put("status", "Payroll blocked: Manager approval pending");
+
 				response.put("error",
+
 						pendingCount + " employee(s) not approved yet. All must be APPROVED before running payroll.");
+
 				response.put("pending_count", pendingCount);
+
 				return ResponseEntity.status(400).body(response);
-			}
 
+			}
+ 
 			// STEP 1: Move previous month payroll to history
+
 			List<Payroll> previousPayrolls = payrollRepository.findByMonth(previousMonth.toString());
+
 			if (!previousPayrolls.isEmpty()) {
+
 				List<PayrollHistory> historyRecords = previousPayrolls.stream().map(p -> {
+
 					PayrollHistory h = new PayrollHistory();
+
 					BeanUtils.copyProperties(p, h);
+
 					return h;
+
 				}).collect(Collectors.toList());
+
 				payrollHistoryRepository.saveAllAndFlush(historyRecords);
+
 				payrollRepository.deleteByMonth(previousMonth.toString());
+
 			}
-
+ 
 			// STEP 2: Generate payroll using APPROVED adjustment values
+
 			LocalDate periodStart = LocalDate.of(previousMonth.getYear(), previousMonth.getMonth(), 27);
+
 			LocalDate periodEnd = LocalDate.of(currentMonth.getYear(), currentMonth.getMonth(), 26);
-
+ 
 			List<WsslCalendarMod> holidays = wsslCalendarModRepository
+
 					.findByEventDateBetween(java.sql.Date.valueOf(periodStart), java.sql.Date.valueOf(periodEnd));
+
 			List<Date> weekOffDates = getWeekOffsInRange(java.sql.Date.valueOf(periodStart),
+
 					java.sql.Date.valueOf(periodEnd));
-
+ 
 			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
 			Set<String> holidaySet = holidays.stream().map(h -> sdf.format(h.getEventDate()))
+
 					.collect(Collectors.toSet());
+
 			Set<String> weekOffSet = weekOffDates.stream().map(d -> sdf.format(d)).collect(Collectors.toSet());
-
-//	        long effectiveWorkingDays = 0;
-//	        LocalDate loopDate = periodStart;
-//	        while (!loopDate.isAfter(periodEnd)) {
-//	            String dateStr = loopDate.toString();
-//	            if (!holidaySet.contains(dateStr) && !weekOffSet.contains(dateStr)) {
-//	                effectiveWorkingDays++;
-//	            }
-//	            loopDate = loopDate.plusDays(1);
-//	        }
-//	        if (effectiveWorkingDays == 0) effectiveWorkingDays = currentMonth.lengthOfMonth();
-
+ 
 			for (PayrollAdjustment adj : allAdjustments) {
+
 				String empId = adj.getEmpId();
+
 				EmployeeSalaryTbl empSalary = employeeSalaryTblRepository.findByEmpid(empId);
+
 				if (empSalary == null)
-					continue;
 
+					continue;
+ 
 				usermaintenance user = usermaintenanceRepository.findByEmpid(empId);
+
 				if (user == null)
+
 					continue;
-
+ 
 				// Use manager-approved values
-				long allowanceDays = adj.getAllowanceDays();
-				float lopDays = adj.getLopDays();
-				double otherDeductions = adj.getOtherDeductions();
-				double effectiveWorkingDays = adj.getEffectiveWorkingDays();
 
+				long allowanceDays = adj.getAllowanceDays();
+
+				float lopDays = adj.getLopDays();
+
+				double otherDeductions = adj.getOtherDeductions();
+
+				double effectiveWorkingDays = adj.getEffectiveWorkingDays();
+ 
 				// Parse Earnings & Deductions
+
 				String earningsJson = cleanJson(empSalary.getEarnings());
+
 				String deductionsJson = cleanJson(empSalary.getDeductions());
+
+				String payrolldetuctionJson = cleanJson(empSalary.getPayrollDeductions());
+
 				JsonNode earningsNode = objectMapper.readTree(earningsJson);
+
 				JsonNode deductionsNode = objectMapper.readTree(deductionsJson);
 
+				JsonNode payrollNode = objectMapper.readTree(payrolldetuctionJson);
+ 
 				double totalEarnings = StreamSupport.stream(earningsNode.spliterator(), false)
+
 						.mapToDouble(e -> e.get("monthlyAmount").asDouble(0.0)).sum();
+
 				double totalDeductions = StreamSupport.stream(deductionsNode.spliterator(), false)
+
 						.mapToDouble(d -> d.get("monthlyAmount").asDouble(0.0)).sum();
 
+				double totalPayRollDeductions = StreamSupport.stream(payrollNode.spliterator(), false)
+
+						.mapToDouble(d -> d.get("monthlyAmount").asDouble(0.0)).sum();
+ 
 				// Identify allowances
+
 				double perDayRate = 0, pgRentAllowance = 0;
+
 				for (JsonNode e : earningsNode) {
+
 					String name = e.get("name").asText();
+
 					double amount = e.get("monthlyAmount").asDouble(0.0);
+
 					if ("Per Day Allowance".equalsIgnoreCase(name)) {
+
 						perDayRate = e.has("amount") && !e.get("amount").isNull() ? e.get("amount").asDouble(0.0)
+
 								: amount;
+
 					} else if ("PG Rent Allowance".equalsIgnoreCase(name)) {
+
 						pgRentAllowance = amount;
+
 					}
+
 				}
-
+ 
 				double totalPerDayAllowance = perDayRate * allowanceDays; // Approved days
-				double baseSalary = totalEarnings - (totalPerDayAllowance + pgRentAllowance);
 
+				double baseSalary=(totalEarnings - totalPayRollDeductions)
+
+				  - (totalPerDayAllowance + pgRentAllowance);
+
+//				double baseSalary = totalEarnings - totalPayRollDeductions -(totalPerDayAllowance + pgRentAllowance);
+ 
 				double perDayBaseRate = effectiveWorkingDays > 0 ? baseSalary / effectiveWorkingDays : 0;
-				double lopDeduction = perDayBaseRate * lopDays;
 
-				double finalDeductions = totalDeductions + lopDeduction + otherDeductions;
-				double Deductions = lopDeduction + otherDeductions;
+				double lopDeduction = perDayBaseRate * lopDays;
+ 
+				double finalDeductions = totalDeductions + lopDeduction + otherDeductions + totalPayRollDeductions;
+
+				double Deductions = lopDeduction + otherDeductions ;
+
 				double netPay = baseSalary + totalPerDayAllowance + pgRentAllowance - Deductions;
+ 
+				System.out.println("totalPayRollDeductions>>>>" + totalPayRollDeductions);
+
+				System.out.println("Deductions>>>>" + Deductions);
+
+				System.out.println("baseSalary>>>>" + baseSalary);
+
+				System.out.println("netPay>>>>" + netPay);
 
 				// Round all values
+
 				baseSalary = round(baseSalary);
+
 				totalPerDayAllowance = round(totalPerDayAllowance);
+
 				pgRentAllowance = round(pgRentAllowance);
+
 				lopDeduction = round(lopDeduction);
+
 				finalDeductions = round(finalDeductions);
+
 				netPay = round(netPay);
+
 				totalEarnings = round(netPay + finalDeductions);
+
 				totalDeductions = round(totalDeductions);
-
+ 
 				// Save Payroll
+
 				Payroll payroll = payrollRepository.findByEmpidAndMonth(empId, currentMonth.toString());
+
 				if (payroll == null)
+
 					payroll = new Payroll();
-
+ 
 				payroll.setEmpid(empId);
+
 				payroll.setMonth(currentMonth.toString());
+
 				payroll.setPymtDate(lastDayOfMonth);
+
 				payroll.setStatus("PROCESSED");
+
 				payroll.setAmount(baseSalary);
+
 				payroll.setBnfName(user.getFirstname() + " " + (user.getLastname() != null ? user.getLastname() : ""));
+
 				payroll.setBeneAccNo(empSalary.getAccountNumber());
+
 				payroll.setBeneIfsc(empSalary.getIfscCode());
+
 				payroll.setEmailId(empSalary.getEmailid());
+
 				payroll.setMobileNum(empSalary.getPhonenumber());
+
 				payroll.setDebitAccNo("611905056804");
+
 				payroll.setCreditNarr("NA");
+
 				payroll.setDebitNarr("NA");
+
 				payroll.setPymtMode(
+
 						empSalary.getBankName().toLowerCase().contains("icic".toLowerCase()) ? "FT" : "NEFT");
+
 				payroll.setPymtProdTypeCode("PAB_VENDOR");
+
 				payroll.setRemark(currentMonth.getMonth().name() + " " + currentMonth.getYear() + " Salary");
+
 				// Store all calculated values
+
 				payroll.setLopDays(lopDays);
+
 				payroll.setTotalEarnings(totalEarnings);
+
 				payroll.setTotalDeductions(totalDeductions);
+
 				payroll.setLopDeduction(lopDeduction);
+
 				payroll.setDeductions(finalDeductions);
+
 				payroll.setOtherDeductions(otherDeductions); // New field recommended
+
+				payroll.setPayrollDeductions(totalPayRollDeductions);
+
 				payroll.setPerDayRate(perDayRate);
+
 				payroll.setPerDayAllowance(totalPerDayAllowance);
+
 				payroll.setPerDayAllowanceDays(allowanceDays);
+
 				payroll.setPgRentAllowance(pgRentAllowance);
+
 				payroll.setEffectiveWorkingDays(effectiveWorkingDays);
+
 				payroll.setNetPay(netPay);
+
 				payroll.setOtherDeductionsRemarks(adj.getOtherDeductionsRemarks());
+
 				payroll.setCreatedDate(LocalDateTime.now());
-
+ 
 				payrollList.add(payroll);
-			}
 
+			}
+ 
 			if (!payrollList.isEmpty()) {
+
 				payrollRepository.saveAllAndFlush(payrollList);
+
 				response.put("status", "Payroll processed successfully for " + currentMonth);
+
 				response.put("processed_count", payrollList.size());
+
 				response.put("message",
+
 						"All " + payrollList.size() + " employees processed using manager-approved values");
+
 			} else {
+
 				response.put("status", "No payroll records processed");
+
 			}
-
+ 
 		} catch (Exception e) {
+
 			e.printStackTrace();
+
 			response.put("error", "Payroll processing failed: " + e.getMessage());
+
 			return ResponseEntity.status(500).body(response);
+
 		}
-
+ 
 		return ResponseEntity.ok(response);
-	}
 
-	// Helper method
-	private double round(double value) {
-		return Math.round(value * 100.0) / 100.0;
 	}
+ 
+	// Helper method
+
+	private double round(double value) {
+
+		return Math.round(value * 100.0) / 100.0;
+
+	}
+ 
 
 	/** ✅ 2️⃣ PAYROLL PREVIEW — Fetch all payroll for current month */
 	@GetMapping("/PayrollPreview")
