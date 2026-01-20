@@ -248,128 +248,341 @@ public class AppController {
 	@RequestMapping(value = { "/login" }, method = RequestMethod.POST)
 	@ResponseBody
 	public ResponseEntity<?> login(@RequestBody usermaintenance employeeDetails) {
-		System.out.println("TEST");
-		System.out.println("sedfg" + employeeDetails);
-		try {
-			String employeeid = employeeDetails.getUsername();
-			String rawPassword = employeeDetails.getPassword();
+	    System.out.println("LOGIN API CALLED for user: " + employeeDetails.getUsername());
+	    
+	    try {
+	        String employeeid = employeeDetails.getUsername();
+	        String rawPassword = employeeDetails.getPassword();
 
-			Optional<usermaintenance> employeeOpt = Optional.empty();
-			Optional<TraineeMaster> employeeOpt1 = Optional.empty();
+	        Optional<usermaintenance> employeeOpt = Optional.empty();
+	        Optional<TraineeMaster> employeeOpt1 = Optional.empty();
 
-			if (employeeid.toUpperCase().startsWith("WS")) {
-				employeeOpt1 = traineemasterRepository.findByTrngidOrUserId(employeeid.toUpperCase());
-				System.out.println("employeeid::::   " + employeeOpt1.get().getFirstname());
-			} else {
-				employeeOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeid);
-			}
+	        // Determine user type
+	        boolean isTrainee = employeeid.toUpperCase().startsWith("WS");
+	        
+	        if (isTrainee) {
+	            employeeOpt1 = traineemasterRepository.findByTrngidOrUserId(employeeid.toUpperCase());
+	        } else {
+	            employeeOpt = usermaintenanceRepository.findByEmpIdOrUserId(employeeid);
+	        }
 
-			if ((employeeOpt.isPresent() && passwordEncoder.matches(rawPassword, employeeOpt.get().getPassword()))
-					|| (employeeOpt1.isPresent()
-							&& passwordEncoder.matches(rawPassword, employeeOpt1.get().getPassword()))) {
+	        // Validate credentials
+	        boolean isValidCredentials = false;
+	        
+	        if (employeeOpt.isPresent() && passwordEncoder.matches(rawPassword, employeeOpt.get().getPassword())) {
+	            isValidCredentials = true;
+	        } else if (employeeOpt1.isPresent() && passwordEncoder.matches(rawPassword, employeeOpt1.get().getPassword())) {
+	            isValidCredentials = true;
+	        }
 
-				Map<String, Object> response = new HashMap<>();
+	        if (!isValidCredentials) {
+	            String errorMessage = errorMessageService.getErrorMessage("INVALID_USR_CREDENTIALS", "en");
+	            Map<String, Object> errorResponse = new HashMap<>();
+	            errorResponse.put("error", errorMessage);
+	            return ResponseEntity.badRequest().body(errorResponse);
+	        }
 
-				if (employeeOpt.isPresent()) {
-					usermaintenance employee = employeeOpt.get();
-					String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
-							.map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
+	        // Process successful login
+	        Map<String, Object> response = new HashMap<>();
+	        
+	        if (employeeOpt.isPresent()) {
+	            processRegularEmployee(employeeOpt.get(), response);
+	        } else if (employeeOpt1.isPresent()) {
+	            processTraineeEmployee(employeeOpt1.get(), response);
+	        }
 
-					String employeeId = employee.getEmpid();
-					String employeeName = employee.getFirstname();
-					String employeeEmail = employee.getEmailid();
-					String reportTo = employee.getRepoteTo();
+	        // 🔹 OPTIMIZED: Get today's celebrations (including logged-in user)
+	        List<Map<String, Object>> todayCelebrations = getTodayCelebrationsOptimized();
+	        response.put("todayCelebrations", todayCelebrations);
+	        response.put("celebrationCount", todayCelebrations.size());
+	        
+	        System.out.println("✅ Login successful for: " + response.get("username"));
+	        System.out.println("🎉 Found " + todayCelebrations.size() + " celebration(s) today");
+	        
+	        return ResponseEntity.ok(response);
 
-					// 🔹 Fetch Manager Name from same table (usermaintenance)
-					String managerName = null;
-					if (reportTo != null && !reportTo.isEmpty()) {
-						usermaintenance manager = usermaintenanceRepository.findByEmpid(reportTo);
-						if (manager != null) {
-							managerName = manager.getFirstname()
-									+ (manager.getLastname() != null ? " " + manager.getLastname() : "");
-						}
-					}
-
-					String token = generateToken(employeeId, role);
-					String successMessage = errorMessageService.getErrorMessage("VALID_USR_CREDENTIALS", "en");
-
-					response.put("message", successMessage);
-					response.put("role", role);
-					response.put("employeeId", employeeId);
-					response.put("username", employeeName);
-					response.put("email", employeeEmail);
-					response.put("token", token);
-					response.put("reportTo", reportTo);
-					response.put("managerName", managerName); // ✅ Added Manager Name
-				}
-
-				if (employeeOpt1.isPresent()) {
-					TraineeMaster employee = employeeOpt1.get();
-					String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
-							.map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
-
-					String employeeId = employee.getTrngid();
-					String employeeName = employee.getFirstname();
-					String employeeEmail = employee.getEmailid();
-					String reportTo = employee.getRepoteTo();
-
-					// 🔹 Fetch Manager Name from same table (TraineeMaster)
-					String managerName = null;
-					if (reportTo != null && !reportTo.isEmpty()) {
-						usermaintenance manager = usermaintenanceRepository.findByEmpid(reportTo);
-						if (manager != null) {
-							managerName = manager.getFirstname()
-									+ (manager.getLastname() != null ? " " + manager.getLastname() : "");
-						}
-					}
-
-					String token = generateToken(employeeId, role);
-					String successMessage = errorMessageService.getErrorMessage("VALID_USR_CREDENTIALS", "en");
-
-					response.put("message", successMessage);
-					response.put("role", role);
-					response.put("employeeId", employeeId);
-					response.put("username", employeeName);
-					response.put("email", employeeEmail);
-					response.put("token", token);
-					response.put("reportTo", reportTo);
-					response.put("managerName", managerName); // ✅ Added Manager Name
-				}
-
-				return ResponseEntity.ok(response);
-
-			} else {
-				String errorMessage = errorMessageService.getErrorMessage("INVALID_USR_CREDENTIALS", "en");
-				Map<String, Object> errorResponse = new HashMap<>();
-				errorResponse.put("error", errorMessage);
-				return ResponseEntity.badRequest().body(errorResponse);
-			}
-
-		} catch (Exception e) {
-			e.printStackTrace();
-			String errorMessage = errorMessageService.getErrorMessage("INTERNAL_SERVER_ERROR", "en");
-			Map<String, Object> errorResponse = new HashMap<>();
-			errorResponse.put("error", errorMessage);
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-		}
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        String errorMessage = errorMessageService.getErrorMessage("INTERNAL_SERVER_ERROR", "en");
+	        Map<String, Object> errorResponse = new HashMap<>();
+	        errorResponse.put("error", errorMessage);
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+	    }
 	}
-	
-	
-	
+
+	// Process regular employee
+	private void processRegularEmployee(usermaintenance employee, Map<String, Object> response) {
+	    String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
+	            .map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
+
+	    String employeeId = employee.getEmpid();
+	    String employeeName = employee.getFirstname();
+	    String employeeEmail = employee.getEmailid();
+	    String reportTo = employee.getRepoteTo();
+
+	    // Fetch Manager Name
+	    String managerName = null;
+	    if (reportTo != null && !reportTo.isEmpty()) {
+	        usermaintenance manager = usermaintenanceRepository.findByEmpid(reportTo);
+	        if (manager != null) {
+	            managerName = manager.getFirstname()
+	                    + (manager.getLastname() != null ? " " + manager.getLastname() : "");
+	        }
+	    }
+
+	    // Fetch employee profile
+	    ProfileDates profileDates = fetchEmployeeProfile(employeeId, employeeEmail);
+	    
+	    String token = generateToken(employeeId, role);
+	    String successMessage = errorMessageService.getErrorMessage("VALID_USR_CREDENTIALS", "en");
+
+	    response.put("message", successMessage);
+	    response.put("role", role);
+	    response.put("employeeId", employeeId);
+	    response.put("username", employeeName);
+	    response.put("email", employeeEmail);
+	    response.put("token", token);
+	    response.put("reportTo", reportTo);
+	    response.put("managerName", managerName);
+	    response.put("dateOfBirth", profileDates.dateOfBirth != null ? formatDate(profileDates.dateOfBirth) : null);
+	    response.put("dateOfJoining", profileDates.dateOfJoining != null ? formatDate(profileDates.dateOfJoining) : null);
+	}
+
+	// Process trainee employee
+	private void processTraineeEmployee(TraineeMaster employee, Map<String, Object> response) {
+	    String role = userRoleMaintenanceRepository.findByRoleid(employee.getRoleid())
+	            .map(UserRoleMaintenance::getRolename).orElse("Unknown Role");
+
+	    String employeeId = employee.getTrngid();
+	    String employeeName = employee.getFirstname();
+	    String employeeEmail = employee.getEmailid();
+	    String reportTo = employee.getRepoteTo();
+
+	    // Fetch Manager Name
+	    String managerName = null;
+	    if (reportTo != null && !reportTo.isEmpty()) {
+	        usermaintenance manager = usermaintenanceRepository.findByEmpid(reportTo);
+	        if (manager != null) {
+	            managerName = manager.getFirstname()
+	                    + (manager.getLastname() != null ? " " + manager.getLastname() : "");
+	        }
+	    }
+
+	    // Fetch employee profile
+	    ProfileDates profileDates = fetchEmployeeProfile(employeeId, employeeEmail);
+	    
+	    String token = generateToken(employeeId, role);
+	    String successMessage = errorMessageService.getErrorMessage("VALID_USR_CREDENTIALS", "en");
+
+	    response.put("message", successMessage);
+	    response.put("role", role);
+	    response.put("employeeId", employeeId);
+	    response.put("username", employeeName);
+	    response.put("email", employeeEmail);
+	    response.put("token", token);
+	    response.put("reportTo", reportTo);
+	    response.put("managerName", managerName);
+	    response.put("dateOfBirth", profileDates.dateOfBirth != null ? formatDate(profileDates.dateOfBirth) : null);
+	    response.put("dateOfJoining", profileDates.dateOfJoining != null ? formatDate(profileDates.dateOfJoining) : null);
+	}
+
+	// 🔹 OPTIMIZED: Get today's celebrations (FAST VERSION)
+	private List<Map<String, Object>> getTodayCelebrationsOptimized() {
+	    List<Map<String, Object>> celebrations = new ArrayList<>();
+	    
+	    // Get today's date
+	    Calendar today = Calendar.getInstance();
+	    int todayDay = today.get(Calendar.DAY_OF_MONTH);
+	    int todayMonth = today.get(Calendar.MONTH) + 1;
+	    int todayYear = today.get(Calendar.YEAR);
+	    
+	    System.out.println("📅 Checking for today's celebrations: " + todayDay + "-" + todayMonth + "-" + todayYear);
+	    
+	    try {
+	        // 🔹 OPTIMIZATION 1: Use native query to fetch only employees with birthdays/anniversaries today
+	        // This reduces the data load significantly
+	        
+	        // Get all employee profiles first (this is still needed but we'll optimize)
+	        List<EmployeeProfileMod> allProfiles = employeeProfilemodRepository.findAll();
+	        Map<String, EmployeeProfileMod> profileMap = new HashMap<>();
+	        
+	        // Create a map for quick lookup
+	        for (EmployeeProfileMod profile : allProfiles) {
+	            profileMap.put(profile.getEmpid(), profile);
+	        }
+	        
+	        // Get all employees
+	        List<usermaintenance> allEmployees = usermaintenanceRepository.findAll();
+	        List<TraineeMaster> allTrainees = traineemasterRepository.findAll();
+	        
+	        System.out.println("👥 Total employees to check: " + (allEmployees.size() + allTrainees.size()));
+	        
+	        // Check regular employees
+	        for (usermaintenance employee : allEmployees) {
+	            String employeeId = employee.getEmpid();
+	            String employeeName = employee.getFirstname();
+	            
+	            if (employeeName == null || employeeName.trim().isEmpty()) {
+	                continue;
+	            }
+	            
+	            EmployeeProfileMod profile = profileMap.get(employeeId);
+	            if (profile == null && employee.getEmailid() != null) {
+	                profile = profileMap.get(employee.getEmailid());
+	            }
+	            
+	            if (profile != null) {
+	                Map<String, Object> celebration = checkForCelebration(
+	                    employeeId, employeeName, profile.getDateofbirth(), 
+	                    profile.getDateofjoining(), todayDay, todayMonth, todayYear
+	                );
+	                if (celebration != null) {
+	                    celebrations.add(celebration);
+	                }
+	            }
+	        }
+	        
+	        // Check trainee employees
+	        for (TraineeMaster trainee : allTrainees) {
+	            String employeeId = trainee.getTrngid();
+	            String employeeName = trainee.getFirstname();
+	            
+	            if (employeeName == null || employeeName.trim().isEmpty()) {
+	                continue;
+	            }
+	            
+	            EmployeeProfileMod profile = profileMap.get(employeeId);
+	            if (profile == null && trainee.getEmailid() != null) {
+	                profile = profileMap.get(trainee.getEmailid());
+	            }
+	            
+	            if (profile != null) {
+	                Map<String, Object> celebration = checkForCelebration(
+	                    employeeId, employeeName, profile.getDateofbirth(), 
+	                    profile.getDateofjoining(), todayDay, todayMonth, todayYear
+	                );
+	                if (celebration != null) {
+	                    celebrations.add(celebration);
+	                }
+	            }
+	        }
+	        
+	    } catch (Exception e) {
+	        System.err.println("Error checking celebrations: " + e.getMessage());
+	        e.printStackTrace();
+	    }
+	    
+	    System.out.println("✅ Found " + celebrations.size() + " celebration(s) today");
+	    return celebrations;
+	}
+
+	// Check for celebration
+	// Check for celebration - UPDATED to exclude 0-year anniversaries
+	private Map<String, Object> checkForCelebration(String employeeId, String employeeName, 
+	                                               Date dateOfBirth, Date dateOfJoining, 
+	                                               int todayDay, int todayMonth, int todayYear) {
+	    
+	    Map<String, Object> celebration = null;
+	    
+	    // Check birthday (always show if date matches)
+	    if (dateOfBirth != null) {
+	        Calendar dobCal = Calendar.getInstance();
+	        dobCal.setTime(dateOfBirth);
+	        int birthDay = dobCal.get(Calendar.DAY_OF_MONTH);
+	        int birthMonth = dobCal.get(Calendar.MONTH) + 1;
+	        
+	        if (birthMonth == todayMonth && birthDay == todayDay) {
+	            celebration = new HashMap<>();
+	            celebration.put("employeeId", employeeId);
+	            celebration.put("employeeName", employeeName);
+	            celebration.put("type", "birthday");
+	            celebration.put("date", formatDate(dateOfBirth));
+	            celebration.put("years", todayYear - dobCal.get(Calendar.YEAR));
+	        }
+	    }
+	    
+	    // Check anniversary (ONLY show if years completed > 0)
+	    if (dateOfJoining != null) {
+	        Calendar dojCal = Calendar.getInstance();
+	        dojCal.setTime(dateOfJoining);
+	        int joiningDay = dojCal.get(Calendar.DAY_OF_MONTH);
+	        int joiningMonth = dojCal.get(Calendar.MONTH) + 1;
+	        int joiningYear = dojCal.get(Calendar.YEAR);
+	        
+	        if (joiningMonth == todayMonth && joiningDay == todayDay) {
+	            int yearsCompleted = todayYear - joiningYear;
+	            
+	            // ONLY create celebration if at least 1 year has been completed
+	            if (yearsCompleted > 0) {
+	                if (celebration == null) {
+	                    celebration = new HashMap<>();
+	                    celebration.put("employeeId", employeeId);
+	                    celebration.put("employeeName", employeeName);
+	                    celebration.put("type", "anniversary");
+	                    celebration.put("date", formatDate(dateOfJoining));
+	                    celebration.put("years", yearsCompleted);
+	                } else {
+	                    // Both birthday and anniversary (with anniversary years > 0)
+	                    celebration.put("type", "both");
+	                    celebration.put("anniversaryYears", yearsCompleted);
+	                }
+	            }
+	        }
+	    }
+	    
+	    return celebration;
+	}
+
+	// Fetch employee profile
+	private ProfileDates fetchEmployeeProfile(String employeeId, String employeeEmail) {
+	    ProfileDates dates = new ProfileDates();
+	    
+	    // Try by employeeId first
+	    Optional<EmployeeProfileMod> profileOpt = employeeProfilemodRepository.findByEmpid(employeeId);
+	    
+	    if (!profileOpt.isPresent() && employeeEmail != null) {
+	        // Try by email if not found by employeeId
+	        profileOpt = employeeProfilemodRepository.findByEmpid(employeeEmail);
+	    }
+	    
+	    if (profileOpt.isPresent()) {
+	        EmployeeProfileMod profile = profileOpt.get();
+	        dates.dateOfBirth = profile.getDateofbirth();
+	        dates.dateOfJoining = profile.getDateofjoining();
+	    }
+	    
+	    return dates;
+	}
+
+	// Helper classes
+	class ProfileDates {
+	    Date dateOfBirth;
+	    Date dateOfJoining;
+	}
+
+	// Format date as string
+	private String formatDate(Date date) {
+	    if (date == null) return null;
+	    SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+	    return sdf.format(date);
+	}
+
 	public String generateToken(String employeeId, String role) {
-		// Set expiration date for token (1 hour from now)
-		long expirationTime = 1000 * 60 * 60; // 1 hour in milliseconds
-		Date expirationDate = new Date(System.currentTimeMillis() + expirationTime);
+	    long expirationTime = 1000 * 60 * 60; // 1 hour
+	    Date expirationDate = new Date(System.currentTimeMillis() + expirationTime);
 
-		// Generate a secure signing key for HS256 algorithm (256 bits)
-		SecretKey secretKey = Keys.secretKeyFor(SignatureAlgorithm.HS256); // Secure key for HS256
+	    SecretKey secretKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
 
-		// Generate JWT token using the employeeId and role
-		return Jwts.builder().setSubject(employeeId).claim("role", role) // You can add more claims as needed
-				.setIssuedAt(new Date()).setExpiration(expirationDate).signWith(secretKey) // Use the generated secret
-																							// key
-				.compact();
+	    return Jwts.builder()
+	            .setSubject(employeeId)
+	            .claim("role", role)
+	            .setIssuedAt(new Date())
+	            .setExpiration(expirationDate)
+	            .signWith(secretKey)
+	            .compact();
 	}
+	
+	
 
 	@PostMapping("/checkIn")
 	public ResponseEntity<?> checkIn(@RequestBody UserMasterAttendanceMod attendancePayload) {
@@ -6981,10 +7194,10 @@ public class AppController {
 
 			if (existingMonthHours == null)
 				existingMonthHours = 0f;
-			if (existingMonthHours + newHours > 6) {
-				System.out.println("Exceeded monthly permission limit of 6 hours.");
+			if (existingMonthHours + newHours > 4) {
+				System.out.println("Exceeded monthly permission limit of 4 hours.");
 				return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-						.body("{\"error\": \"Exceeded monthly permission limit of 6 hours.\"}");
+						.body("{\"error\": \"Exceeded monthly permission limit of 4 hours.\"}");
 			}
 
 			// Save the permission request
