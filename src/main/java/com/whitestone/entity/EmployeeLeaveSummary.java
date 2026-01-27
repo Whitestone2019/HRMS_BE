@@ -7,6 +7,7 @@ import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.SequenceGenerator;
 import javax.persistence.Table;
 import javax.persistence.UniqueConstraint;
 
@@ -14,9 +15,10 @@ import javax.persistence.UniqueConstraint;
 @Table(name = "employee_leave_summary", uniqueConstraints = @UniqueConstraint(columnNames = {"emp_id", "year"}))
 public class EmployeeLeaveSummary {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+	  @Id
+	    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "leave_summary_seq")
+	    @SequenceGenerator(name = "leave_summary_seq", sequenceName = "EMPLOYEE_LEAVE_SUMMARY_SEQ", allocationSize = 1)
+	    private Long id;
 
     @Column(name = "emp_id", nullable = false)
     private String empId;

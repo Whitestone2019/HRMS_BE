@@ -8557,29 +8557,36 @@ public class AppController {
 	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 	    }
 	}
+	  @Autowired
+	    private WsslCalendarModRepository calendarRepository;
+	
 	@GetMapping("/attendance/checkin/eligibility/{employeeId}")
 	public ResponseEntity<Map<String, Object>> checkCheckInEligibility(@PathVariable String employeeId) {
 		Map<String, Object> response = new HashMap<>();
-
+ 
 		try {
 			// 🔹 Step 1: Check if employee exists
 			usermaintenance employee = usermaintenanceRepository.findByEmpid(employeeId);
 			TraineeMaster trainee = null;
-
+ 
 			if (employee == null) {
 				trainee = traineemasterRepository.findByTrngid(employeeId);
 			}
-
+ 
 			if (employee == null && trainee == null) {
 				response.put("status", "error");
 				response.put("eligible", false);
 				response.put("message", "Employee or Trainee not found.");
 				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
 			}
-
+ 
 			// 🔹 Step 2: Get yesterday’s date
 			LocalDate yesterday = LocalDate.now().minusDays(1);
-
+			
+			Date yesterdayDate = Date.from(
+				    yesterday.atStartOfDay(ZoneId.systemDefault()).toInstant()
+				);	
+ 
 			// 🔹 Step 3: Week off check (Sunday or 2nd/4th Saturday)
 			if (isWeekOff(yesterday)) {
 				response.put("status", "success");
@@ -8587,18 +8594,26 @@ public class AppController {
 				response.put("message", "Yesterday was a week off (Sunday or 2nd/4th Saturday). Check-in allowed.");
 				return ResponseEntity.ok(response);
 			}
-
+			List<WsslCalendarMod> calendarEvents =
+					calendarRepository.findByEventDate(yesterdayDate);
+			if (!calendarEvents.isEmpty()) {
+			    response.put("status", "success");
+			    response.put("eligible", true);
+			    response.put("message", "Yesterday was marked as holiday/week off in calendar. Check-in allowed.");
+			    return ResponseEntity.ok(response);
+			}
+ 
 			// 🔹 Step 4: Convert to java.util.Date
 			Date startOfDay = Date.from(yesterday.atStartOfDay(ZoneId.systemDefault()).toInstant());
 			Date endOfDay = Date.from(yesterday.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant());
-
+ 
 			// 🔹 Step 5: Check attendance record
 			Optional<UserMasterAttendanceMod> attendanceOpt = usermasterattendancemodrepository
 					.findByAttendanceidAndAttendancedate(employeeId, startOfDay);
-
+ 
 			if (attendanceOpt.isPresent()) {
 				String status = attendanceOpt.get().getStatus();
-
+ 
 				if ("Present".equalsIgnoreCase(status)) {
 					response.put("status", "success");
 					response.put("eligible", true);
@@ -8633,13 +8648,13 @@ public class AppController {
 					response.put("eligible", true);
 					response.put("message", "Eligible for check-in, but yesterday was marked as Week off.");
 				}
-
+ 
 				else if ("Public holiday".equalsIgnoreCase(status)) {
 					response.put("status", "success");
 					response.put("eligible", true);
 					response.put("message", "Eligible for check-in, but yesterday was marked as Public holiday.");
 				}
-
+ 
 				else if ("holiday".equalsIgnoreCase(status)) {
 					response.put("status", "success");
 					response.put("eligible", true);
@@ -8647,28 +8662,28 @@ public class AppController {
 				}
 				return ResponseEntity.ok(response);
 			}
-
+ 
 			// 🔹 Step 6: Check pending attendance change request
 			Optional<AttendanceChangeRequest> pendingRequestOpt = attendanceChangeRequestRepository
 					.findByEmployeeIdAndAttendanceDateAndStatus(employeeId, yesterday, "Pending");
-
+ 
 			if (pendingRequestOpt.isPresent()) {
 				response.put("status", "success");
 				response.put("eligible", true);
 				response.put("message", "Pending attendance change request found. Check-in allowed.");
 				return ResponseEntity.ok(response);
 			}
-
+ 
 			// 🔹 Step 7: Check leave record covering yesterday
 			List<EmployeeLeaveMasterTbl> leaves = employeeLeaveMasterRepository
 					.findByEmpidAndStartdateBetweenAndStatusInIgnoreCase(employeeId, startOfDay, endOfDay,
 							Arrays.asList("approved", "pending"));
-
+ 
 			if (!leaves.isEmpty()) {
 				EmployeeLeaveMasterTbl leave = leaves.get(0);
 				LocalDate startDate = leave.getStartdate().toLocalDateTime().toLocalDate();
 				LocalDate endDate = leave.getEnddate().toLocalDateTime().toLocalDate();
-
+ 
 				response.put("status", "success");
 				response.put("eligible", true);
 				response.put("message", String.format(
@@ -8676,14 +8691,14 @@ public class AppController {
 						yesterday, leave.getLeavetype(), startDate, endDate, leave.getStatus()));
 				return ResponseEntity.ok(response);
 			}
-
+ 
 			// 🔹 Step 8: Not eligible (no attendance, leave, or request)
 			response.put("status", "error");
 			response.put("eligible", false);
 			response.put("message",
 					"Yesterday's attendance is not marked and no leave/pending request found. Please update the timesheet and try again.");
 			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-
+ 
 		} catch (Exception e) {
 			e.printStackTrace();
 			response.put("status", "error");
@@ -8692,13 +8707,13 @@ public class AppController {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 		}
 	}
-
+ 
 	private boolean isWeekOff(LocalDate date) {
 		// ✅ Always treat Sunday as week off
 		if (date.getDayOfWeek() == DayOfWeek.SUNDAY) {
 			return true;
 		}
-
+ 
 		// ✅ For Saturdays: check if it’s the 2nd or 4th one in the month
 		if (date.getDayOfWeek() == DayOfWeek.SATURDAY) {
 			LocalDate firstDay = date.withDayOfMonth(1);
@@ -8714,9 +8729,10 @@ public class AppController {
 				return true;
 			}
 		}
-
+ 
 		return false;
 	}
+ 
 
 	@GetMapping("/download/employees/excel")
 	public ResponseEntity<byte[]> downloadEmployeeExcel() {
