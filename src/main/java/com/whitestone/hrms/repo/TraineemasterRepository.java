@@ -46,6 +46,9 @@ public interface TraineemasterRepository extends JpaRepository<TraineeMaster, St
     @Query("SELECT t.emailid FROM TraineeMaster t WHERE t.trngid = :empId")
     String findEmailByTrngid(@Param("empId") String empId);
     
+    @Query("SELECT u FROM TraineeMaster u WHERE u.status = 'Active'")
+    List<TraineeMaster> findAllActiveTrainees();
+    
     @Modifying
     @Transactional
     @Query("UPDATE TraineeMaster t SET t.password = :password WHERE t.trngid = :empId OR t.userid = :empId")

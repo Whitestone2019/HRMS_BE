@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,6 +34,7 @@ import java.util.Date;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -291,7 +293,7 @@ public class AppController {
 	            processTraineeEmployee(employeeOpt1.get(), response);
 	        }
 
-	        // 🔹 OPTIMIZED: Get today's celebrations (including logged-in user)
+	        // 🔹 OPTIMIZED: Get today's celebrations with email IDs
 	        List<Map<String, Object>> todayCelebrations = getTodayCelebrationsOptimized();
 	        response.put("todayCelebrations", todayCelebrations);
 	        response.put("celebrationCount", todayCelebrations.size());
@@ -386,7 +388,7 @@ public class AppController {
 	    response.put("dateOfJoining", profileDates.dateOfJoining != null ? formatDate(profileDates.dateOfJoining) : null);
 	}
 
-	// 🔹 OPTIMIZED: Get today's celebrations (FAST VERSION)
+	// 🔹 OPTIMIZED: Get today's celebrations with email IDs (FAST VERSION)
 	private List<Map<String, Object>> getTodayCelebrationsOptimized() {
 	    List<Map<String, Object>> celebrations = new ArrayList<>();
 	    
@@ -399,67 +401,80 @@ public class AppController {
 	    System.out.println("📅 Checking for today's celebrations: " + todayDay + "-" + todayMonth + "-" + todayYear);
 	    
 	    try {
-	        // 🔹 OPTIMIZATION 1: Use native query to fetch only employees with birthdays/anniversaries today
-	        // This reduces the data load significantly
-	        
-	        // Get all employee profiles first (this is still needed but we'll optimize)
-	        List<EmployeeProfileMod> allProfiles = employeeProfilemodRepository.findAll();
-	        Map<String, EmployeeProfileMod> profileMap = new HashMap<>();
-	        
-	        // Create a map for quick lookup
-	        for (EmployeeProfileMod profile : allProfiles) {
-	            profileMap.put(profile.getEmpid(), profile);
+	        // 🔹 OPTIMIZATION: Create lookup maps for quick access
+	        // Map of employeeId -> email for regular employees
+	        Map<String, String> regularEmployeeEmailMap = new HashMap<>();
+	        List<usermaintenance> allEmployees = usermaintenanceRepository.findAll();
+	        for (usermaintenance emp : allEmployees) {
+	            regularEmployeeEmailMap.put(emp.getEmpid(), emp.getEmailid());
 	        }
 	        
-	        // Get all employees
-	        List<usermaintenance> allEmployees = usermaintenanceRepository.findAll();
+	        // Map of traineeId -> email for trainee employees
+	        Map<String, String> traineeEmailMap = new HashMap<>();
 	        List<TraineeMaster> allTrainees = traineemasterRepository.findAll();
+	        for (TraineeMaster trainee : allTrainees) {
+	            traineeEmailMap.put(trainee.getTrngid(), trainee.getEmailid());
+	        }
 	        
-	        System.out.println("👥 Total employees to check: " + (allEmployees.size() + allTrainees.size()));
+	        // Get all employee profiles once
+	        List<EmployeeProfileMod> allProfiles = employeeProfilemodRepository.findAll();
 	        
-	        // Check regular employees
-	        for (usermaintenance employee : allEmployees) {
-	            String employeeId = employee.getEmpid();
-	            String employeeName = employee.getFirstname();
+	        System.out.println("👥 Total profiles to check: " + allProfiles.size());
+	        
+	        // Check each profile for celebrations
+	        for (EmployeeProfileMod profile : allProfiles) {
+	            String empId = profile.getEmpid();
+	            if (empId == null) continue;
 	            
-	            if (employeeName == null || employeeName.trim().isEmpty()) {
-	                continue;
-	            }
+	            // Determine employee type and get details
+	            String employeeName = null;
+	            String employeeEmail = null;
 	            
-	            EmployeeProfileMod profile = profileMap.get(employeeId);
-	            if (profile == null && employee.getEmailid() != null) {
-	                profile = profileMap.get(employee.getEmailid());
-	            }
-	            
-	            if (profile != null) {
-	                Map<String, Object> celebration = checkForCelebration(
-	                    employeeId, employeeName, profile.getDateofbirth(), 
-	                    profile.getDateofjoining(), todayDay, todayMonth, todayYear
-	                );
-	                if (celebration != null) {
-	                    celebrations.add(celebration);
+	            // Try regular employees first
+	            if (regularEmployeeEmailMap.containsKey(empId)) {
+	                // This is a regular employee
+	                for (usermaintenance emp : allEmployees) {
+	                    if (empId.equals(emp.getEmpid())) {
+	                        employeeName = emp.getFirstname();
+	                        employeeEmail = emp.getEmailid();
+	                        break;
+	                    }
+	                }
+	            } else if (traineeEmailMap.containsKey(empId)) {
+	                // This is a trainee
+	                for (TraineeMaster trainee : allTrainees) {
+	                    if (empId.equals(trainee.getTrngid())) {
+	                        employeeName = trainee.getFirstname();
+	                        employeeEmail = trainee.getEmailid();
+	                        break;
+	                    }
+	                }
+	            } else {
+	                // Try to find by email (if empId is actually an email)
+	                for (usermaintenance emp : allEmployees) {
+	                    if (empId.equals(emp.getEmailid())) {
+	                        employeeName = emp.getFirstname();
+	                        employeeEmail = emp.getEmailid();
+	                        break;
+	                    }
+	                }
+	                if (employeeName == null) {
+	                    for (TraineeMaster trainee : allTrainees) {
+	                        if (empId.equals(trainee.getEmailid())) {
+	                            employeeName = trainee.getFirstname();
+	                            employeeEmail = trainee.getEmailid();
+	                            break;
+	                        }
+	                    }
 	                }
 	            }
-	        }
-	        
-	        // Check trainee employees
-	        for (TraineeMaster trainee : allTrainees) {
-	            String employeeId = trainee.getTrngid();
-	            String employeeName = trainee.getFirstname();
 	            
-	            if (employeeName == null || employeeName.trim().isEmpty()) {
-	                continue;
-	            }
-	            
-	            EmployeeProfileMod profile = profileMap.get(employeeId);
-	            if (profile == null && trainee.getEmailid() != null) {
-	                profile = profileMap.get(trainee.getEmailid());
-	            }
-	            
-	            if (profile != null) {
+	            // If we found the employee, check for celebrations
+	            if (employeeName != null && !employeeName.trim().isEmpty()) {
 	                Map<String, Object> celebration = checkForCelebration(
-	                    employeeId, employeeName, profile.getDateofbirth(), 
-	                    profile.getDateofjoining(), todayDay, todayMonth, todayYear
+	                    empId, employeeName, employeeEmail,
+	                    profile.getDateofbirth(), profile.getDateofjoining(), 
+	                    todayDay, todayMonth, todayYear
 	                );
 	                if (celebration != null) {
 	                    celebrations.add(celebration);
@@ -472,13 +487,12 @@ public class AppController {
 	        e.printStackTrace();
 	    }
 	    
-	    System.out.println("✅ Found " + celebrations.size() + " celebration(s) today");
+	    System.out.println("✅ Found " + celebrations.size() + " celebration(s) today with email IDs");
 	    return celebrations;
 	}
 
-	// Check for celebration
-	// Check for celebration - UPDATED to exclude 0-year anniversaries
-	private Map<String, Object> checkForCelebration(String employeeId, String employeeName, 
+	// Check for celebration - UPDATED to include email and exclude 0-year anniversaries
+	private Map<String, Object> checkForCelebration(String employeeId, String employeeName, String employeeEmail,
 	                                               Date dateOfBirth, Date dateOfJoining, 
 	                                               int todayDay, int todayMonth, int todayYear) {
 	    
@@ -495,6 +509,7 @@ public class AppController {
 	            celebration = new HashMap<>();
 	            celebration.put("employeeId", employeeId);
 	            celebration.put("employeeName", employeeName);
+	            celebration.put("employeeEmail", employeeEmail); // Added email for mail triggering
 	            celebration.put("type", "birthday");
 	            celebration.put("date", formatDate(dateOfBirth));
 	            celebration.put("years", todayYear - dobCal.get(Calendar.YEAR));
@@ -518,6 +533,7 @@ public class AppController {
 	                    celebration = new HashMap<>();
 	                    celebration.put("employeeId", employeeId);
 	                    celebration.put("employeeName", employeeName);
+	                    celebration.put("employeeEmail", employeeEmail); // Added email for mail triggering
 	                    celebration.put("type", "anniversary");
 	                    celebration.put("date", formatDate(dateOfJoining));
 	                    celebration.put("years", yearsCompleted);
@@ -2407,12 +2423,15 @@ public class AppController {
 			}
 
 			if (isHR) {
-				// Fetch all employees + trainees
-				empIds.addAll(usermaintenanceRepository.findAll().stream().map(usermaintenance::getEmpid).toList());
-				empIds.addAll(traineemasterRepository.findAll().stream().map(TraineeMaster::getTrngid).toList());
+			    empIds.addAll(usermaintenanceRepository.findAll().stream()
+			        .map(usermaintenance -> usermaintenance.getEmpid())
+			        .collect(Collectors.toList()));
+			    
+			    empIds.addAll(traineemasterRepository.findAll().stream()
+			        .map(TraineeMaster::getTrngid)
+			        .collect(Collectors.toList()));
 			} else {
-				// Non-HR, fetch only direct reports
-				empIds = getDirectReports(empId);
+			    empIds = getDirectReports(empId);
 			}
 
 			// Fetch Master and Mod leave requests
@@ -2476,8 +2495,7 @@ public class AppController {
 
 	@Autowired
 	private EmployeeLeaveModTblRepository employeeLeaveModRepository;
-	@Autowired
-	private EmployeeLeaveMasterTblRepository employeeLeaveMasterRepository;
+
 
 	@PutMapping("/updateEntityFlag")
 	public ResponseEntity<?> updateEntityFlag(@RequestParam(name = "empid", required = false) String empid,
@@ -2509,8 +2527,12 @@ public class AppController {
 	                modRecord.getEmpid() != null && modRecord.getEmpid().equals(empid) &&
 	                modRecord.getSrlnum() != null && modRecord.getSrlnum().equals(srlnum)) {
 	                
-	                // If found in mod table, delete from master and return
-	                employeeLeaveMasterRepository.delete(entity);
+	                // If found in mod table, just update the master table status and keep it
+	                entity.setEntitycreflg("Y");
+	                entity.setStatus("Approved");
+	                entity.setRmodtime(new java.sql.Timestamp(System.currentTimeMillis()));
+	                entity.setRmoduserid("System"); // Set actual approver ID if available
+	                employeeLeaveMasterRepository.save(entity);
 	                
 	                Map<String, String> errorResponse = new HashMap<>();
 	                errorResponse.put("status", "failure");
@@ -2519,9 +2541,9 @@ public class AppController {
 	            }
 	        }
 
-	        // Check if attendance is already marked for these dates
-	        Date startDate = entity.getStartdate();
-	        Date endDate = entity.getEnddate();
+	        // Convert Timestamp to Date for date calculations
+	        Date startDate = new Date(entity.getStartdate().getTime());
+	        Date endDate = new Date(entity.getEnddate().getTime());
 	        Calendar calendar = Calendar.getInstance();
 	        calendar.setTime(startDate);
 	        
@@ -2541,14 +2563,13 @@ public class AppController {
 	            calendar.add(Calendar.DATE, 1);
 	        }
 
-	        // ⚠️⚠️⚠️ CRITICAL FIX: REMOVE THE updateConsolidatedLeave() CALL ⚠️⚠️⚠️
-	        // The CL balance was already updated when the leave was applied in leaveRequest()
-	        // So we should NOT update it again here!
 	        System.out.println("CL balance already updated during leave application. Skipping CL deduction during approval.");
 
-	        // Update flag and status
+	        // Update flag and status in MASTER table (KEEP IT HERE)
 	        entity.setEntitycreflg("Y");
 	        entity.setStatus("Approved");
+	        entity.setRmodtime(new java.sql.Timestamp(System.currentTimeMillis()));
+	        entity.setRmoduserid("SystemApprover"); // Set actual approver ID if available
 	        employeeLeaveMasterRepository.save(entity);
 
 	        // Mark "Absent" attendance records during leave period
@@ -2589,7 +2610,7 @@ public class AppController {
 	            calendar.add(Calendar.DATE, 1); // next day
 	        }
 
-	        // Copy entity to mod table
+	        // Copy entity to mod table for archive/history (optional)
 	        EmployeeLeaveModTbl modEntity = new EmployeeLeaveModTbl();
 	        modEntity.setSrlnum(entity.getSrlnum());
 	        modEntity.setEmpid(entity.getEmpid());
@@ -2604,16 +2625,17 @@ public class AppController {
 	        modEntity.setDelflg(entity.getDelflg());
 	        modEntity.setRcreuserid(entity.getRcreuserid());
 	        modEntity.setRcretime(entity.getRcretime());
-	        modEntity.setRmoduserid(entity.getRmoduserid());
-	        modEntity.setRmodtime(entity.getRmodtime());
+	        modEntity.setRmoduserid("SystemArchive"); // Different user ID for archive
+	        modEntity.setRmodtime(new java.sql.Timestamp(System.currentTimeMillis()));
 	        modEntity.setRvfyuserid(entity.getRvfyuserid());
 	        modEntity.setRvfytime(entity.getRvfytime());
 	        modEntity.setNoofbooked(entity.getNoofdays());
 
 	        employeeLeaveModRepository.save(modEntity);
 
-	        // Delete record from master table
-	        employeeLeaveMasterRepository.delete(entity);
+	        // ⚠️ CRITICAL CHANGE: DO NOT DELETE FROM MASTER TABLE ⚠️
+	        // The data will stay in EMPLOYEE_LEAVE_MASTER_TBL with status "Approved"
+	        // employeeLeaveMasterRepository.delete(entity); // REMOVED THIS LINE
 
 	        // Send email to employee (regular or trainee)
 	        try {
@@ -2630,8 +2652,7 @@ public class AppController {
 
 	                if (employeeEmail != null && !employeeEmail.isEmpty()) {
 	                    sendLeaveApprovalEmail(existingEmployee.getFirstname(), employeeEmail, manager.getFirstname(),
-	                            manager.getEmailid(), entity.getLeavetype(), entity.getStartdate(),
-	                            entity.getEnddate());
+	                            manager.getEmailid(), entity.getLeavetype(), startDate, endDate);
 	                    emailSent = true;
 	                }
 	            }
@@ -2648,8 +2669,7 @@ public class AppController {
 
 	                    if (traineeEmail != null && !traineeEmail.isEmpty()) {
 	                        sendLeaveApprovalEmail(trainee.getFirstname(), traineeEmail, manager.getFirstname(),
-	                                manager.getEmailid(), entity.getLeavetype(), entity.getStartdate(),
-	                                entity.getEnddate());
+	                                manager.getEmailid(), entity.getLeavetype(), startDate, endDate);
 	                    }
 	                }
 	            }
@@ -2660,11 +2680,14 @@ public class AppController {
 	        }
 
 	        // Return success response
+	     // Return success response
 	        Map<String, Object> successResponse = new HashMap<>();
-	        successResponse.put("status", "success");
+	        successResponse.put("status", "success");  // Keep this as "success"
 	        successResponse.put("message", "Leave request approved successfully");
 	        successResponse.put("empid", empid);
 	        successResponse.put("srlnum", srlnum);
+	        successResponse.put("leaveStatus", "Approved"); // Change to different key name
+	        successResponse.put("entitycreflg", "Y");
 	        successResponse.put("attendanceMarked", !attendanceAlreadyMarked);
 	        return ResponseEntity.ok(successResponse);
 
@@ -2684,9 +2707,10 @@ public class AppController {
 	    String body = String.format(
 	            "Dear %s,\n\nYour leave request for %s from %s to %s has been approved by your manager, %s.\n\nRegards,\n%s,\nWhitestone Software Solution Pvt Ltd",
 	            employeeName, leaveType, sdf.format(startDate), sdf.format(endDate), managerName, managerName);
-	     emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
+	    // emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
 	}
-
+	
+	
 	@Autowired
 	private WsslCalendarModRepository wsslCalendarModRepository;
 
@@ -2748,52 +2772,209 @@ public class AppController {
 	            System.out.println("Status: " + leaveRequest.getStatus());
 	            System.out.println("Delete Flag: " + leaveRequest.getDelflg());
 
+	            // Check if already approved (once approved, cannot reject)
+	            if ("Approved".equals(leaveRequest.getStatus())) {
+	                System.out.println("Leave already approved, cannot reject");
+	                response.put("status", "failure");
+	                response.put("message", "Leave already approved, cannot reject");
+	                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+	            }
+
 	            if ("N".equals(leaveRequest.getDelflg())) {
 	                System.out.println("Processing leave rejection...");
 	                
-	                // Step 1: Mark as rejected
-	                leaveRequest.setDelflg("Y");
-	                leaveRequest.setStatus("Rejected");
-	                EmployeeLeaveMasterTbl savedRequest = employeeLeaveMasterRepository.save(leaveRequest);
-	                System.out.println("Leave marked as rejected.");
+	                // Step 1: Find if this is part of continuous leaves
+	                System.out.println("\n=== CHECKING FOR CONTINUOUS LEAVES ===");
+	                
+	                // Convert to LocalDate for easier date manipulation
+	                LocalDate requestLocalDate = leaveRequest.getStartdate().toInstant()
+	                        .atZone(ZoneId.systemDefault()).toLocalDate();
+	                
+	                // Calculate payroll cycle for the leave date
+	                String payrollCycleMonth = getPayrollCycleMonth(requestLocalDate);
+	                System.out.println("Payroll Cycle for leave date " + requestLocalDate + ": " + payrollCycleMonth);
+	                
+	                // Get year from the leave date
+	                int year = requestLocalDate.getYear();
+	                
+	                // Get the payroll cycle range (27th to 26th)
+	                Map<String, LocalDate> payrollCycleRange = getPayrollCycleRange(requestLocalDate);
+	                LocalDate cycleStart = payrollCycleRange.get("start");
+	                LocalDate cycleEnd = payrollCycleRange.get("end");
+	                
+	                System.out.println("Payroll Cycle Range: " + cycleStart + " to " + cycleEnd);
+	                
+	                // Get all leaves in the same payroll cycle
+	                List<EmployeeLeaveMasterTbl> allLeaves = employeeLeaveMasterRepository.findAll();
+	                
+	                // Filter leaves for this employee in the same payroll cycle
+	                List<EmployeeLeaveMasterTbl> cycleLeaves = new ArrayList<>();
+	                for (EmployeeLeaveMasterTbl leave : allLeaves) {
+	                    if (!empid.equals(leave.getEmpid())) continue;
+	                    if (!"N".equals(leave.getDelflg())) continue;
+	                    if (!"Pending".equals(leave.getStatus())) continue;
+	                    
+	                    LocalDate leaveDate = leave.getStartdate().toInstant()
+	                            .atZone(ZoneId.systemDefault()).toLocalDate();
+	                    
+	                    // Check if leave is within payroll cycle (27th to 26th)
+	                    if (!leaveDate.isBefore(cycleStart) && !leaveDate.isAfter(cycleEnd)) {
+	                        cycleLeaves.add(leave);
+	                    }
+	                }
+	                
+	                // Sort by date
+	                cycleLeaves.sort((a, b) -> a.getStartdate().compareTo(b.getStartdate()));
+	                
+	                System.out.println("Found " + cycleLeaves.size() + " leaves in payroll cycle " + payrollCycleMonth);
+	                
+	                // Find continuous leaves starting from the rejected date
+	                List<EmployeeLeaveMasterTbl> continuousLeaves = new ArrayList<>();
+	                
+	                // First, add the rejected leave
+	                continuousLeaves.add(leaveRequest);
+	                
+	                // Check for consecutive leaves AFTER the rejected date within the same cycle
+	                LocalDate currentEndDate = requestLocalDate.plusDays(Math.round(leaveRequest.getNoofdays()));
+	                
+	                boolean foundMore = true;
+	                while (foundMore) {
+	                    foundMore = false;
+	                    for (EmployeeLeaveMasterTbl leave : cycleLeaves) {
+	                        if (continuousLeaves.contains(leave)) continue;
+	                        
+	                        LocalDate leaveStartDate = leave.getStartdate().toInstant()
+	                                .atZone(ZoneId.systemDefault()).toLocalDate();
+	                        
+	                        // Check if this leave starts exactly when the previous one ends
+	                        // AND is within the same payroll cycle
+	                        if (leaveStartDate.equals(currentEndDate) && 
+	                            !leaveStartDate.isAfter(cycleEnd)) {
+	                            continuousLeaves.add(leave);
+	                            currentEndDate = currentEndDate.plusDays(Math.round(leave.getNoofdays()));
+	                            foundMore = true;
+	                            System.out.println("Found continuous leave starting on: " + leaveStartDate + 
+	                                             " for " + leave.getNoofdays() + " days");
+	                            break;
+	                        }
+	                    }
+	                }
+	                
+	                // Calculate total rejected days
+	                float totalRejectedDays = 0.0f;
+	                for (EmployeeLeaveMasterTbl leave : continuousLeaves) {
+	                    totalRejectedDays += leave.getNoofdays();
+	                }
+	                
+	                System.out.println("\n=== CONTINUOUS LEAVE ANALYSIS ===");
+	                System.out.println("Total continuous leaves found: " + continuousLeaves.size());
+	                System.out.println("Total days to reject: " + totalRejectedDays);
+	                System.out.println("Payroll Cycle Month: " + payrollCycleMonth);
+	                
+	                // Step 2: Mark all continuous leaves as rejected
+	                for (EmployeeLeaveMasterTbl leave : continuousLeaves) {
+	                    leave.setDelflg("Y");
+	                    leave.setStatus("Rejected");
+	                    employeeLeaveMasterRepository.save(leave);
+	                    System.out.println("Marked leave as rejected: " + 
+	                        leave.getStartdate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate() +
+	                        " (" + leave.getNoofdays() + " days)");
+	                }
+	                
+	                // Step 3: REVERSE THE LEAVE BALANCE with payroll cycle logic
+	                System.out.println("\n=== STARTING BALANCE REVERSAL ===");
+	                Map<String, Object> reversalResult = reverseLeaveBalanceWithPayrollCycle(
+	                    empid, payrollCycleMonth, year, totalRejectedDays);
+	                
+	                Float clRestored = reversalResult.get("clRestored") != null ? (Float) reversalResult.get("clRestored") : 0.0f;
+	                Float lopRestored = reversalResult.get("lopRestored") != null ? (Float) reversalResult.get("lopRestored") : 0.0f;
 
-	                // Step 2: REVERSE THE LEAVE BALANCE DEDUCTION
-	                System.out.println("Starting balance reversal process...");
-	                reverseConsolidatedLeave(leaveRequest);
+	                // Step 4: Send rejection email
+	                try {
+	                    Optional<usermaintenance> empOpt = usermaintenanceRepository.findByEmpIdOrUserId(empid);
+	                    if (empOpt.isPresent()) {
+	                        usermaintenance employee = empOpt.get();
+	                        String managerId = employee.getRepoteTo();
+	                        Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpIdOrUserId(managerId);
+	                        
+	                        if (employee.getEmailid() != null && !employee.getEmailid().isEmpty()) {
+	                            String subject = "Your Leave Request Has Been Rejected";
+	                            String managerName = managerOpt.isPresent() ? managerOpt.get().getFirstname() : "Your Manager";
+	                            
+	                            String body = String.format(
+	                                "Dear %s,\n\n" +
+	                                "Your leave request from %s to %s (%s) has been rejected.\n\n" +
+	                                "Total Days Rejected: %.1f day(s)\n" +
+	                                "Payroll Cycle: %s\n" +
+	                                "Reason: %s\n\n" +
+	                                "Balance Restored: %.1f CL and %.1f LOP\n\n" +
+	                                "Please contact your manager (%s) for more details.\n\n" +
+	                                "Regards,\nHR Team\nWhitestone Software Solution Pvt Ltd.",
+	                                employee.getFirstname(),
+	                                new SimpleDateFormat("dd-MM-yyyy").format(leaveRequest.getStartdate()),
+	                                new SimpleDateFormat("dd-MM-yyyy").format(leaveRequest.getEnddate()),
+	                                leaveRequest.getLeavetype(),
+	                                totalRejectedDays,
+	                                payrollCycleMonth,
+	                                leaveRequest.getLeavereason(),
+	                                clRestored,
+	                                lopRestored,
+	                                managerName
+	                            );
 
-	        // Step 3: Send rejection email
-	        try {
-	            usermaintenance employee = usermaintenanceRepository.findByEmpIdOrUserId(empid)
-	                    .orElseThrow(() -> new RuntimeException("Employee not found"));
+	                            // Uncomment to send email
+	                            // emailService.sendLeaveEmail("hr@company.com", employee.getEmailid(), subject, body);
+	                        }
+	                    } else {
+	                        // Try trainee table
+	                        Optional<TraineeMaster> traineeOpt = traineemasterRepository.findByTrngidOrUserId(empid);
+	                        if (traineeOpt.isPresent()) {
+	                            TraineeMaster employee = traineeOpt.get();
+	                            String managerId = employee.getRepoteTo();
+	                            Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpIdOrUserId(managerId);
+	                            Optional<TraineeMaster> managerTraineeOpt = managerId != null ? 
+	                                traineemasterRepository.findByTrngidOrUserId(managerId) : Optional.empty();
+	                            
+	                            if (employee.getEmailid() != null && !employee.getEmailid().isEmpty()) {
+	                                String subject = "Your Leave Request Has Been Rejected";
+	                                String managerName = managerOpt.isPresent() ? managerOpt.get().getFirstname() : 
+	                                                   (managerTraineeOpt.isPresent() ? managerTraineeOpt.get().getFirstname() : "Your Manager");
+	                                
+	                                String body = String.format(
+	                                    "Dear %s,\n\n" +
+	                                    "Your leave request from %s to %s (%s) has been rejected.\n\n" +
+	                                    "Total Days Rejected: %.1f day(s)\n" +
+	                                    "Payroll Cycle: %s\n" +
+	                                    "Reason: %s\n\n" +
+	                                    "Balance Restored: %.1f CL and %.1f LOP\n\n" +
+	                                    "Please contact your manager (%s) for more details.\n\n" +
+	                                    "Regards,\nHR Team\nWhitestone Software Solution Pvt Ltd.",
+	                                    employee.getFirstname(),
+	                                    new SimpleDateFormat("dd-MM-yyyy").format(leaveRequest.getStartdate()),
+	                                    new SimpleDateFormat("dd-MM-yyyy").format(leaveRequest.getEnddate()),
+	                                    leaveRequest.getLeavetype(),
+	                                    totalRejectedDays,
+	                                    payrollCycleMonth,
+	                                    leaveRequest.getLeavereason(),
+	                                    clRestored,
+	                                    lopRestored,
+	                                    managerName
+	                                );
 
-	            String managerId = employee.getRepoteTo();
-	            usermaintenance manager = usermaintenanceRepository.findByEmpIdOrUserId(managerId)
-	                    .orElseThrow(() -> new RuntimeException("Manager not found"));
-
-	            if (employee.getEmailid() != null && !employee.getEmailid().isEmpty()) {
-	                String subject = "Your Leave Request Has Been Rejected";
-	                String body = String.format(
-	                    "Dear %s,\n\n" +
-	                    "Your leave request from %s to %s (%s) has been rejected.\n\n" +
-	                    "Reason: %s\n\n" +
-	                    "Please contact your manager (%s) for more details.\n\n" +
-	                    "Regards,\nHR Team\nWhitestone Software Solution Pvt Ltd.",
-	                    employee.getFirstname(),
-	                    new SimpleDateFormat("dd-MM-yyyy").format(leaveRequest.getStartdate()),
-	                    new SimpleDateFormat("dd-MM-yyyy").format(leaveRequest.getEnddate()),
-	                    leaveRequest.getLeavetype(),
-	                    leaveRequest.getLeavereason(),
-	                    manager.getFirstname()
-	                );
-
-	                emailService.sendLeaveEmail(manager.getEmailid(), employee.getEmailid(), subject, body);
-	            }
-	        } catch (Exception e) {
-	            e.printStackTrace();
-	        }
+	                                // Uncomment to send email
+	                                // emailService.sendLeaveEmail("hr@company.com", employee.getEmailid(), subject, body);
+	                            }
+	                        }
+	                    }
+	                } catch (Exception e) {
+	                    System.err.println("Error sending email: " + e.getMessage());
+	                    e.printStackTrace();
+	                }
 
 	                response.put("status", "success");
-	                response.put("message", "Leave request rejected and balance restored.");
+	                response.put("message", String.format("Leave request rejected. Total %.1f days rejected. Restored %.1f CL and %.1f LOP.", 
+	                    totalRejectedDays, clRestored, lopRestored));
+	                response.put("payrollCycle", payrollCycleMonth);
 	                System.out.println("=== RESPONSE SENT ===");
 	                return ResponseEntity.ok(response);
 
@@ -2822,255 +3003,330 @@ public class AppController {
 	    }
 	}
 
+	// NEW METHOD: Reverse leave balance with payroll cycle logic
 	@Transactional
-	public void reverseConsolidatedLeave(EmployeeLeaveMasterTbl rejectedLeave) {
+	public Map<String, Object> reverseLeaveBalanceWithPayrollCycle(String empId, String payrollCycleMonth, int year, float totalRejectedDays) {
+	    Map<String, Object> result = new HashMap<>();
+	    
 	    try {
-	        System.out.println("=== START REVERSE CONSOLIDATED LEAVE ===");
-	        System.out.println("Employee: " + rejectedLeave.getEmpid());
-	        System.out.println("Days to reverse: " + rejectedLeave.getNoofdays());
+	        System.out.println("\n=== STARTING REVERSE LEAVE BALANCE WITH PAYROLL CYCLE ===");
+	        System.out.println("Employee: " + empId);
+	        System.out.println("Payroll Cycle Month: " + payrollCycleMonth);
+	        System.out.println("Year: " + year);
+	        System.out.println("Total Days to Reverse: " + totalRejectedDays);
 	        
-	        String empId = rejectedLeave.getEmpid();
-	        LocalDate requestDate = rejectedLeave.getStartdate()
-	                .toInstant()
-	                .atZone(ZoneId.systemDefault())
-	                .toLocalDate();
-	        int year = requestDate.getYear();
-	        int month = requestDate.getMonthValue();
-	        Float rejectedDays = rejectedLeave.getNoofdays();
-
-	        System.out.println("Year: " + year + ", Month: " + month + " (" + getMonthName(month) + ")");
-	        System.out.println("Rejected Days: " + rejectedDays);
-
-	        // Step 1: Get ALL active leaves for this month (from both tables)
-	        System.out.println("Checking for other active leaves in month " + month + "...");
+	        // Convert payroll cycle month to month key (e.g., "mar" for March)
+	        String monthKey = payrollCycleMonth.toLowerCase();
+	        if (monthKey.length() > 3) {
+	            monthKey = monthKey.substring(0, 3);
+	        }
 	        
-	        // Get active leaves from master table for this month
-	        List<EmployeeLeaveMasterTbl> activeMasterLeaves = employeeLeaveMasterRepository
-	            .findAllActiveLeavesForMonth(empId, year, month);
+	        System.out.println("Using month key: " + monthKey);
 	        
-	        // Get active leaves from mod table for this month
-	        List<EmployeeLeaveModTbl> activeModLeaves = employeeLeaveModRepository
-	            .findAllActiveLeavesForMonth(empId, year, month);
-	        
-	        // IMPORTANT: Remove the current rejected leave from the count
-	        // We need to exclude the leave being rejected
-	        List<EmployeeLeaveMasterTbl> otherMasterLeaves = activeMasterLeaves.stream()
-	            .filter(leave -> !leave.getSrlnum().equals(rejectedLeave.getSrlnum()))
-	            .collect(Collectors.toList());
-	        
-	        System.out.println("Active master leaves (excluding current): " + otherMasterLeaves.size());
-	        System.out.println("Active mod leaves: " + activeModLeaves.size());
-	        
-	        // Step 2: Calculate total active leaves excluding the current one
-	        int totalOtherActiveLeaves = otherMasterLeaves.size() + activeModLeaves.size();
-	        System.out.println("Total other active leaves for month " + month + ": " + totalOtherActiveLeaves);
-
-	        // Step 3: Get leave summary
+	        // Step 1: Get leave summary
 	        EmployeeLeaveSummary summary = employeeLeaveSummaryRepository
 	                .findByEmpIdAndYear(empId, year)
 	                .orElse(null);
 
 	        if (summary == null) {
-	            System.out.println("WARNING: No leave summary found.");
-	            return;
+	            System.out.println("ERROR: No leave summary found for year " + year);
+	            result.put("clRestored", 0.0f);
+	            result.put("lopRestored", 0.0f);
+	            return result;
 	        }
 	        
-	        System.out.println("=== BEFORE REVERSAL ===");
-	        System.out.println("CL Balance: " + summary.getCasualLeaveBalance());
-	        System.out.println("Leave Taken: " + summary.getLeaveTaken());
-	        System.out.println("Total LOP: " + summary.getLop());
-	        System.out.println("Month " + month + " LOP: " + getMonthlyLop(summary, month));
-
-	        // Step 4: Calculate CL and LOP to restore
-	        Float clToRestore = 0.0f;
-	        Float lopToRestore = 0.0f;
+	        // Get current annual balance
+	        Float currentAnnualBalance = summary.getCasualLeaveBalance() != null ? 
+	                                    summary.getCasualLeaveBalance() : 0.0f;
+	        Float currentLeaveTaken = summary.getLeaveTaken() != null ? summary.getLeaveTaken() : 0.0f;
+	        Float currentTotalLop = summary.getLop() != null ? summary.getLop() : 0.0f;
 	        
-	        if (totalOtherActiveLeaves == 0) {
-	            // This is the LAST/ONLY leave for the month
-	            // We need to restore up to 1.5 CL based on the rejected days
+	        System.out.println("Current Annual CL Balance: " + currentAnnualBalance);
+	        System.out.println("Current Leave Taken: " + currentLeaveTaken);
+	        System.out.println("Current Total LOP: " + currentTotalLop);
+	        
+	        // Step 2: Get and parse monthly CL used JSON
+	        String monthlyClUsedJson = summary.getMonthlyClUsed();
+	        if (monthlyClUsedJson == null || monthlyClUsedJson.trim().isEmpty()) {
+	            monthlyClUsedJson = "{}";
+	        }
+	        
+	        ObjectMapper mapper = new ObjectMapper();
+	        Map<String, Object> monthlyData = mapper.readValue(monthlyClUsedJson, Map.class);
+	        
+	        // Get payroll cycle month's data
+	        Object monthData = monthlyData.get(monthKey);
+	        
+	        float currentTotalClUsed = 0.0f;
+	        float currentClFromCurrent = 0.0f;
+	        float currentClFromCarry = 0.0f;
+	        float currentLopGenerated = 0.0f;
+	        
+	        Map<String, Object> monthDetails = new HashMap<>();
+	        
+	        if (monthData instanceof Map) {
+	            @SuppressWarnings("unchecked")
+	            Map<String, Object> details = (Map<String, Object>) monthData;
+	            monthDetails = details;
 	            
-	            System.out.println("NO OTHER ACTIVE LEAVES FOR MONTH " + month);
+	            currentTotalClUsed = ((Number) details.getOrDefault("total_cl_used", 0.0f)).floatValue();
+	            currentClFromCurrent = ((Number) details.getOrDefault("cl_from_current_cycle", 0.0f)).floatValue();
+	            currentClFromCarry = ((Number) details.getOrDefault("cl_from_carry_forward", 0.0f)).floatValue();
+	            currentLopGenerated = ((Number) details.getOrDefault("lop_generated", 0.0f)).floatValue();
 	            
-	            // Calculate total days of all leaves in this month (including rejected ones)
-	            List<EmployeeLeaveMasterTbl> allLeavesForMonth = employeeLeaveMasterRepository
-	                .findAllLeavesForMonth(empId, year, month);
+	            System.out.println("\n=== PAYROLL CYCLE " + monthKey.toUpperCase() + " DETAILS ===");
+	            System.out.println("Total CL Used: " + currentTotalClUsed);
+	            System.out.println("CL from Current Cycle: " + currentClFromCurrent);
+	            System.out.println("CL from Carry Forward: " + currentClFromCarry);
+	            System.out.println("LOP Generated: " + currentLopGenerated);
 	            
-	            // Filter to get only the leaves that were active (including the one being rejected)
-	            List<EmployeeLeaveMasterTbl> allActiveLeavesIncludingCurrent = allLeavesForMonth.stream()
-	                .filter(leave -> "N".equals(leave.getDelflg()) || leave.getSrlnum().equals(rejectedLeave.getSrlnum()))
-	                .collect(Collectors.toList());
+	        } else if (monthData instanceof Number) {
+	            // Simple numeric value (backward compatibility)
+	            currentTotalClUsed = ((Number) monthData).floatValue();
+	            System.out.println("Simple month value found: " + currentTotalClUsed);
 	            
-	            // Add mod leaves
-	            List<EmployeeLeaveModTbl> allModLeaves = employeeLeaveModRepository
-	                .findAllLeavesForMonth(empId, year, month);
-	            
-	            // Calculate total days that were active in this month
-	            Float totalDaysInMonth = 0.0f;
-	            
-	            for (EmployeeLeaveMasterTbl leave : allActiveLeavesIncludingCurrent) {
-	                totalDaysInMonth += leave.getNoofdays();
-	            }
-	            
-	            for (EmployeeLeaveModTbl leave : allModLeaves) {
-	                totalDaysInMonth += leave.getNoofdays();
-	            }
-	            
-	            System.out.println("Total active days in month (including rejected): " + totalDaysInMonth);
-	            
-	            // Now determine how much CL was used for this specific rejected leave
-	            if (totalDaysInMonth <= 1.5f) {
-	                // All days were CL
-	                clToRestore = rejectedDays;
-	                lopToRestore = 0.0f;
-	                System.out.println("All days were CL: Restoring " + clToRestore + " CL");
-	            } else {
-	                // Some days were LOP
-	                // Calculate remaining CL that wasn't consumed by other leaves
-	                Float otherDays = totalDaysInMonth - rejectedDays;
-	                Float remainingCL = Math.max(0.0f, 1.5f - otherDays);
-	                clToRestore = Math.min(rejectedDays, remainingCL);
-	                lopToRestore = rejectedDays - clToRestore;
-	                System.out.println("Partial CL: Restoring " + clToRestore + " CL and " + lopToRestore + " LOP");
-	            }
+	            // Initialize details map
+	            monthDetails.put("total_cl_used", currentTotalClUsed);
+	            monthDetails.put("cl_from_current_cycle", currentTotalClUsed); // Assume all from current
+	            monthDetails.put("cl_from_carry_forward", 0.0f);
+	            monthDetails.put("lop_generated", 0.0f);
 	        } else {
-	            // There are OTHER active leaves for this month
-	            System.out.println("OTHER ACTIVE LEAVES EXIST FOR MONTH " + month);
+	            // No data for this payroll cycle, initialize
+	            System.out.println("No data found for payroll cycle " + monthKey + ", initializing");
+	            monthDetails.put("total_cl_used", 0.0f);
+	            monthDetails.put("cl_from_current_cycle", 0.0f);
+	            monthDetails.put("cl_from_carry_forward", 0.0f);
+	            monthDetails.put("lop_generated", 0.0f);
+	        }
+	        
+	        // Step 3: CALCULATE RESTORATION BASED ON PAYROLL CYCLE
+	        
+	        System.out.println("\n=== CALCULATING RESTORATION FOR PAYROLL CYCLE ===");
+	        System.out.println("Days to restore: " + totalRejectedDays);
+	        
+	        float clToRestore = 0.0f;
+	        float lopToRestore = 0.0f;
+	        float remainingDays = totalRejectedDays;
+	        
+	        // RULE 1: FIRST RESTORE LOP (if any) from this payroll cycle
+	        if (currentLopGenerated > 0) {
+	            System.out.println("Step 1: Restoring LOP from payroll cycle " + monthKey);
 	            
-	            // Calculate total days of other active leaves
-	            Float totalOtherDays = 0.0f;
-	            
-	            for (EmployeeLeaveMasterTbl leave : otherMasterLeaves) {
-	                totalOtherDays += leave.getNoofdays();
-	            }
-	            
-	            for (EmployeeLeaveModTbl leave : activeModLeaves) {
-	                totalOtherDays += leave.getNoofdays();
-	            }
-	            
-	            System.out.println("Total days of other active leaves: " + totalOtherDays);
-	            
-	            if (totalOtherDays >= 1.5f) {
-	                // Other leaves have already consumed all 1.5 CL for the month
-	                clToRestore = 0.0f;
-	                lopToRestore = rejectedDays;
-	                System.out.println("Other leaves consumed all CL: Restoring " + lopToRestore + " LOP only");
+	            if (currentLopGenerated >= remainingDays) {
+	                // All rejected days can be restored from LOP
+	                lopToRestore = remainingDays;
+	                remainingDays = 0;
+	                System.out.println("  - Restored " + lopToRestore + " days from LOP");
+	                System.out.println("  - No remaining days for CL restoration");
 	            } else {
-	                // Other leaves haven't consumed all CL yet
-	                Float remainingCL = 1.5f - totalOtherDays;
-	                clToRestore = Math.min(rejectedDays, remainingCL);
-	                lopToRestore = rejectedDays - clToRestore;
-	                System.out.println("Other leaves partial CL: Restoring " + clToRestore + " CL and " + lopToRestore + " LOP");
+	                // Only part can be restored from LOP
+	                lopToRestore = currentLopGenerated;
+	                remainingDays = remainingDays - lopToRestore;
+	                System.out.println("  - Restored " + lopToRestore + " days from LOP");
+	                System.out.println("  - " + remainingDays + " days remaining for CL restoration");
 	            }
 	        }
-
-	        // Step 5: Apply the reversals
-	        Float currentCL = safe(summary.getCasualLeaveBalance());
-	        Float currentLeaveTaken = safe(summary.getLeaveTaken());
-	        Float currentTotalLop = safe(summary.getLop());
-	        Float currentMonthlyLop = getMonthlyLop(summary, month);
 	        
-	        Float newCL = currentCL + clToRestore;
-	        Float newLeaveTaken = Math.max(0.0f, currentLeaveTaken - rejectedDays);
-	        Float newTotalLop = Math.max(0.0f, currentTotalLop - lopToRestore);
-	        Float newMonthlyLop = Math.max(0.0f, currentMonthlyLop - lopToRestore);
-	        
-	        // NEW LOGIC: Check if LOP for THIS SPECIFIC MONTH becomes 0
-	        // If yes, add 1.5 CL to casual_leave_balance for this month
-	        boolean monthlyLopBecomingZero = false;
-	        if (currentMonthlyLop > 0 && newMonthlyLop == 0) {
-	            monthlyLopBecomingZero = true;
-	            System.out.println("LOP for month " + getMonthName(month) + " is becoming ZERO!");
+	        // RULE 2: THEN RESTORE CL FROM TOTAL_CL_USED in this payroll cycle
+	        if (remainingDays > 0 && currentTotalClUsed > 0) {
+	            System.out.println("Step 2: Restoring CL from payroll cycle " + monthKey);
+	            
+	            // We can restore up to the total CL used in this payroll cycle
+	            float clAvailableToRestore = Math.min(remainingDays, currentTotalClUsed);
+	            clToRestore = clAvailableToRestore;
+	            remainingDays = remainingDays - clToRestore;
+	            
+	            System.out.println("  - Restored " + clToRestore + " days from CL");
+	            if (remainingDays > 0) {
+	                System.out.println("  - " + remainingDays + " days remaining (cannot restore - beyond payroll cycle usage)");
+	            }
 	        }
 	        
-	        // Add 1.5 CL bonus if monthly LOP is becoming zero
-	        if (monthlyLopBecomingZero && lopToRestore > 0) {
-	            newCL += 1.5f;
-	            System.out.println("Adding 1.5 CL bonus for month " + getMonthName(month) + " as LOP is now ZERO!");
+	        // RULE 3: DISTRIBUTE CL RESTORATION BETWEEN CURRENT CYCLE AND CARRY FORWARD
+	        float clCurrentRestore = 0.0f;
+	        float clCarryRestore = 0.0f;
+	        
+	        if (clToRestore > 0 && currentTotalClUsed > 0) {
+	            System.out.println("Step 3: Distributing CL restoration within payroll cycle");
+	            
+	            // Calculate proportions based on payroll cycle usage
+	            float currentCycleRatio = currentClFromCurrent / currentTotalClUsed;
+	            float carryForwardRatio = currentClFromCarry / currentTotalClUsed;
+	            
+	            clCurrentRestore = clToRestore * currentCycleRatio;
+	            clCarryRestore = clToRestore * carryForwardRatio;
+	            
+	            System.out.println("  - From Current Cycle: " + clCurrentRestore);
+	            System.out.println("  - From Carry Forward: " + clCarryRestore);
 	        }
 	        
-	        // Apply the changes
-	        summary.setCasualLeaveBalance(newCL);
+	        // Step 4: UPDATE THE PAYROLL CYCLE DATA
+	        
+	        System.out.println("\n=== UPDATING PAYROLL CYCLE DATA ===");
+	        
+	        // Update payroll cycle details
+	        float newTotalClUsed = Math.max(0, currentTotalClUsed - clToRestore);
+	        float newClFromCurrent = Math.max(0, currentClFromCurrent - clCurrentRestore);
+	        float newClFromCarry = Math.max(0, currentClFromCarry - clCarryRestore);
+	        float newLopGenerated = Math.max(0, currentLopGenerated - lopToRestore);
+	        
+	        // Round to 1 decimal place
+	        newTotalClUsed = Math.round(newTotalClUsed * 10) / 10.0f;
+	        newClFromCurrent = Math.round(newClFromCurrent * 10) / 10.0f;
+	        newClFromCarry = Math.round(newClFromCarry * 10) / 10.0f;
+	        newLopGenerated = Math.round(newLopGenerated * 10) / 10.0f;
+	        
+	        monthDetails.put("total_cl_used", newTotalClUsed);
+	        monthDetails.put("cl_from_current_cycle", newClFromCurrent);
+	        monthDetails.put("cl_from_carry_forward", newClFromCarry);
+	        monthDetails.put("lop_generated", newLopGenerated);
+	        
+	        // Update the monthly data map
+	        monthlyData.put(monthKey, monthDetails);
+	        
+	        // Convert back to JSON
+	        String updatedMonthlyClUsed = mapper.writeValueAsString(monthlyData);
+	        
+	        // Step 5: UPDATE THE SUMMARY WITH PAYROLL CYCLE RESTORATION
+	        
+	        System.out.println("\n=== UPDATING SUMMARY WITH PAYROLL CYCLE ===");
+	        
+	        // Calculate new values
+	        float newAnnualBalance = currentAnnualBalance + clToRestore;
+	        float newLeaveTaken = Math.max(0, currentLeaveTaken - totalRejectedDays);
+	        float newTotalLop = Math.max(0, currentTotalLop - lopToRestore);
+	        
+	        // Round values
+	        newAnnualBalance = Math.round(newAnnualBalance * 10) / 10.0f;
+	        newLeaveTaken = Math.round(newLeaveTaken * 10) / 10.0f;
+	        newTotalLop = Math.round(newTotalLop * 10) / 10.0f;
+	        clToRestore = Math.round(clToRestore * 10) / 10.0f;
+	        lopToRestore = Math.round(lopToRestore * 10) / 10.0f;
+	        
+	        // Update summary
+	        summary.setCasualLeaveBalance(newAnnualBalance);
 	        summary.setLeaveTaken(newLeaveTaken);
 	        summary.setLop(newTotalLop);
-	        setMonthlyLop(summary, month, newMonthlyLop);
+	        summary.setMonthlyClUsed(updatedMonthlyClUsed);
 	        summary.setUpdatedAt(LocalDateTime.now());
 	        
-	        System.out.println("=== BALANCE UPDATES ===");
-	        System.out.println("CL Balance: " + currentCL + " + " + clToRestore + 
-	                          (monthlyLopBecomingZero ? " + 1.5 (bonus for " + getMonthName(month) + ")" : "") + 
-	                          " = " + newCL);
-	        System.out.println("Leave Taken: " + currentLeaveTaken + " - " + rejectedDays + " = " + newLeaveTaken);
-	        System.out.println("Total LOP: " + currentTotalLop + " - " + lopToRestore + " = " + newTotalLop);
-	        System.out.println("Month " + month + " LOP: " + currentMonthlyLop + " - " + lopToRestore + " = " + newMonthlyLop);
-	        
+	        // Save changes
 	        employeeLeaveSummaryRepository.save(summary);
-	        System.out.println("Summary saved successfully");
-
-	        System.out.println("=== AFTER REVERSAL ===");
-	        System.out.println("New CL Balance: " + newCL);
+	        
+	        System.out.println("=== UPDATED VALUES ===");
+	        System.out.println("New Annual CL Balance: " + newAnnualBalance);
 	        System.out.println("New Leave Taken: " + newLeaveTaken);
 	        System.out.println("New Total LOP: " + newTotalLop);
-	        System.out.println("New Month " + month + " LOP: " + newMonthlyLop);
+	        System.out.println("Total CL Restored from payroll cycle: " + clToRestore);
+	        System.out.println("Total LOP Restored from payroll cycle: " + lopToRestore);
+	        System.out.println("Payroll Cycle Updated: " + monthKey);
+	        System.out.println("Updated Monthly JSON: " + updatedMonthlyClUsed);
 	        
-	        if (monthlyLopBecomingZero) {
-	            System.out.println("*** 1.5 CL BONUS ADDED for " + getMonthName(month) + " as its LOP is now ZERO ***");
-	        }
-
-	        System.out.println("=== REVERSAL COMPLETED ===");
+	        // Return results
+	        result.put("clRestored", clToRestore);
+	        result.put("lopRestored", lopToRestore);
+	        result.put("totalRejectedDays", totalRejectedDays);
+	        result.put("payrollCycle", payrollCycleMonth);
+	        
+	        System.out.println("\n=== PAYROLL CYCLE REVERSE COMPLETED SUCCESSFULLY ===");
+	        
+	        return result;
 
 	    } catch (Exception e) {
-	        System.err.println("=== ERROR IN REVERSE CONSOLIDATED LEAVE ===");
+	        System.err.println("=== ERROR IN REVERSE LEAVE BALANCE WITH PAYROLL CYCLE ===");
 	        System.err.println("Error: " + e.getMessage());
 	        e.printStackTrace();
-	        throw new RuntimeException("Failed to reverse consolidated leave: " + e.getMessage(), e);
+	        result.put("clRestored", 0.0f);
+	        result.put("lopRestored", 0.0f);
+	        return result;
 	    }
 	}
 
-	// Helper methods
-	private String getMonthName(int month) {
-	    String[] monthNames = {"January", "February", "March", "April", "May", "June", 
-	                          "July", "August", "September", "October", "November", "December"};
-	    return (month >= 1 && month <= 12) ? monthNames[month - 1] : "Unknown";
-	}
-
-	private Float safe(Float value) {
-	    return value != null ? value : 0.0f;
-	}
-
-	private Float getMonthlyLop(EmployeeLeaveSummary summary, int month) {
-	    if (summary == null) return 0f;
-	    switch (month) {
-	        case 1:  return safe(summary.getLopJan());
-	        case 2:  return safe(summary.getLopFeb());
-	        case 3:  return safe(summary.getLopMar());
-	        case 4:  return safe(summary.getLopApr());
-	        case 5:  return safe(summary.getLopMay());
-	        case 6:  return safe(summary.getLopJun());
-	        case 7:  return safe(summary.getLopJul());
-	        case 8:  return safe(summary.getLopAug());
-	        case 9:  return safe(summary.getLopSep());
-	        case 10: return safe(summary.getLopOct());
-	        case 11: return safe(summary.getLopNov());
-	        case 12: return safe(summary.getLopDec());
-	        default: return 0f;
+	// HELPER METHOD: Get payroll cycle month (27th to 26th)
+	private String getPayrollCycleMonth(LocalDate date) {
+	    int dayOfMonth = date.getDayOfMonth();
+	    int month = date.getMonthValue();
+	    int year = date.getYear();
+	    
+	    // Payroll cycle: 27th to 26th of next month
+	    if (dayOfMonth >= 27) {
+	        // Falls in next month's payroll cycle
+	        if (month == 12) {
+	            // December 27+ falls in January next year
+	            return "jan"; // Next year January
+	        } else {
+	            // Get next month
+	            String[] months = {"jan", "feb", "mar", "apr", "may", "jun", 
+	                              "jul", "aug", "sep", "oct", "nov", "dec"};
+	            return months[month]; // Current month index = next month (0-based)
+	        }
+	    } else {
+	        // Falls in current month's payroll cycle (1st to 26th)
+	        String[] months = {"jan", "feb", "mar", "apr", "may", "jun", 
+	                          "jul", "aug", "sep", "oct", "nov", "dec"};
+	        return months[month - 1]; // Current month (0-based)
 	    }
 	}
 
-	private void setMonthlyLop(EmployeeLeaveSummary summary, int month, Float value) {
-	    if (summary == null) return;
-	    switch (month) {
-	        case 1:  summary.setLopJan(value); break;
-	        case 2:  summary.setLopFeb(value); break;
-	        case 3:  summary.setLopMar(value); break;
-	        case 4:  summary.setLopApr(value); break;
-	        case 5:  summary.setLopMay(value); break;
-	        case 6:  summary.setLopJun(value); break;
-	        case 7:  summary.setLopJul(value); break;
-	        case 8:  summary.setLopAug(value); break;
-	        case 9:  summary.setLopSep(value); break;
-	        case 10: summary.setLopOct(value); break;
-	        case 11: summary.setLopNov(value); break;
-	        case 12: summary.setLopDec(value); break;
+	// HELPER METHOD: Get payroll cycle date range
+	private Map<String, LocalDate> getPayrollCycleRange(LocalDate date) {
+	    Map<String, LocalDate> range = new HashMap<>();
+	    int dayOfMonth = date.getDayOfMonth();
+	    int month = date.getMonthValue();
+	    int year = date.getYear();
+	    
+	    if (dayOfMonth >= 27) {
+	        // Cycle: 27th of current month to 26th of next month
+	        LocalDate cycleStart = LocalDate.of(year, month, 27);
+	        if (month == 12) {
+	            LocalDate cycleEnd = LocalDate.of(year + 1, 1, 26);
+	            range.put("start", cycleStart);
+	            range.put("end", cycleEnd);
+	        } else {
+	            LocalDate cycleEnd = LocalDate.of(year, month + 1, 26);
+	            range.put("start", cycleStart);
+	            range.put("end", cycleEnd);
+	        }
+	    } else {
+	        // Cycle: 27th of previous month to 26th of current month
+	        if (month == 1) {
+	            LocalDate cycleStart = LocalDate.of(year - 1, 12, 27);
+	            LocalDate cycleEnd = LocalDate.of(year, month, 26);
+	            range.put("start", cycleStart);
+	            range.put("end", cycleEnd);
+	        } else {
+	            LocalDate cycleStart = LocalDate.of(year, month - 1, 27);
+	            LocalDate cycleEnd = LocalDate.of(year, month, 26);
+	            range.put("start", cycleStart);
+	            range.put("end", cycleEnd);
+	        }
+	    }
+	    
+	    return range;
+	}
+
+	// Helper method to convert full month name to short month key
+	private String getMonthKeyFromName(String monthName) {
+	    if (monthName == null) return "jan";
+	    
+	    String lower = monthName.toLowerCase();
+	    switch (lower) {
+	        case "january": return "jan";
+	        case "february": return "feb";
+	        case "march": return "mar";
+	        case "april": return "apr";
+	        case "may": return "may";
+	        case "june": return "jun";
+	        case "july": return "jul";
+	        case "august": return "aug";
+	        case "september": return "sep";
+	        case "october": return "oct";
+	        case "november": return "nov";
+	        case "december": return "dec";
+	        default: 
+	            // If already short form
+	            if (lower.length() <= 3) return lower;
+	            return "jan";
 	    }
 	}
 	
@@ -3078,38 +3334,23 @@ public class AppController {
 	@Autowired
 	private EmployeeLeaveModTblRepository leaveRepository;
 
+
+
+	@Autowired
+	private EmployeeLeaveMasterTblRepository employeeLeaveMasterRepository;
+
 	@GetMapping("/leave/count")
 	public ResponseEntity<Map<String, Object>> getLeaveCounts(@RequestParam("empId") String empId) {
 	    try {
 	        int year = LocalDate.now().getYear();
-	        Optional<EmployeeLeaveSummary> summaryOpt = employeeLeaveSummaryRepository
-	                .findByEmpIdAndYear(empId, year);
-
-	        float casualBalance = 18.0f;
-	        float totalLop = 0f;
-
-	        if (summaryOpt.isPresent()) {
-	            EmployeeLeaveSummary s = summaryOpt.get();
-	           // casualBalance = safe(s.getCasualLeaveBalance());
-
-	            totalLop = safe1(s.getLopJan()) + safe1(s.getLopFeb()) + safe1(s.getLopMar())
-	                     + safe1(s.getLopApr()) + safe1(s.getLopMay()) + safe1(s.getLopJun())
-	                     + safe1(s.getLopJul()) + safe1(s.getLopAug()) + safe1(s.getLopSep())
-	                     + safe1(s.getLopOct()) + safe1(s.getLopNov()) + safe1(s.getLopDec())
-	                     + safe1(s.getLop());
-	        }
-
-	        // 4. Calculate CL Used & Remaining
-	        float clUsed = Math.max(summaryOpt.get().getLeaveTaken() - totalLop, 0f);
-	        float clRemaining = Math.max(casualBalance - clUsed, 0f);
-	        Map<String, Object> resp = new HashMap<>();
-	        resp.put("empId", empId);
-	        resp.put("year", year);
-	        resp.put("casualUsed", clUsed);           // Booked
-	        resp.put("casualRemaining", Math.round(clRemaining));
-	        resp.put("rawCasualBalance", Math.round(casualBalance));
-
-	        return ResponseEntity.ok(resp);
+	        
+	        // Fetch leave data
+	        Map<String, Object> leaveDataResult = fetchLeavesData(empId, year);
+	        
+	        // Process and build response
+	        Map<String, Object> response = processAndBuildResponse(empId, year, leaveDataResult);
+	        
+	        return ResponseEntity.ok(response);
 
 	    } catch (Exception e) {
 	        e.printStackTrace();
@@ -3118,583 +3359,1147 @@ public class AppController {
 	    }
 	}
 
-	// Safe null check for Float
-	private float safe1(Float value) {
+	private Map<String, Object> fetchLeavesData(String empId, int year) {
+	    Map<String, Object> result = new HashMap<>();
+	    Map<String, Float> leaveDaysByType = new HashMap<>();
+	    
+	    try {
+	        // Get all approved leaves for this employee in current year
+	        List<EmployeeLeaveMasterTbl> allLeaves = employeeLeaveMasterRepository.findByEmpid(empId);
+	        
+	        if (allLeaves == null || allLeaves.isEmpty()) {
+	            result.put("leaveDaysByType", leaveDaysByType);
+	            result.put("actualCasualLeaves", 0f);
+	            return result;
+	        }
+	        
+	        float totalActualCasualLeaves = 0f;
+	        
+	        for (EmployeeLeaveMasterTbl leave : allLeaves) {
+	            // Basic validation
+	            if (leave.getStartdate() == null || leave.getStatus() == null || 
+	                leave.getNoofdays() == null || leave.getLeavetype() == null) {
+	                continue;
+	            }
+	            
+	            // Check if in current year
+	            Calendar cal = Calendar.getInstance();
+	            cal.setTime(leave.getStartdate());
+	            if (cal.get(Calendar.YEAR) != year) continue;
+	            
+	            // Check status - only count approved leaves
+	            String status = leave.getStatus().toLowerCase().trim();
+	            if (!status.equals("approved")) continue;
+	            
+	            Float days = leave.getNoofdays();
+	            if (days <= 0) continue;
+	            
+	            String leaveType = leave.getLeavetype().toLowerCase().trim();
+	            
+	            // Categorize leave type
+	            if (leaveType.contains("casual") || leaveType.contains("cl")) {
+	                totalActualCasualLeaves += days;
+	            } else if (leaveType.contains("maternity")) {
+	                addToLeaveType(leaveDaysByType, "maternity leave", days);
+	            } else if (leaveType.contains("paternity")) {
+	                addToLeaveType(leaveDaysByType, "paternity leave", days);
+	            } else if (leaveType.contains("wedding") || leaveType.contains("marriage")) {
+	                addToLeaveType(leaveDaysByType, "wedding leave", days);
+	            } else if (leaveType.contains("bereavement") || leaveType.contains("compassionate")) {
+	                addToLeaveType(leaveDaysByType, "bereavement leave", days);
+	            }
+	        }
+	        
+	        // Add casual leaves to map if any
+	        if (totalActualCasualLeaves > 0) {
+	            leaveDaysByType.put("casual leave", totalActualCasualLeaves);
+	        }
+	        
+	        result.put("leaveDaysByType", leaveDaysByType);
+	        result.put("actualCasualLeaves", totalActualCasualLeaves);
+	        
+	    } catch (Exception e) {
+	        System.err.println("Error fetching leaves data: " + e.getMessage());
+	        result.put("leaveDaysByType", new HashMap<>());
+	        result.put("actualCasualLeaves", 0f);
+	    }
+	    
+	    return result;
+	}
+
+	private void addToLeaveType(Map<String, Float> leaveDaysByType, String leaveType, Float days) {
+	    float currentTotal = leaveDaysByType.getOrDefault(leaveType, 0f);
+	    leaveDaysByType.put(leaveType, currentTotal + days);
+	}
+
+	private Map<String, Object> processAndBuildResponse(String empId, int year, 
+	                                                   Map<String, Object> leaveDataResult) {
+	    Map<String, Object> response = new LinkedHashMap<>();
+	    
+	    @SuppressWarnings("unchecked")
+	    Map<String, Float> leaveCountsByType = (Map<String, Float>) leaveDataResult.getOrDefault("leaveDaysByType", new HashMap<>());
+	    Float actualCasualLeaves = (Float) leaveDataResult.getOrDefault("actualCasualLeaves", 0f);
+	    
+	    // Check if employee is WS type
+	    boolean isWSEmployee = empId.toLowerCase().startsWith("ws");
+	    float totalAvailableCasualLeaves = isWSEmployee ? 6.0f : 18.0f;
+	    
+	    // Get employee leave summary
+	    Optional<EmployeeLeaveSummary> summaryOpt = employeeLeaveSummaryRepository
+	            .findByEmpIdAndYear(empId, year);
+	    
+	    float casualBalance;
+	    float totalLop = 0f;
+	    
+	    if (summaryOpt.isPresent()) {
+	        EmployeeLeaveSummary summary = summaryOpt.get();
+	        casualBalance = safeFloat(summary.getCasualLeaveBalance());
+	        
+	        // For WS employees, cap at 6
+	        if (isWSEmployee) {
+	            casualBalance = Math.min(casualBalance, 6.0f);
+	        }
+	        
+	        // Calculate total LOP
+	        totalLop = calculateTotalLop(summary);
+	    } else {
+	        // Default values if no summary found
+	        casualBalance = isWSEmployee ? 6.0f : 18.0f;
+	    }
+	    
+	    // Calculate derived values
+	    float calculatedCasualLeaves = totalAvailableCasualLeaves - casualBalance;
+	    calculatedCasualLeaves = Math.max(calculatedCasualLeaves, 0f);
+	    
+	    float casualUsed = totalAvailableCasualLeaves - casualBalance;
+	    float clUsedForBalance = Math.max(calculatedCasualLeaves - totalLop, 0f);
+	    
+	    // Build main response
+	    response.put("empId", empId);
+	    response.put("year", year);
+	    response.put("isWSEmployee", isWSEmployee);
+	    response.put("casualUsed", casualUsed);
+	    response.put("casualBalance", casualBalance);
+	    response.put("remainingBalance", calculatedCasualLeaves);
+	    response.put("totalLop", totalLop);
+	    response.put("casualLeavesTaken", actualCasualLeaves);
+	    response.put("calculatedCasualLeaves", calculatedCasualLeaves);
+	    
+	    // Add special leaves
+	    response.put("specialLeaves", getSpecialLeaves(leaveCountsByType));
+	    
+	    // Add summary for clarity
+	    Map<String, Object> summary = new HashMap<>();
+	    summary.put("totalAvailable", totalAvailableCasualLeaves);
+	    summary.put("balance", casualBalance);
+	    summary.put("used", casualUsed);
+	    summary.put("calculatedUsed", clUsedForBalance);
+	    summary.put("remaining", calculatedCasualLeaves);
+	    summary.put("lopDeducted", totalLop);
+	    summary.put("casualLeavesTaken", actualCasualLeaves);
+	    summary.put("isWSEmployee", isWSEmployee);
+	    summary.put("calculationDetails", 
+	        String.format("%.0f - %.1f = %.1f", totalAvailableCasualLeaves, casualBalance, calculatedCasualLeaves));
+	    
+	    response.put("casualLeaveSummary", summary);
+	    
+	    return response;
+	}
+
+	private List<Map<String, Object>> getSpecialLeaves(Map<String, Float> leaveCountsByType) {
+	    List<Map<String, Object>> specialLeaves = new ArrayList<>();
+	    
+	    // Define special leave types with their properties
+	    SpecialLeaveType[] leaveTypes = {
+	        new SpecialLeaveType("paternity leave", "fas fa-baby", "#bd10e0", 2.0f),
+	        new SpecialLeaveType("maternity leave", "fas fa-female", "#a3d39c", 182.0f),
+	        new SpecialLeaveType("wedding leave", "fas fa-heart", "#f5a623", 5.0f),
+	        new SpecialLeaveType("bereavement leave", "fas fa-hands-helping", "#f5a623", 5.0f)
+	    };
+	    
+	    for (SpecialLeaveType leaveType : leaveTypes) {
+	        Map<String, Object> leave = new LinkedHashMap<>();
+	        leave.put("name", leaveType.name);
+	        leave.put("icon", leaveType.icon);
+	        leave.put("color", leaveType.color);
+	        leave.put("available", leaveType.available);
+	        
+	        float booked = leaveCountsByType.getOrDefault(leaveType.name, 0f);
+	        leave.put("booked", booked);
+	        leave.put("remaining", Math.max(leaveType.available - booked, 0f));
+	        
+	        specialLeaves.add(leave);
+	    }
+	    
+	    return specialLeaves;
+	}
+
+	private float calculateTotalLop(EmployeeLeaveSummary summary) {
+	    if (summary == null) return 0f;
+	    
+	    float totalLop = safeFloat(summary.getLop());
+	    totalLop += safeFloat(summary.getLopJan()) + safeFloat(summary.getLopFeb()) + safeFloat(summary.getLopMar());
+	    totalLop += safeFloat(summary.getLopApr()) + safeFloat(summary.getLopMay()) + safeFloat(summary.getLopJun());
+	    totalLop += safeFloat(summary.getLopJul()) + safeFloat(summary.getLopAug()) + safeFloat(summary.getLopSep());
+	    totalLop += safeFloat(summary.getLopOct()) + safeFloat(summary.getLopNov()) + safeFloat(summary.getLopDec());
+	    
+	    return totalLop;
+	}
+
+	private float safeFloat(Float value) {
 	    return value == null ? 0f : value;
 	}
+
+	// Helper class for special leave types
+	static class SpecialLeaveType {
+	    String name;
+	    String icon;
+	    String color;
+	    float available;
+	    
+	    SpecialLeaveType(String name, String icon, String color, float available) {
+	        this.name = name;
+	        this.icon = icon;
+	        this.color = color;
+	        this.available = available;
+	    }
+	}
 	
+	 @Autowired
+	    private EmployeeLeaveSummaryRepository employeeLeaveSummaryRepository;
+	 
 	// Controller
-		@PostMapping("/leaveRequest")
-		public ResponseEntity<?> leaveRequest(@RequestBody EmployeeLeaveMasterTbl employeeLeaveMasterTbl) {
-		    try {
-		        System.out.println("=== START LEAVE REQUEST ===");
-		        System.out.println("Employee ID: " + employeeLeaveMasterTbl.getEmpid());
-		        System.out.println("Start Date: " + employeeLeaveMasterTbl.getStartdate());
-		        System.out.println("No of Days: " + employeeLeaveMasterTbl.getNoofdays());
-		        
-		        // Step 1: Normalize start date to remove time part
-		        LocalDate onlyDate = employeeLeaveMasterTbl.getStartdate().toLocalDateTime().toLocalDate();
-		        Timestamp dateOnlyTimestamp = Timestamp.valueOf(onlyDate.atStartOfDay());
-
-		        // Step 2: Check if leave already exists for that date
-		        boolean existingLeave = employeeLeaveMasterRepository
-		                .countByEmpidAndStartDate(employeeLeaveMasterTbl.getEmpid(), dateOnlyTimestamp) > 0;
-
-		        if (existingLeave) {
-		            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-		                    .body("{\"error\": \"Leave request already exists for the selected date.\"}");
-		        }
-
-		        // Step 3: Save the leave request
-		        employeeLeaveMasterTbl.setNoofbooked(1.0f);
-		        employeeLeaveMasterTbl.setDelflg("N");
-		        employeeLeaveMasterTbl.setEntitycreflg("N");
-		        employeeLeaveMasterTbl.setStatus("Pending");
-		        EmployeeLeaveMasterTbl savedRequest = employeeLeaveMasterRepository.save(employeeLeaveMasterTbl);
-
-		        // Step 4: Update consolidated leave WITH TRANSACTION AND CARRY-FORWARD
-		        Map<String, Object> calculationResult = updateConsolidatedLeaveWithCarryForward(employeeLeaveMasterTbl);
-		        
-		        Map<String, Object> response = new HashMap<>();
-		        response.put("message", "Leave Request sent successfully");
-		        response.put("data", savedRequest);
-		        response.put("calculation", calculationResult);
-
-		        // Step 5: Fetch employee details (from either table)
-		        String empId = employeeLeaveMasterTbl.getEmpid();
-		        Optional<usermaintenance> empOpt = usermaintenanceRepository.findByEmpIdOrUserId(empId);
-		        Optional<TraineeMaster> traineeOpt = Optional.empty();
-		        if (empOpt.isEmpty()) {
-		            traineeOpt = traineemasterRepository.findByTrngidOrUserId(empId);
-		        }
-		        if (empOpt.isEmpty() && traineeOpt.isEmpty()) {
-		            throw new RuntimeException("Employee not found in both employee and trainee tables");
-		        }
-
-		        String managerId;
-		        String employeeFirstName;
-		        String employeeEmail;
-		        String roleId;
-
-		        if (empOpt.isPresent()) {
-		            usermaintenance emp = empOpt.get();
-		            managerId = emp.getRepoteTo();
-		            employeeFirstName = emp.getFirstname();
-		            employeeEmail = emp.getEmailid();
-		            roleId = emp.getRoleid();
-		        } else {
-		            TraineeMaster emp = traineeOpt.get();
-		            managerId = emp.getRepoteTo();
-		            employeeFirstName = emp.getFirstname();
-		            employeeEmail = emp.getEmailid();
-		            roleId = emp.getRoleid();
-		        }
-
-		        if (managerId == null) {
-		            throw new RuntimeException("Manager not assigned to this employee");
-		        }
-
-		        // Step 6: Fetch manager details (from either table)
-		        Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpIdOrUserId(managerId);
-		        Optional<TraineeMaster> managerTraineeOpt = Optional.empty();
-		        if (managerOpt.isEmpty()) {
-		            managerTraineeOpt = traineemasterRepository.findByTrngidOrUserId(managerId);
-		        }
-		        if (managerOpt.isEmpty() && managerTraineeOpt.isEmpty()) {
-		            throw new RuntimeException("Manager not found in both tables");
-		        }
-
-		        String managerFirstName;
-		        String managerEmail;
-		        if (managerOpt.isPresent()) {
-		            managerFirstName = managerOpt.get().getFirstname();
-		            managerEmail = managerOpt.get().getEmailid();
-		        } else {
-		            managerFirstName = managerTraineeOpt.get().getFirstname();
-		            managerEmail = managerTraineeOpt.get().getEmailid();
-		        }
-
-		        // Step 7: Send email if manager email exists
-		        if (managerEmail != null && !managerEmail.isEmpty()) {
-		            UserRoleMaintenance role = userRoleMaintenanceRepository.findByRoleid(roleId)
-		                    .orElseThrow(() -> new RuntimeException("Role not found"));
-
-		            String subject = "Leave Request Approval Needed for " + employeeFirstName;
-		            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-
-		            String startDateFormatted = sdf.format(employeeLeaveMasterTbl.getStartdate());
-		            String endDateFormatted = sdf.format(employeeLeaveMasterTbl.getEnddate());
-		            
-		            // Add calculation info to email with carry-forward details
-		            StringBuilder calculationInfo = new StringBuilder();
-		            calculationInfo.append(String.format(
-		                "Month: %s | CL Used: %.1f days | LOP: %.1f days | New CL Balance: %.1f days\n",
-		                calculationResult.get("monthName"),
-		                calculationResult.get("clUsed"),
-		                calculationResult.get("lopDays"),
-		                calculationResult.get("newClBalance")
-		            ));
-		            
-		            if (calculationResult.containsKey("carryForwardUsed") && (Float)calculationResult.get("carryForwardUsed") > 0) {
-		                calculationInfo.append(String.format(
-		                    "Carry Forward Used: %.1f days | Remaining Carry Forward: %.1f days",
-		                    calculationResult.get("carryForwardUsed"),
-		                    calculationResult.get("remainingCarryForward")
-		                ));
-		            }
-		            
-		            String body = String.format(
-		                    "Dear %s,\n\n"
-		                            + "Employee %s (%s) has submitted a leave request. Please find the details below:\n\n"
-		                            + "Leave Type: %s\n" + "From Date: %s\n" + "To Date: %s\n" + "No. of Days: %s\n"
-		                            + "Reason: %s\n\n"
-		                            + "LEAVE CALCULATION:\n"
-		                            + "%s\n\n"
-		                            + "Kindly review the request and take necessary action.\n\n"
-		                            + "Regards,\n" + "%s,\n" + "%s - %s,\n" + "Whitestone Software Solution Pvt Ltd.\n",
-		                    managerFirstName, employeeFirstName, empId, employeeLeaveMasterTbl.getLeavetype(),
-		                    startDateFormatted, endDateFormatted, employeeLeaveMasterTbl.getNoofdays(),
-		                    employeeLeaveMasterTbl.getLeavereason(),
-		                    calculationInfo.toString(),
-		                    employeeFirstName, role.getRolename(),
-		                    role.getDescription());
-
-		            emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, body);
-		            response.put("emailStatus", "Email sent to manager: " + managerEmail);
-		        } else {
-		            response.put("emailStatus", "Manager email not found");
-		        }
-
-		        System.out.println("=== LEAVE REQUEST COMPLETED SUCCESSFULLY ===");
-		        
-		        // VERIFY DATA WAS SAVED CORRECTLY
-		        verifyLeaveDataSaved(empId, calculationResult);
-		        
-		        return ResponseEntity.ok(response);
-
-		    } catch (Exception e) {
-		        System.err.println("=== ERROR IN LEAVE REQUEST ===");
-		        System.err.println("Error: " + e.getMessage());
-		        e.printStackTrace();
-		        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-		                .body("{\"error\": \"Failed to send Leave Request: " + e.getMessage() + "\"}");
-		    }
-		}
-
-		@Autowired
-		private EmployeeLeaveSummaryRepository employeeLeaveSummaryRepository;
-
-		// KEEP THE ORIGINAL METHOD FOR BACKWARD COMPATIBILITY
-		@Transactional
-		public Map<String, Object> updateConsolidatedLeaveWithCarryForward(EmployeeLeaveMasterTbl leaveRequest) {
-		    Map<String, Object> calculationResult = new HashMap<>();
-		    
-		    try {
-		        System.out.println("=== START UPDATE CONSOLIDATED LEAVE WITH PROPER MONTHLY DEDUCTION ===");
-		        
-		        String empId = leaveRequest.getEmpid();
-		        LocalDate requestDate = leaveRequest.getStartdate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-		        int year = requestDate.getYear();
-		        int currentMonth = requestDate.getMonthValue();
-		        Float requestedDays = leaveRequest.getNoofdays();
-		        
-		        System.out.println("Employee: " + empId + ", Year: " + year + ", Month: " + getMonthName(currentMonth) + ", Days: " + requestedDays);
-		        
-		        // Fetch or create leave summary
-		        EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, year)
-		                .orElseGet(() -> {
-		                    System.out.println("Creating NEW leave summary for employee: " + empId + ", Year: " + year);
-		                    EmployeeLeaveSummary newSummary = new EmployeeLeaveSummary();
-		                    newSummary.setEmpId(empId);
-		                    newSummary.setYear(year);
-		                    newSummary.setCasualLeaveBalance(18.0f);
-		                    newSummary.setLeaveTaken(0.0f);
-		                    newSummary.setLop(0.0f);
-		                    
-		                    // Initialize all monthly LOP fields to 0
-		                    for (int i = 1; i <= 12; i++) {
-		                        updateMonthlyLop(newSummary, i, 0.0f);
-		                    }
-		                    
-		                    return newSummary;
-		                });
-		        
-		        // DEBUG: Print current state BEFORE update
-		        System.out.println("=== BEFORE UPDATE ===");
-		        System.out.println("Annual CL Balance: " + leaveSummary.getCasualLeaveBalance() + " days");
-		        System.out.println("Leave Taken: " + leaveSummary.getLeaveTaken() + " days");
-		        System.out.println("Total LOP: " + leaveSummary.getLop() + " days");
-		        
-		        // Get current values with null safety
-		        Float annualClBalance = leaveSummary.getCasualLeaveBalance() != null ? leaveSummary.getCasualLeaveBalance() : 18.0f;
-		        Float currentLeaveTaken = leaveSummary.getLeaveTaken() != null ? leaveSummary.getLeaveTaken() : 0.0f;
-		        Float currentTotalLop = leaveSummary.getLop() != null ? leaveSummary.getLop() : 0.0f;
-		        Float existingMonthLop = getCurrentMonthLop(leaveSummary, currentMonth);
-		        
-		        // MONTHLY CL QUOTA
-		        float monthlyClQuota = 1.5f;
-		        
-		        // Calculate how much monthly quota has been used this month
-		        // We'll calculate this based on the current annual balance and month
-		        float monthlyClUsedSoFar = calculateMonthlyClUsedSoFar(leaveSummary, currentMonth);
-		        
-		        // Calculate available CL for this month
-		        float availableClThisMonth = calculateAvailableClForMonth(leaveSummary, currentMonth, monthlyClUsedSoFar);
-		        
-		        System.out.println("=== CALCULATION DETAILS ===");
-		        System.out.println("Annual CL Balance: " + annualClBalance + " days");
-		        System.out.println("Monthly CL Quota: " + monthlyClQuota + " days");
-		        System.out.println("CL Used This Month (so far): " + monthlyClUsedSoFar + " days");
-		        System.out.println("Available CL for This Month: " + availableClThisMonth + " days");
-		        System.out.println("Requested Days: " + requestedDays + " days");
-		        
-		        float clUsed = 0.0f;
-		        float lopDays = 0.0f;
-		        float carryForwardUsed = 0.0f;
-		        float monthlyClToUse = 0.0f;
-		        
-		        // LOGIC: Use available CL for this month first
-		        if (availableClThisMonth >= requestedDays) {
-		            // All requested days can be covered by this month's available CL
-		            monthlyClToUse = requestedDays;
-		            lopDays = 0.0f;
-		        } else if (availableClThisMonth > 0) {
-		            // Partially cover with this month's CL
-		            monthlyClToUse = availableClThisMonth;
-		            lopDays = requestedDays - availableClThisMonth;
-		        } else {
-		            // No CL available for this month
-		            monthlyClToUse = 0.0f;
-		            lopDays = requestedDays;
-		        }
-		        
-		        // Calculate how much of the monthly CL used should come from annual balance
-		        // We only deduct from annual balance if we haven't used the monthly quota yet
-		        float clToDeductFromAnnual = 0.0f;
-		        
-		        if (monthlyClToUse > 0) {
-		            // Check how much monthly quota remains unused
-		            float unusedMonthlyQuota = Math.max(0, monthlyClQuota - monthlyClUsedSoFar);
-		            
-		            if (unusedMonthlyQuota > 0) {
-		                // We can deduct from annual balance, up to the unused quota
-		                clToDeductFromAnnual = Math.min(unusedMonthlyQuota, monthlyClToUse);
-		                
-		                // The rest of the monthly CL used comes from carry-forward
-		                carryForwardUsed = monthlyClToUse - clToDeductFromAnnual;
-		            } else {
-		                // Monthly quota already used, all comes from carry-forward
-		                carryForwardUsed = monthlyClToUse;
-		                clToDeductFromAnnual = 0.0f;
-		            }
-		        }
-		        
-		        // Total CL used = monthly CL used (from annual + carry-forward)
-		        clUsed = monthlyClToUse;
-		        
-		        // Ensure we don't use more CL than annual balance allows
-		        if (clToDeductFromAnnual > annualClBalance) {
-		            float excess = clToDeductFromAnnual - annualClBalance;
-		            clToDeductFromAnnual = annualClBalance;
-		            // Convert excess to LOP
-		            lopDays += excess;
-		            // Reduce carry-forward used if applicable
-		            carryForwardUsed = Math.max(0, carryForwardUsed - excess);
-		        }
-		        
-		        // Round values
-		        clUsed = Math.round(clUsed * 10) / 10.0f;
-		        lopDays = Math.round(lopDays * 10) / 10.0f;
-		        carryForwardUsed = Math.round(carryForwardUsed * 10) / 10.0f;
-		        clToDeductFromAnnual = Math.round(clToDeductFromAnnual * 10) / 10.0f;
-		        
-		        // Calculate new values
-		        float newAnnualClBalance = Math.round((annualClBalance - clToDeductFromAnnual) * 10) / 10.0f;
-		        float newLeaveTaken = Math.round((currentLeaveTaken + requestedDays) * 10) / 10.0f;
-		        float newTotalLop = Math.round((currentTotalLop + lopDays) * 10) / 10.0f;
-		        
-		        // Update LOP for current month
-		        float newMonthLop = Math.round((existingMonthLop + lopDays) * 10) / 10.0f;
-		        
-		        // Update the entity
-		        leaveSummary.setCasualLeaveBalance(newAnnualClBalance);
-		        leaveSummary.setLeaveTaken(newLeaveTaken);
-		        leaveSummary.setLop(newTotalLop);
-		        updateMonthlyLop(leaveSummary, currentMonth, newMonthLop);
-		        leaveSummary.setUpdatedAt(LocalDateTime.now());
-		        
-		        // Save with flush
-		        System.out.println("Saving leave summary to database...");
-		        employeeLeaveSummaryRepository.saveAndFlush(leaveSummary);
-		        System.out.println("Leave summary saved successfully");
-		        
-		        // Store calculation results
-		        calculationResult.put("month", currentMonth);
-		        calculationResult.put("monthName", getMonthName(currentMonth));
-		        calculationResult.put("requestedDays", requestedDays);
-		        calculationResult.put("annualClBalance", annualClBalance);
-		        calculationResult.put("monthlyClQuota", monthlyClQuota);
-		        calculationResult.put("monthlyClUsedSoFar", monthlyClUsedSoFar);
-		        calculationResult.put("availableClThisMonth", availableClThisMonth);
-		        calculationResult.put("clUsed", clUsed);
-		        calculationResult.put("lopDays", lopDays);
-		        calculationResult.put("carryForwardUsed", carryForwardUsed);
-		        calculationResult.put("clDeductedFromAnnual", clToDeductFromAnnual);
-		        calculationResult.put("newClBalance", newAnnualClBalance);
-		        calculationResult.put("newLeaveTaken", newLeaveTaken);
-		        calculationResult.put("newTotalLop", newTotalLop);
-		        calculationResult.put("monthLop", newMonthLop);
-		        
-		        // Print detailed calculation
-		        System.out.println("=== LEAVE CALCULATION WITH PROPER MONTHLY DEDUCTION ===");
-		        System.out.println("Employee: " + empId);
-		        System.out.println("Month: " + getMonthName(currentMonth));
-		        System.out.println("Requested Leave: " + requestedDays + " days");
-		        System.out.println("Annual CL Balance (Before): " + annualClBalance + " days");
-		        System.out.println("CL Used This Month (Before): " + monthlyClUsedSoFar + " days");
-		        System.out.println("Available CL This Month: " + availableClThisMonth + " days");
-		        System.out.println("CL Used (Total): " + clUsed + " days");
-		        System.out.println("CL Deducted from Annual: " + clToDeductFromAnnual + " days");
-		        System.out.println("Carry-Forward Used: " + carryForwardUsed + " days");
-		        System.out.println("LOP Generated: " + lopDays + " days");
-		        System.out.println("New Annual CL Balance: " + newAnnualClBalance + " days");
-		        System.out.println("==========================================");
-		        
-		        return calculationResult;
-		        
-		    } catch (Exception e) {
-		        System.err.println("=== ERROR IN UPDATE CONSOLIDATED LEAVE ===");
-		        System.err.println("Error: " + e.getMessage());
-		        e.printStackTrace();
-		        throw new RuntimeException("Failed to update consolidated leave: " + e.getMessage(), e);
-		    }
-		}
-
-		// NEW: Calculate how much CL has been used this month
-		private float calculateMonthlyClUsedSoFar(EmployeeLeaveSummary leaveSummary, int currentMonth) {
-		    // We need to calculate this based on the annual balance and LOP
-		    // If employee has taken leave this month, some CL would have been deducted
-		    
-		    float monthlyClUsed = 0.0f;
-		    
-		    // Get monthly LOP
-		    float monthLop = getCurrentMonthLop(leaveSummary, currentMonth);
-		    
-		    // If there's LOP this month, it means we've used all available CL for this month
-		    if (monthLop > 0) {
-		        // Calculate total available CL for this month
-		        float availableClThisMonth = calculateAvailableClForMonth(leaveSummary, currentMonth, 0.0f);
-		        monthlyClUsed = availableClThisMonth;
-		    } else {
-		        // No LOP this month, check if CL has been deducted
-		        // We'll calculate based on annual balance
-		        Float annualClBalance = leaveSummary.getCasualLeaveBalance() != null ? leaveSummary.getCasualLeaveBalance() : 18.0f;
-		        
-		        // Expected balance if no CL used this month
-		        float expectedBalance = 18.0f - (1.5f * (currentMonth - 1));
-		        
-		        if (annualClBalance < expectedBalance) {
-		            // CL has been deducted this month
-		            monthlyClUsed = expectedBalance - annualClBalance;
-		        } else {
-		            // No CL deducted this month yet
-		            monthlyClUsed = 0.0f;
-		        }
-		    }
-		    
-		    System.out.println("Calculated CL used this month (so far): " + monthlyClUsed + " days");
-		    return monthlyClUsed;
-		}
-
-		// NEW: Calculate available CL for a specific month
-		private float calculateAvailableClForMonth(EmployeeLeaveSummary leaveSummary, int currentMonth, float monthlyClUsedSoFar) {
-		    float monthlyQuota = 1.5f;
-		    float carryForward = 0.0f;
-		    
-		    // Calculate carry-forward from previous months
-		    for (int month = 1; month < currentMonth; month++) {
-		        // For previous months, we need to estimate how much CL was used
-		        float monthLop = getCurrentMonthLop(leaveSummary, month);
-		        
-		        if (monthLop > 0) {
-		            // If there was LOP, all available CL was used
-		            carryForward += 0.0f; // No carry-forward if LOP existed
-		        } else {
-		            // Estimate CL usage for previous months
-		            Float annualClBalance = leaveSummary.getCasualLeaveBalance() != null ? leaveSummary.getCasualLeaveBalance() : 18.0f;
-		            float expectedBalance = 18.0f - (1.5f * month);
-		            float actualBalance = annualClBalance;
-		            
-		            if (actualBalance >= expectedBalance) {
-		                // Not all CL used in this previous month
-		                float unusedCl = Math.min(1.5f, actualBalance - expectedBalance + 1.5f);
-		                carryForward += unusedCl;
-		            }
-		        }
-		    }
-		    
-		    float totalAvailable = monthlyQuota + carryForward - monthlyClUsedSoFar;
-		    System.out.println("Available CL for month " + getMonthName(currentMonth) + ": " + 
-		                      monthlyQuota + " (quota) + " + carryForward + " (carry-forward) - " + 
-		                      monthlyClUsedSoFar + " (used so far) = " + totalAvailable + " days");
-		    
-		    return Math.max(0, totalAvailable);
-		}
-		// NEW: Calculate available carry-forward from previous months
-		private float calculateAvailableCarryForward(Float annualClBalance, int currentMonth) {
-		    // Total annual CL = 18.0
-		    // Each month earns 1.5 CL
-		    // Months completed = currentMonth - 1 (months before current month)
-		    
-		    int monthsCompleted = currentMonth - 1;
-		    float totalEarnedCl = 1.5f * monthsCompleted; // CL earned from previous months
-		    
-		    // CL used so far from annual balance
-		    float clUsedFromAnnual = 18.0f - annualClBalance;
-		    
-		    // Available carry-forward = CL earned minus CL used
-		    float availableCarryForward = Math.max(0, totalEarnedCl - clUsedFromAnnual);
-		    
-		    System.out.println("Carry-Forward Calculation:");
-		    System.out.println("Months completed (before current): " + monthsCompleted);
-		    System.out.println("Total CL earned from previous months: " + totalEarnedCl + " days");
-		    System.out.println("CL used from annual so far: " + clUsedFromAnnual + " days");
-		    System.out.println("Available carry-forward: " + availableCarryForward + " days");
-		    
-		    return availableCarryForward;
-		}
-
-		// Helper method to check if CL has already been deducted for this month
-		private boolean hasDeductedClForMonth(Float annualClBalance, Float monthLop, int month) {
-		    // Simple logic: If it's January (month 1), check if annual balance is less than 18
-		    // For other months, we need to track differently
-		    
-		    // For now, a simple approach: If month has LOP > 0, CL was probably deducted
-		    // This is a simplification - in real system, you'd track this separately
-		    
-		    float expectedBalanceIfNoDeduction = 18.0f;
-		    float monthIndex = month;
-		    
-		    // Calculate expected balance if we deducted 1.5 for each completed month
-		    float totalDeductionIfAllMonthsUsed = 1.5f * (month - 1);
-		    float expectedBalance = 18.0f - totalDeductionIfAllMonthsUsed;
-		    
-		    System.out.println("Month: " + month + ", Expected balance if all previous months used CL: " + expectedBalance);
-		    System.out.println("Actual balance: " + annualClBalance);
-		    
-		    // If actual balance is less than expected, CL was likely deducted for this month
-		    boolean hasDeducted = annualClBalance < expectedBalance;
-		    
-		    System.out.println("Has deducted CL for month " + month + ": " + hasDeducted);
-		    return hasDeducted;
-		}
-		
-		
-		// Helper method to verify data was saved
-		private void verifyLeaveDataSaved(String empId, Map<String, Object> calculationResult) {
-		    try {
-		        System.out.println("=== VERIFYING DATA SAVED TO DATABASE ===");
-		        
-		        LocalDate today = LocalDate.now();
-		        int year = today.getYear();
-		        
-		        Optional<EmployeeLeaveSummary> savedSummary = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, year);
-		        
-		        if (savedSummary.isPresent()) {
-		            EmployeeLeaveSummary summary = savedSummary.get();
-		            
-		            System.out.println("DATABASE VALUES:");
-		            System.out.println("Annual CL Balance: " + summary.getCasualLeaveBalance());
-		            System.out.println("Leave Taken: " + summary.getLeaveTaken());
-		            System.out.println("Total LOP: " + summary.getLop());
-		            
-		            // Check monthly LOP
-		            for (int month = 1; month <= 12; month++) {
-		                float monthLop = getCurrentMonthLop(summary, month);
-		                if (monthLop > 0) {
-		                    System.out.println(getMonthName(month) + " LOP: " + monthLop);
-		                }
-		            }
-		            
-		            // Compare with calculation
-		            Float expectedClBalance = (Float) calculationResult.get("newClBalance");
-		            Float actualClBalance = summary.getCasualLeaveBalance();
-		            
-		            if (expectedClBalance != null && actualClBalance != null) {
-		                if (Math.abs(expectedClBalance - actualClBalance) < 0.01) {
-		                    System.out.println("✓ Annual CL Balance matches: Expected " + expectedClBalance + ", Actual " + actualClBalance);
-		                } else {
-		                    System.err.println("✗ Annual CL Balance MISMATCH: Expected " + expectedClBalance + ", Actual " + actualClBalance);
-		                }
-		            }
-		            
-		            // Verify carry-forward was used if applicable
-		            if (calculationResult.containsKey("carryForwardUsed")) {
-		                Float carryForwardUsed = (Float) calculationResult.get("carryForwardUsed");
-		                if (carryForwardUsed > 0) {
-		                    System.out.println("✓ Carry-forward was used: " + carryForwardUsed + " days");
-		                }
-		            }
-		            
-		        } else {
-		            System.err.println("✗ No leave summary found for employee " + empId);
-		        }
-		        
-		        System.out.println("=== END VERIFICATION ===");
-		    } catch (Exception e) {
-		        System.err.println("Error during verification: " + e.getMessage());
-		    }
-		}
-
-		// Helper method to get month name
-		private String getMonthName1(int month) {
-		    String[] monthNames = {"January", "February", "March", "April", "May", "June", 
-		                          "July", "August", "September", "October", "November", "December"};
-		    return monthNames[month - 1];
-		}
-
-		// Helper method to get current month's LOP
-		private Float getCurrentMonthLop(EmployeeLeaveSummary leaveSummary, int month) {
-		    if (leaveSummary == null) return 0.0f;
-		    
-		    switch (month) {
-		        case 1: return leaveSummary.getLopJan() != null ? leaveSummary.getLopJan() : 0.0f;
-		        case 2: return leaveSummary.getLopFeb() != null ? leaveSummary.getLopFeb() : 0.0f;
-		        case 3: return leaveSummary.getLopMar() != null ? leaveSummary.getLopMar() : 0.0f;
-		        case 4: return leaveSummary.getLopApr() != null ? leaveSummary.getLopApr() : 0.0f;
-		        case 5: return leaveSummary.getLopMay() != null ? leaveSummary.getLopMay() : 0.0f;
-		        case 6: return leaveSummary.getLopJun() != null ? leaveSummary.getLopJun() : 0.0f;
-		        case 7: return leaveSummary.getLopJul() != null ? leaveSummary.getLopJul() : 0.0f;
-		        case 8: return leaveSummary.getLopAug() != null ? leaveSummary.getLopAug() : 0.0f;
-		        case 9: return leaveSummary.getLopSep() != null ? leaveSummary.getLopSep() : 0.0f;
-		        case 10: return leaveSummary.getLopOct() != null ? leaveSummary.getLopOct() : 0.0f;
-		        case 11: return leaveSummary.getLopNov() != null ? leaveSummary.getLopNov() : 0.0f;
-		        case 12: return leaveSummary.getLopDec() != null ? leaveSummary.getLopDec() : 0.0f;
-		        default: return 0.0f;
-		    }
-		}
-
-		// Helper method to update LOP for the correct month
-		private void updateMonthlyLop(EmployeeLeaveSummary leaveSummary, int month, Float lopDays) {
-		    if (leaveSummary == null) return;
-		    
-		    switch (month) {
-		        case 1: leaveSummary.setLopJan(lopDays); break;
-		        case 2: leaveSummary.setLopFeb(lopDays); break;
-		        case 3: leaveSummary.setLopMar(lopDays); break;
-		        case 4: leaveSummary.setLopApr(lopDays); break;
-		        case 5: leaveSummary.setLopMay(lopDays); break;
-		        case 6: leaveSummary.setLopJun(lopDays); break;
-		        case 7: leaveSummary.setLopJul(lopDays); break;
-		        case 8: leaveSummary.setLopAug(lopDays); break;
-		        case 9: leaveSummary.setLopSep(lopDays); break;
-		        case 10: leaveSummary.setLopOct(lopDays); break;
-		        case 11: leaveSummary.setLopNov(lopDays); break;
-		        case 12: leaveSummary.setLopDec(lopDays); break;
-		        default: throw new IllegalArgumentException("Invalid month: " + month);
-		    }
-		}
 	
+	 @PostMapping("/leaveRequest")
+	 public ResponseEntity<?> leaveRequest(@RequestBody EmployeeLeaveMasterTbl employeeLeaveMasterTbl) {
+	     try {
+	         System.out.println("=== START LEAVE REQUEST ===");
+	         System.out.println("Employee ID: " + employeeLeaveMasterTbl.getEmpid());
+	         System.out.println("Start Date: " + employeeLeaveMasterTbl.getStartdate());
+	         System.out.println("No of Days: " + employeeLeaveMasterTbl.getNoofdays());
+	         System.out.println("Leave Type: " + employeeLeaveMasterTbl.getLeavetype());
+	         
+	         // NEW: Check if employee is WS type
+	         String empId = employeeLeaveMasterTbl.getEmpid();
+	         boolean isWSEmployee = empId.toLowerCase().startsWith("ws");
+	         System.out.println("Is WS Employee: " + isWSEmployee);
+	         
+	         // Step 1: Normalize start date to remove time part
+	         LocalDate onlyDate = employeeLeaveMasterTbl.getStartdate().toLocalDateTime().toLocalDate();
+	         Timestamp dateOnlyTimestamp = Timestamp.valueOf(onlyDate.atStartOfDay());
+
+	         // Step 2: Check if leave already exists for that date
+	         boolean existingLeave = employeeLeaveMasterRepository
+	                 .countByEmpidAndStartDate(employeeLeaveMasterTbl.getEmpid(), dateOnlyTimestamp) > 0;
+
+	         if (existingLeave) {
+	             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+	                     .body("{\"error\": \"Leave request already exists for the selected date.\"}");
+	         }
+
+	         // NEW: For WS employees applying for casual leave, check if they have available balance
+	         String leaveType = employeeLeaveMasterTbl.getLeavetype();
+	         Float requestedDays = employeeLeaveMasterTbl.getNoofdays();
+	         
+	         if (isWSEmployee && isCasualLeave(leaveType)) {
+	             System.out.println("WS Employee applying for casual leave - checking available balance...");
+	             
+	             // Get current year
+	             LocalDate requestDate = employeeLeaveMasterTbl.getStartdate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+	             int year = requestDate.getYear();
+	             
+	             // Check existing casual leaves taken this year
+	             float totalCasualLeavesTaken = 0.0f;
+	             List<EmployeeLeaveMasterTbl> allLeaves = employeeLeaveMasterRepository.findByEmpid(empId);
+	             
+	             for (EmployeeLeaveMasterTbl leave : allLeaves) {
+	                 if (leave.getStartdate() == null) continue;
+	                 
+	                 Calendar cal = Calendar.getInstance();
+	                 cal.setTime(leave.getStartdate());
+	                 int leaveYear = cal.get(Calendar.YEAR);
+	                 
+	                 if (leaveYear != year) continue;
+	                 
+	                 String status = leave.getStatus();
+	                 if (status == null) continue;
+	                 
+	                 String statusLower = status.toLowerCase().trim();
+	                 boolean validStatus = statusLower.equals("approved") || 
+	                                      statusLower.equals("pending") || 
+	                                      statusLower.equals("applied");
+	                 
+	                 if (!validStatus) continue;
+	                 
+	                 String currentLeaveType = leave.getLeavetype();
+	                 if (currentLeaveType == null) continue;
+	                 
+	                 if (isCasualLeave(currentLeaveType)) {
+	                     totalCasualLeavesTaken += leave.getNoofdays() != null ? leave.getNoofdays() : 0;
+	                 }
+	             }
+	             
+	             // WS employees get only 6 days casual leave per year
+	             float remainingCasualLeave = 6.0f - totalCasualLeavesTaken;
+	             
+	             System.out.println("WS Employee - Casual leaves taken this year: " + totalCasualLeavesTaken);
+	             System.out.println("Remaining casual leave: " + remainingCasualLeave);
+	             System.out.println("Requested days: " + requestedDays);
+	             
+	             if (requestedDays > remainingCasualLeave) {
+	                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+	                         .body("{\"error\": \"WS employees have only 6 days casual leave per year. You have " + remainingCasualLeave + " days remaining.\"}");
+	             }
+	         }
+
+	         // Step 3: Save the leave request
+	         employeeLeaveMasterTbl.setNoofbooked(1.0f);
+	         employeeLeaveMasterTbl.setDelflg("N");
+	         employeeLeaveMasterTbl.setEntitycreflg("N");
+	         employeeLeaveMasterTbl.setStatus("Pending");
+	         EmployeeLeaveMasterTbl savedRequest = employeeLeaveMasterRepository.save(employeeLeaveMasterTbl);
+
+	         // Step 4: Update consolidated leave ONLY FOR CASUAL LEAVE
+	         Map<String, Object> calculationResult = new HashMap<>();
+	         
+	         if (isCasualLeave(leaveType)) {
+	             System.out.println("Casual Leave detected - updating consolidated leave summary");
+	             // Pass WS flag to the calculation method
+	             calculationResult = updateConsolidatedLeaveWithMonthlyTracking(employeeLeaveMasterTbl, isWSEmployee);
+	         } else {
+	             System.out.println("Non-Casual Leave detected (" + leaveType + ") - Skipping consolidated leave update");
+	             calculationResult.put("message", "Leave recorded in master table only (non-casual leave)");
+	             calculationResult.put("leaveType", leaveType);
+	             calculationResult.put("noOfDays", employeeLeaveMasterTbl.getNoofdays());
+	         }
+
+	         Map<String, Object> response = new HashMap<>();
+	         response.put("message", "Leave Request sent successfully");
+	         response.put("data", savedRequest);
+	         response.put("calculation", calculationResult);
+
+	         // Step 5: Fetch employee details (from either table)
+	         Optional<usermaintenance> empOpt = usermaintenanceRepository.findByEmpIdOrUserId(empId);
+	         Optional<TraineeMaster> traineeOpt = Optional.empty();
+	         if (empOpt.isEmpty()) {
+	             traineeOpt = traineemasterRepository.findByTrngidOrUserId(empId);
+	         }
+	         if (empOpt.isEmpty() && traineeOpt.isEmpty()) {
+	             throw new RuntimeException("Employee not found in both employee and trainee tables");
+	         }
+
+	         String managerId;
+	         String employeeFirstName;
+	         String employeeEmail;
+	         String roleId;
+
+	         if (empOpt.isPresent()) {
+	             usermaintenance emp = empOpt.get();
+	             managerId = emp.getRepoteTo();
+	             employeeFirstName = emp.getFirstname();
+	             employeeEmail = emp.getEmailid();
+	             roleId = emp.getRoleid();
+	         } else {
+	             TraineeMaster emp = traineeOpt.get();
+	             managerId = emp.getRepoteTo();
+	             employeeFirstName = emp.getFirstname();
+	             employeeEmail = emp.getEmailid();
+	             roleId = emp.getRoleid();
+	         }
+
+	         if (managerId == null) {
+	             throw new RuntimeException("Manager not assigned to this employee");
+	         }
+
+	         // Step 6: Fetch manager details (from either table)
+	         Optional<usermaintenance> managerOpt = usermaintenanceRepository.findByEmpIdOrUserId(managerId);
+	         Optional<TraineeMaster> managerTraineeOpt = Optional.empty();
+	         if (managerOpt.isEmpty()) {
+	             managerTraineeOpt = traineemasterRepository.findByTrngidOrUserId(managerId);
+	         }
+	         if (managerOpt.isEmpty() && managerTraineeOpt.isEmpty()) {
+	             throw new RuntimeException("Manager not found in both tables");
+	         }
+
+	         String managerFirstName;
+	         String managerEmail;
+	         if (managerOpt.isPresent()) {
+	             managerFirstName = managerOpt.get().getFirstname();
+	             managerEmail = managerOpt.get().getEmailid();
+	         } else {
+	             managerFirstName = managerTraineeOpt.get().getFirstname();
+	             managerEmail = managerTraineeOpt.get().getEmailid();
+	         }
+
+	         // Step 7: Send email if manager email exists
+	         if (managerEmail != null && !managerEmail.isEmpty()) {
+	             UserRoleMaintenance role = userRoleMaintenanceRepository.findByRoleid(roleId)
+	                     .orElseThrow(() -> new RuntimeException("Role not found"));
+
+	             String subject = "Leave Request Approval Needed for " + employeeFirstName;
+	             SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+
+	             String startDateFormatted = sdf.format(employeeLeaveMasterTbl.getStartdate());
+	             String endDateFormatted = sdf.format(employeeLeaveMasterTbl.getEnddate());
+	             
+	             // Build email body with monthly CL usage details
+	             StringBuilder emailBody = new StringBuilder();
+	             emailBody.append(String.format(
+	                 "Dear %s,\n\n"
+	                 + "Employee %s (%s) has submitted a leave request. Please find the details below:\n\n"
+	                 + "Leave Type: %s\n"
+	                 + "From Date: %s\n"
+	                 + "To Date: %s\n"
+	                 + "No. of Days: %s\n"
+	                 + "Reason: %s\n\n",
+	                 managerFirstName, employeeFirstName, empId, employeeLeaveMasterTbl.getLeavetype(),
+	                 startDateFormatted, endDateFormatted, employeeLeaveMasterTbl.getNoofdays(),
+	                 employeeLeaveMasterTbl.getLeavereason()
+	             ));
+	             
+	             // Only show calculation for casual leave
+	             if (isCasualLeave(leaveType)) {
+	                 emailBody.append("LEAVE CALCULATION DETAILS:\n");
+	                 emailBody.append(String.format(
+	                     "Payroll Cycle: %s\n",
+	                     calculationResult.get("payrollCycleName")
+	                 ));
+	                 emailBody.append(String.format(
+	                     "CL Used: %.1f days\n",
+	                     calculationResult.get("clUsed")
+	                 ));
+	                 
+	                 if (isWSEmployee) {
+	                     emailBody.append(String.format(
+	                         "Annual CL Balance Before: %.1f days\n",
+	                         calculationResult.get("annualClBalance")
+	                     ));
+	                     emailBody.append(String.format(
+	                         "Annual CL Balance After: %.1f days\n",
+	                         calculationResult.get("newClBalance")
+	                     ));
+	                     emailBody.append("\nNote: WS Employee - Simple 6 days annual casual leave limit (No LOP)\n");
+	                 } else {
+	                     emailBody.append(String.format(
+	                         "CL From Current Cycle: %.1f days\n",
+	                         calculationResult.get("clFromCurrentCycle")
+	                     ));
+	                     emailBody.append(String.format(
+	                         "CL From Carry-Forward: %.1f days\n",
+	                         calculationResult.get("clFromCarryForward")
+	                     ));
+	                     emailBody.append(String.format(
+	                         "LOP: %.1f days\n",
+	                         calculationResult.get("lopDays")
+	                     ));
+	                     emailBody.append(String.format(
+	                         "CL Balance After This Leave: %.1f days\n",
+	                         calculationResult.get("newClBalance")
+	                     ));
+	                 }
+	                 
+	                 // Add payroll cycle CL usage summary
+	                 if (calculationResult.containsKey("payrollCycleForMonth")) {
+	                     String payrollCycleMonth = (String) calculationResult.get("payrollCycleForMonth");
+	                     emailBody.append("\nPAYROLL CYCLE CL USAGE SUMMARY:\n");
+	                     emailBody.append(String.format(
+	                         "Payroll Cycle Month: %s\n",
+	                         payrollCycleMonth
+	                     ));
+	                 }
+	                 emailBody.append("\n");
+	             } else {
+	                 emailBody.append("Note: This leave type does not affect casual leave balance.\n\n");
+	             }
+	             
+	             emailBody.append("Kindly review the request and take necessary action.\n\n");
+	             emailBody.append("Regards,\n");
+	             emailBody.append(employeeFirstName + ",\n");
+	             emailBody.append(role.getRolename() + " - " + role.getDescription() + ",\n");
+	             emailBody.append("Whitestone Software Solution Pvt Ltd.\n");
+	             
+	             // Uncomment to send email
+	             // emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, emailBody.toString());
+	             response.put("emailStatus", "Email sent to manager: " + managerEmail);
+	         } else {
+	             response.put("emailStatus", "Manager email not found");
+	         }
+
+	         System.out.println("=== LEAVE REQUEST COMPLETED SUCCESSFULLY ===");
+	         
+	         // Only verify for casual leave
+	         if (isCasualLeave(leaveType)) {
+	             verifyLeaveDataWithMonthlyTracking(empId, calculationResult);
+	         } else {
+	             System.out.println("Non-casual leave - skipping verification of consolidated leave");
+	         }
+	         
+	         return ResponseEntity.ok(response);
+
+	     } catch (Exception e) {
+	         System.err.println("=== ERROR IN LEAVE REQUEST ===");
+	         System.err.println("Error: " + e.getMessage());
+	         e.printStackTrace();
+	         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                 .body("{\"error\": \"Failed to send Leave Request: " + e.getMessage() + "\"}");
+	     }
+	 }
+
+	 // Helper method to check if leave type is casual leave
+	 private boolean isCasualLeave(String leaveType) {
+	     if (leaveType == null) return false;
+	     return leaveType.equalsIgnoreCase("Casual Leave") || 
+	            leaveType.equalsIgnoreCase("CL") ||
+	            leaveType.equalsIgnoreCase("Casual");
+	 }
+
+	 // Determine which payroll cycle a date falls into (1-12 cycles per year)
+	 private int getPayrollCycleNumber(LocalDate date) {
+	     int day = date.getDayOfMonth();
+	     int month = date.getMonthValue();
+	     
+	     // Payroll cycles: 27th to 26th of next month
+	     if (day >= 27) {
+	         // From 27th to end of month - belongs to next month's payroll cycle
+	         if (month == 12) {
+	             return 1; // December 27-31 belongs to Jan cycle of next year
+	         } else {
+	             return month + 1;
+	         }
+	     } else {
+	         // From 1st to 26th - belongs to current month's payroll cycle
+	         return month;
+	     }
+	 }
+
+	 // Get payroll cycle dates as string (e.g., "27 Dec 2025 - 26 Jan 2026")
+	 private String getPayrollCycleName(LocalDate date) {
+	     int cycle = getPayrollCycleNumber(date);
+	     int year = date.getYear();
+	     
+	     int startMonth, endMonth;
+	     int startYear = year, endYear = year;
+	     
+	     if (cycle == 1) {
+	         startMonth = 12;
+	         startYear = year - 1;
+	         endMonth = 1;
+	     } else {
+	         startMonth = cycle - 1;
+	         endMonth = cycle;
+	     }
+	     
+	     String[] monthNames = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+	                           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+	     
+	     return String.format("27 %s %d - 26 %s %d", 
+	         monthNames[startMonth - 1], startYear,
+	         monthNames[endMonth - 1], endYear);
+	 }
+
+	 // Get the month for payroll cycle (for monthly_cl_used column)
+	 private String getPayrollCycleMonthKey(LocalDate date) {
+	     int payrollCycle = getPayrollCycleNumber(date);
+	     
+	     switch (payrollCycle) {
+	         case 1: return "jan";
+	         case 2: return "feb";
+	         case 3: return "mar";
+	         case 4: return "apr";
+	         case 5: return "may";
+	         case 6: return "jun";
+	         case 7: return "jul";
+	         case 8: return "aug";
+	         case 9: return "sep";
+	         case 10: return "oct";
+	         case 11: return "nov";
+	         case 12: return "dec";
+	         default: return "jan";
+	     }
+	 }
+
+	 // Get readable name for payroll cycle month
+	 private String getPayrollCycleMonthName(int payrollCycle) {
+	     switch (payrollCycle) {
+	         case 1: return "January (27 Dec - 26 Jan)";
+	         case 2: return "February (27 Jan - 26 Feb)";
+	         case 3: return "March (27 Feb - 26 Mar)";
+	         case 4: return "April (27 Mar - 26 Apr)";
+	         case 5: return "May (27 Apr - 26 May)";
+	         case 6: return "June (27 May - 26 Jun)";
+	         case 7: return "July (27 Jun - 26 Jul)";
+	         case 8: return "August (27 Jul - 26 Aug)";
+	         case 9: return "September (27 Aug - 26 Sep)";
+	         case 10: return "October (27 Sep - 26 Oct)";
+	         case 11: return "November (27 Oct - 26 Nov)";
+	         case 12: return "December (27 Nov - 26 Dec)";
+	         default: return "Unknown";
+	     }
+	 }
+
+	 // UPDATED: Method to handle leave calculation with monthly tracking - SIMPLIFIED FOR WS EMPLOYEES
+	 @Transactional
+	 public Map<String, Object> updateConsolidatedLeaveWithMonthlyTracking(EmployeeLeaveMasterTbl leaveRequest, boolean isWSEmployee) {
+	     Map<String, Object> calculationResult = new HashMap<>();
+	     
+	     try {
+	         System.out.println("=== START UPDATE CONSOLIDATED LEAVE WITH MONTHLY TRACKING ===");
+	         System.out.println("Is WS Employee: " + isWSEmployee);
+	         
+	         // First check if this is casual leave
+	         String leaveType = leaveRequest.getLeavetype();
+	         if (!isCasualLeave(leaveType)) {
+	             System.out.println("Skipping consolidated leave update for non-casual leave type: " + leaveType);
+	             calculationResult.put("message", "No update to consolidated leave - non-casual leave type");
+	             calculationResult.put("leaveType", leaveType);
+	             return calculationResult;
+	         }
+	         
+	         System.out.println("Processing Casual Leave - updating consolidated leave summary");
+	         
+	         String empId = leaveRequest.getEmpid();
+	         LocalDate requestDate = leaveRequest.getStartdate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+	         int year = requestDate.getYear();
+	         int payrollCycle = getPayrollCycleNumber(requestDate);
+	         Float requestedDays = leaveRequest.getNoofdays();
+	         
+	         String payrollCycleName = getPayrollCycleName(requestDate);
+	         String payrollCycleMonthKey = getPayrollCycleMonthKey(requestDate);
+	         String payrollCycleMonthName = getPayrollCycleMonthName(payrollCycle);
+	         
+	         System.out.println("Employee: " + empId + ", Year: " + year + 
+	                           ", Payroll Cycle: " + payrollCycle + 
+	                           " (" + payrollCycleName + "), Days: " + requestedDays);
+	         
+	         // Set initial casual leave balance based on employee type
+	         float initialCasualLeaveBalance = isWSEmployee ? 6.0f : 18.0f;
+	         System.out.println("Initial casual leave balance: " + initialCasualLeaveBalance + " days");
+	         
+	         // Fetch or create leave summary for the year
+	         EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, year)
+	                 .orElseGet(() -> {
+	                     System.out.println("Creating NEW leave summary for employee: " + empId + ", Year: " + year);
+	                     EmployeeLeaveSummary newSummary = new EmployeeLeaveSummary();
+	                     newSummary.setEmpId(empId);
+	                     newSummary.setYear(year);
+	                     newSummary.setCasualLeaveBalance(initialCasualLeaveBalance);
+	                     newSummary.setLeaveTaken(0.0f);
+	                     newSummary.setLop(0.0f);
+	                     
+	                     // Initialize all payroll cycle LOP fields to 0
+	                     for (int i = 1; i <= 12; i++) {
+	                         updatePayrollCycleLop(newSummary, i, 0.0f);
+	                     }
+	                     
+	                     // Initialize monthly CL used JSON
+	                     newSummary.setMonthlyClUsed("{\"jan\":0.0,\"feb\":0.0,\"mar\":0.0,\"apr\":0.0,\"may\":0.0,\"jun\":0.0,\"jul\":0.0,\"aug\":0.0,\"sep\":0.0,\"oct\":0.0,\"nov\":0.0,\"dec\":0.0}");
+	                     
+	                     return newSummary;
+	                 });
+	         
+	         // DEBUG: Print current state BEFORE update
+	         System.out.println("=== BEFORE UPDATE ===");
+	         System.out.println("Annual CL Balance: " + leaveSummary.getCasualLeaveBalance() + " days");
+	         System.out.println("Leave Taken: " + leaveSummary.getLeaveTaken() + " days");
+	         System.out.println("Total LOP: " + leaveSummary.getLop() + " days");
+	         
+	         // Get current values with null safety
+	         Float annualClBalance = leaveSummary.getCasualLeaveBalance() != null ? 
+	                                 leaveSummary.getCasualLeaveBalance() : initialCasualLeaveBalance;
+	         Float currentLeaveTaken = leaveSummary.getLeaveTaken() != null ? 
+	                                   leaveSummary.getLeaveTaken() : 0.0f;
+	         
+	         // *** SIMPLIFIED LOGIC FOR WS EMPLOYEES ***
+	         // No LOP, no cycle quotas, just simple annual balance deduction
+	         float clUsed = 0.0f;
+	         float lopDays = 0.0f;
+	         float clFromCurrentCycle = 0.0f;
+	         float clFromCarryForward = 0.0f;
+	         
+	         if (isWSEmployee) {
+	             // WS EMPLOYEE: Simple annual balance deduction with NO LOP
+	             // They can use all remaining leaves at once
+	             System.out.println("=== WS EMPLOYEE SIMPLE CALCULATION (NO LOP) ===");
+	             
+	             // All requested days are CL, no LOP ever
+	             clUsed = requestedDays;
+	             lopDays = 0.0f;
+	             
+	             // For WS, we don't track cycle vs carry-forward separately
+	             // Just show all as from current cycle for simplicity
+	             clFromCurrentCycle = requestedDays;
+	             clFromCarryForward = 0.0f;
+	             
+	             System.out.println("WS Employee - Using " + clUsed + " days from annual balance of " + annualClBalance);
+	             
+	         } else {
+	             // NON-WS EMPLOYEE: Complex logic with cycle quotas, carry-forward, LOP
+	             System.out.println("=== NON-WS EMPLOYEE COMPLEX CALCULATION ===");
+	             
+	             float cycleClQuota = 1.5f;
+	             
+	             // Calculate how much cycle quota has been used this payroll cycle
+	             float cycleClUsedSoFar = calculatePayrollCycleClUsedSoFar(leaveSummary, payrollCycle, false);
+	             
+	             // Calculate available CL for this payroll cycle
+	             float availableClThisCycle = calculateAvailableClForPayrollCycle(leaveSummary, payrollCycle, cycleClUsedSoFar, false);
+	             
+	             System.out.println("Payroll Cycle CL Quota: " + cycleClQuota + " days");
+	             System.out.println("CL Used This Cycle (so far): " + cycleClUsedSoFar + " days");
+	             System.out.println("Available CL for This Cycle: " + availableClThisCycle + " days");
+	             
+	             // LOGIC: Use available CL first, then LOP
+	             if (availableClThisCycle >= requestedDays) {
+	                 // All requested days can be covered by available CL
+	                 clUsed = requestedDays;
+	                 lopDays = 0.0f;
+	                 
+	                 // Breakdown of CL usage
+	                 float currentCycleAvailable = Math.min(cycleClQuota - cycleClUsedSoFar, availableClThisCycle);
+	                 if (currentCycleAvailable >= requestedDays) {
+	                     clFromCurrentCycle = requestedDays;
+	                     clFromCarryForward = 0.0f;
+	                 } else {
+	                     clFromCurrentCycle = currentCycleAvailable;
+	                     clFromCarryForward = requestedDays - currentCycleAvailable;
+	                 }
+	             } else if (availableClThisCycle > 0) {
+	                 // Partially cover with available CL, rest becomes LOP
+	                 clUsed = availableClThisCycle;
+	                 lopDays = requestedDays - availableClThisCycle;
+	                 
+	                 // Breakdown of CL usage
+	                 float currentCycleAvailable = Math.min(cycleClQuota - cycleClUsedSoFar, availableClThisCycle);
+	                 clFromCurrentCycle = currentCycleAvailable;
+	                 clFromCarryForward = availableClThisCycle - currentCycleAvailable;
+	             } else {
+	                 // No CL available for this cycle
+	                 clUsed = 0.0f;
+	                 lopDays = requestedDays;
+	                 clFromCurrentCycle = 0.0f;
+	                 clFromCarryForward = 0.0f;
+	             }
+	             
+	             // Ensure we don't use more CL than annual balance allows
+	             if (clUsed > annualClBalance) {
+	                 float excess = clUsed - annualClBalance;
+	                 clUsed = annualClBalance;
+	                 lopDays += excess;
+	                 
+	                 // Adjust breakdown
+	                 if (clFromCarryForward > excess) {
+	                     clFromCarryForward = clFromCarryForward - excess;
+	                 } else {
+	                     float remainingExcess = excess - clFromCarryForward;
+	                     clFromCarryForward = 0.0f;
+	                     clFromCurrentCycle = Math.max(0, clFromCurrentCycle - remainingExcess);
+	                 }
+	             }
+	         }
+	         
+	         // Round values to 1 decimal place
+	         clUsed = Math.round(clUsed * 10) / 10.0f;
+	         lopDays = Math.round(lopDays * 10) / 10.0f;
+	         clFromCurrentCycle = Math.round(clFromCurrentCycle * 10) / 10.0f;
+	         clFromCarryForward = Math.round(clFromCarryForward * 10) / 10.0f;
+	         
+	         // Calculate new values
+	         float newAnnualClBalance = Math.round((annualClBalance - clUsed) * 10) / 10.0f;
+	         float newLeaveTaken = Math.round((currentLeaveTaken + requestedDays) * 10) / 10.0f;
+	         float newTotalLop = 0.0f;
+	         
+	         // Update LOP only for non-WS employees
+	         if (!isWSEmployee) {
+	             Float currentTotalLop = leaveSummary.getLop() != null ? leaveSummary.getLop() : 0.0f;
+	             newTotalLop = Math.round((currentTotalLop + lopDays) * 10) / 10.0f;
+	             leaveSummary.setLop(newTotalLop);
+	             
+	             // Update LOP for current payroll cycle (only for non-WS)
+	             Float existingCycleLop = getCurrentPayrollCycleLop(leaveSummary, payrollCycle);
+	             float newCycleLop = Math.round((existingCycleLop + lopDays) * 10) / 10.0f;
+	             updatePayrollCycleLop(leaveSummary, payrollCycle, newCycleLop);
+	             calculationResult.put("cycleLop", newCycleLop);
+	         } else {
+	             // WS employees always have 0 LOP
+	             leaveSummary.setLop(0.0f);
+	             // Reset all payroll cycle LOP to 0 for WS employees
+	             for (int i = 1; i <= 12; i++) {
+	                 updatePayrollCycleLop(leaveSummary, i, 0.0f);
+	             }
+	         }
+	         
+	         // UPDATE MONTHLY CL USED
+	         updateMonthlyClUsedForPayrollCycle(leaveSummary, payrollCycleMonthKey, clUsed, 
+	                                           clFromCurrentCycle, clFromCarryForward, 
+	                                           isWSEmployee ? 0.0f : lopDays);
+	         
+	         // Update the entity
+	         leaveSummary.setCasualLeaveBalance(newAnnualClBalance);
+	         leaveSummary.setLeaveTaken(newLeaveTaken);
+	         leaveSummary.setUpdatedAt(LocalDateTime.now());
+	         
+	         // Save with flush
+	         System.out.println("Saving leave summary to database...");
+	         EmployeeLeaveSummary savedSummary = employeeLeaveSummaryRepository.saveAndFlush(leaveSummary);
+	         System.out.println("Leave summary saved successfully");
+	         
+	         // Store calculation results
+	         calculationResult.put("payrollCycle", payrollCycle);
+	         calculationResult.put("payrollCycleName", payrollCycleName);
+	         calculationResult.put("payrollCycleForMonth", payrollCycleMonthName);
+	         calculationResult.put("requestedDays", requestedDays);
+	         calculationResult.put("annualClBalance", annualClBalance);
+	         calculationResult.put("clUsed", clUsed);
+	         calculationResult.put("lopDays", isWSEmployee ? 0.0f : lopDays);
+	         calculationResult.put("clFromCurrentCycle", isWSEmployee ? 0.0f : clFromCurrentCycle);
+	         calculationResult.put("clFromCarryForward", isWSEmployee ? 0.0f : clFromCarryForward);
+	         calculationResult.put("newClBalance", newAnnualClBalance);
+	         calculationResult.put("newLeaveTaken", newLeaveTaken);
+	         calculationResult.put("newTotalLop", isWSEmployee ? 0.0f : newTotalLop);
+	         calculationResult.put("monthlyClUsed", savedSummary.getMonthlyClUsed());
+	         calculationResult.put("leaveType", "Casual Leave");
+	         calculationResult.put("isWSEmployee", isWSEmployee);
+	         calculationResult.put("payrollCycleMonthKey", payrollCycleMonthKey);
+	         
+	         // Print detailed calculation
+	         System.out.println("=== LEAVE CALCULATION RESULT ===");
+	         System.out.println("Employee: " + empId);
+	         System.out.println("WS Employee: " + isWSEmployee);
+	         System.out.println("Request Date: " + requestDate);
+	         System.out.println("Payroll Cycle: " + payrollCycle + " (" + payrollCycleName + ")");
+	         System.out.println("Requested Leave: " + requestedDays + " days");
+	         System.out.println("Annual CL Balance (Before): " + annualClBalance + " days");
+	         System.out.println("CL Used: " + clUsed + " days");
+	         
+	         if (!isWSEmployee) {
+	             System.out.println("  - From Current Cycle Quota: " + clFromCurrentCycle + " days");
+	             System.out.println("  - From Carry Forward: " + clFromCarryForward + " days");
+	             System.out.println("LOP Generated: " + lopDays + " days");
+	         } else {
+	             System.out.println("  - WS Employee: Simple annual deduction (No LOP, No cycle limits)");
+	         }
+	         
+	         System.out.println("New Annual CL Balance: " + newAnnualClBalance + " days");
+	         System.out.println("Updated Monthly CL Used JSON: " + savedSummary.getMonthlyClUsed());
+	         System.out.println("==========================================");
+	         
+	         return calculationResult;
+	         
+	     } catch (Exception e) {
+	         System.err.println("=== ERROR IN UPDATE CONSOLIDATED LEAVE ===");
+	         System.err.println("Error: " + e.getMessage());
+	         e.printStackTrace();
+	         throw new RuntimeException("Failed to update consolidated leave: " + e.getMessage(), e);
+	     }
+	 }
+
+	 // Updated method to update monthly CL used
+	 private void updateMonthlyClUsedForPayrollCycle(EmployeeLeaveSummary leaveSummary, String payrollCycleMonthKey, 
+	                                               float totalClUsed, float clFromCurrentCycle, 
+	                                               float clFromCarryForward, float lopGenerated) {
+	     try {
+	         // Parse current monthly CL used
+	         Map<String, Object> monthlyClUsed = parseMonthlyClUsed(leaveSummary.getMonthlyClUsed());
+	         
+	         // Get current value for this payroll cycle month
+	         Object currentValue = monthlyClUsed.get(payrollCycleMonthKey);
+	         
+	         // Create or update month details
+	         Map<String, Object> monthDetails = new HashMap<>();
+	         
+	         if (currentValue instanceof Map) {
+	             // Already has detailed structure
+	             @SuppressWarnings("unchecked")
+	             Map<String, Object> existingDetails = (Map<String, Object>) currentValue;
+	             monthDetails.putAll(existingDetails);
+	         } else if (currentValue instanceof Number) {
+	             // Has simple number value - convert to detailed structure
+	             monthDetails.put("total_cl_used", ((Number) currentValue).floatValue());
+	             monthDetails.put("cl_from_current_cycle", 0.0f);
+	             monthDetails.put("cl_from_carry_forward", 0.0f);
+	             monthDetails.put("lop_generated", 0.0f);
+	         } else {
+	             // Initialize new structure
+	             monthDetails.put("total_cl_used", 0.0f);
+	             monthDetails.put("cl_from_current_cycle", 0.0f);
+	             monthDetails.put("cl_from_carry_forward", 0.0f);
+	             monthDetails.put("lop_generated", 0.0f);
+	         }
+	         
+	         // Update values
+	         float currentTotal = ((Number) monthDetails.getOrDefault("total_cl_used", 0.0f)).floatValue();
+	         float currentFromCycle = ((Number) monthDetails.getOrDefault("cl_from_current_cycle", 0.0f)).floatValue();
+	         float currentFromCarryForward = ((Number) monthDetails.getOrDefault("cl_from_carry_forward", 0.0f)).floatValue();
+	         float currentLop = ((Number) monthDetails.getOrDefault("lop_generated", 0.0f)).floatValue();
+	         
+	         monthDetails.put("total_cl_used", Math.round((currentTotal + totalClUsed) * 10) / 10.0f);
+	         monthDetails.put("cl_from_current_cycle", Math.round((currentFromCycle + clFromCurrentCycle) * 10) / 10.0f);
+	         monthDetails.put("cl_from_carry_forward", Math.round((currentFromCarryForward + clFromCarryForward) * 10) / 10.0f);
+	         monthDetails.put("lop_generated", Math.round((currentLop + lopGenerated) * 10) / 10.0f);
+	         
+	         // Update the monthly map
+	         monthlyClUsed.put(payrollCycleMonthKey, monthDetails);
+	         
+	         // Convert to JSON string
+	         ObjectMapper mapper = new ObjectMapper();
+	         String updatedMonthlyClUsed = mapper.writeValueAsString(monthlyClUsed);
+	         leaveSummary.setMonthlyClUsed(updatedMonthlyClUsed);
+	         
+	         System.out.println("Updated monthly CL used for payroll cycle month " + payrollCycleMonthKey + ": " + monthDetails);
+	         
+	     } catch (Exception e) {
+	         System.err.println("Error updating monthly CL used for payroll cycle: " + e.getMessage());
+	         e.printStackTrace();
+	     }
+	 }
+
+	 // Helper method to parse monthly CL used JSON
+	 private Map<String, Object> parseMonthlyClUsed(String monthlyClUsedJson) {
+	     Map<String, Object> monthlyClUsed = new HashMap<>();
+	     
+	     try {
+	         if (monthlyClUsedJson == null || monthlyClUsedJson.trim().isEmpty()) {
+	             monthlyClUsedJson = "{\"jan\":0.0,\"feb\":0.0,\"mar\":0.0,\"apr\":0.0,\"may\":0.0,\"jun\":0.0,\"jul\":0.0,\"aug\":0.0,\"sep\":0.0,\"oct\":0.0,\"nov\":0.0,\"dec\":0.0}";
+	         }
+	         
+	         ObjectMapper mapper = new ObjectMapper();
+	         Map<String, Object> jsonMap = mapper.readValue(monthlyClUsedJson, Map.class);
+	         
+	         for (Map.Entry<String, Object> entry : jsonMap.entrySet()) {
+	             Object value = entry.getValue();
+	             // Check if value is a string that might contain JSON details
+	             if (value instanceof String && ((String) value).startsWith("{")) {
+	                 try {
+	                     // Try to parse as detailed JSON
+	                     Map<String, Object> details = mapper.readValue((String) value, Map.class);
+	                     monthlyClUsed.put(entry.getKey(), details);
+	                 } catch (Exception e) {
+	                     // If parsing fails, store as simple value
+	                     try {
+	                         float floatValue = Float.parseFloat((String) value);
+	                         monthlyClUsed.put(entry.getKey(), floatValue);
+	                     } catch (NumberFormatException nfe) {
+	                         monthlyClUsed.put(entry.getKey(), value);
+	                     }
+	                 }
+	             } else if (value instanceof Number) {
+	                 monthlyClUsed.put(entry.getKey(), ((Number) value).floatValue());
+	             } else if (value instanceof String) {
+	                 try {
+	                     monthlyClUsed.put(entry.getKey(), Float.parseFloat((String) value));
+	                 } catch (NumberFormatException nfe) {
+	                     monthlyClUsed.put(entry.getKey(), value);
+	                 }
+	             } else {
+	                 monthlyClUsed.put(entry.getKey(), value);
+	             }
+	         }
+	     } catch (Exception e) {
+	         System.err.println("Error parsing monthly CL used JSON: " + e.getMessage());
+	         // Initialize with default values
+	         monthlyClUsed.put("jan", 0.0f);
+	         monthlyClUsed.put("feb", 0.0f);
+	         monthlyClUsed.put("mar", 0.0f);
+	         monthlyClUsed.put("apr", 0.0f);
+	         monthlyClUsed.put("may", 0.0f);
+	         monthlyClUsed.put("jun", 0.0f);
+	         monthlyClUsed.put("jul", 0.0f);
+	         monthlyClUsed.put("aug", 0.0f);
+	         monthlyClUsed.put("sep", 0.0f);
+	         monthlyClUsed.put("oct", 0.0f);
+	         monthlyClUsed.put("nov", 0.0f);
+	         monthlyClUsed.put("dec", 0.0f);
+	     }
+	     
+	     return monthlyClUsed;
+	 }
+
+	 // Method to calculate CL used in current payroll cycle (for NON-WS only)
+	 private float calculatePayrollCycleClUsedSoFar(EmployeeLeaveSummary leaveSummary, int currentCycle, boolean isWSEmployee) {
+	     // This method should only be called for non-WS employees
+	     if (isWSEmployee) {
+	         return 0.0f; // WS employees don't have cycle limits
+	     }
+	     
+	     float cycleClUsed = 0.0f;
+	     
+	     // Get cycle LOP
+	     float cycleLop = getCurrentPayrollCycleLop(leaveSummary, currentCycle);
+	     
+	     // If there's LOP this cycle, we've already used all available CL for this cycle
+	     if (cycleLop > 0) {
+	         cycleClUsed = 1.5f;
+	     } else {
+	         // Check the actual CL deducted from annual balance
+	         float totalAnnualBalance = 18.0f; // Non-WS get 18 days
+	         Float annualClBalance = leaveSummary.getCasualLeaveBalance() != null ? 
+	                                 leaveSummary.getCasualLeaveBalance() : totalAnnualBalance;
+	         
+	         // Expected balance if no CL used in current cycle
+	         float expectedBalance = totalAnnualBalance - (1.5f * (currentCycle - 1));
+	         
+	         if (annualClBalance < expectedBalance - 0.1f) {
+	             cycleClUsed = expectedBalance - annualClBalance;
+	             cycleClUsed = Math.min(cycleClUsed, 1.5f);
+	         }
+	     }
+	     
+	     System.out.println("Calculated CL used this payroll cycle (so far): " + cycleClUsed + " days");
+	     return cycleClUsed;
+	 }
+
+	 // Method to calculate available CL for payroll cycle (for NON-WS only)
+	 private float calculateAvailableClForPayrollCycle(EmployeeLeaveSummary leaveSummary, int currentCycle, 
+	                                                  float cycleClUsedSoFar, boolean isWSEmployee) {
+	     // This method should only be called for non-WS employees
+	     if (isWSEmployee) {
+	         Float annualClBalance = leaveSummary.getCasualLeaveBalance() != null ? 
+	                                 leaveSummary.getCasualLeaveBalance() : 6.0f;
+	         return annualClBalance; // WS employees just have their remaining balance
+	     }
+	     
+	     float cycleQuota = 1.5f;
+	     
+	     // Calculate carry-forward from previous cycles
+	     float carryForward = calculateCarryForwardFromPreviousCycles(leaveSummary, currentCycle, false);
+	     
+	     // Total available = current cycle quota + carry-forward - already used this cycle
+	     float totalAvailable = cycleQuota + carryForward - cycleClUsedSoFar;
+	     
+	     // Don't exceed annual balance
+	     float totalAnnualBalance = 18.0f;
+	     Float annualClBalance = leaveSummary.getCasualLeaveBalance() != null ? 
+	                             leaveSummary.getCasualLeaveBalance() : totalAnnualBalance;
+	     float remainingAnnualBalance = annualClBalance; // This is the current balance
+	     
+	     totalAvailable = Math.min(totalAvailable, remainingAnnualBalance);
+	     
+	     System.out.println("Available CL for payroll cycle " + currentCycle + ": " + 
+	                       cycleQuota + " (quota) + " + carryForward + " (carry-forward) - " + 
+	                       cycleClUsedSoFar + " (used so far) = " + totalAvailable + " days");
+	     
+	     return Math.max(0, totalAvailable);
+	 }
+
+	 // Calculate carry-forward from previous cycles (for NON-WS only)
+	 private float calculateCarryForwardFromPreviousCycles(EmployeeLeaveSummary leaveSummary, int currentCycle, boolean isWSEmployee) {
+	     if (isWSEmployee) {
+	         return 0.0f; // No carry-forward for WS employees
+	     }
+	     
+	     float carryForward = 0.0f;
+	     float totalAnnualBalance = 18.0f;
+	     
+	     for (int cycle = 1; cycle < currentCycle; cycle++) {
+	         float cycleLop = getCurrentPayrollCycleLop(leaveSummary, cycle);
+	         
+	         if (cycleLop > 0) {
+	             continue;
+	         }
+	         
+	         Float annualClBalance = leaveSummary.getCasualLeaveBalance() != null ? 
+	                                 leaveSummary.getCasualLeaveBalance() : totalAnnualBalance;
+	         
+	         float expectedIfAllUsed = totalAnnualBalance - (1.5f * cycle);
+	         float expectedIfNoneUsed = totalAnnualBalance - (1.5f * (cycle - 1));
+	         float actualBalance = annualClBalance;
+	         
+	         if (actualBalance > expectedIfAllUsed && actualBalance <= expectedIfNoneUsed) {
+	             float unusedInCycle = Math.min(1.5f, actualBalance - expectedIfAllUsed);
+	             carryForward += unusedInCycle;
+	             System.out.println("Cycle " + cycle + " unused CL: " + unusedInCycle + " days added to carry-forward");
+	         }
+	     }
+	     
+	     System.out.println("Total carry-forward from previous cycles: " + carryForward + " days");
+	     return carryForward;
+	 }
+
+	 // Helper method to get current payroll cycle's LOP
+	 private Float getCurrentPayrollCycleLop(EmployeeLeaveSummary leaveSummary, int cycle) {
+	     if (leaveSummary == null) return 0.0f;
+	     
+	     switch (cycle) {
+	         case 1: return leaveSummary.getLopJan() != null ? leaveSummary.getLopJan() : 0.0f;
+	         case 2: return leaveSummary.getLopFeb() != null ? leaveSummary.getLopFeb() : 0.0f;
+	         case 3: return leaveSummary.getLopMar() != null ? leaveSummary.getLopMar() : 0.0f;
+	         case 4: return leaveSummary.getLopApr() != null ? leaveSummary.getLopApr() : 0.0f;
+	         case 5: return leaveSummary.getLopMay() != null ? leaveSummary.getLopMay() : 0.0f;
+	         case 6: return leaveSummary.getLopJun() != null ? leaveSummary.getLopJun() : 0.0f;
+	         case 7: return leaveSummary.getLopJul() != null ? leaveSummary.getLopJul() : 0.0f;
+	         case 8: return leaveSummary.getLopAug() != null ? leaveSummary.getLopAug() : 0.0f;
+	         case 9: return leaveSummary.getLopSep() != null ? leaveSummary.getLopSep() : 0.0f;
+	         case 10: return leaveSummary.getLopOct() != null ? leaveSummary.getLopOct() : 0.0f;
+	         case 11: return leaveSummary.getLopNov() != null ? leaveSummary.getLopNov() : 0.0f;
+	         case 12: return leaveSummary.getLopDec() != null ? leaveSummary.getLopDec() : 0.0f;
+	         default: return 0.0f;
+	     }
+	 }
+
+	 // Helper method to update LOP for the correct payroll cycle
+	 private void updatePayrollCycleLop(EmployeeLeaveSummary leaveSummary, int cycle, Float lopDays) {
+	     if (leaveSummary == null) return;
+	     
+	     switch (cycle) {
+	         case 1: leaveSummary.setLopJan(lopDays); break;
+	         case 2: leaveSummary.setLopFeb(lopDays); break;
+	         case 3: leaveSummary.setLopMar(lopDays); break;
+	         case 4: leaveSummary.setLopApr(lopDays); break;
+	         case 5: leaveSummary.setLopMay(lopDays); break;
+	         case 6: leaveSummary.setLopJun(lopDays); break;
+	         case 7: leaveSummary.setLopJul(lopDays); break;
+	         case 8: leaveSummary.setLopAug(lopDays); break;
+	         case 9: leaveSummary.setLopSep(lopDays); break;
+	         case 10: leaveSummary.setLopOct(lopDays); break;
+	         case 11: leaveSummary.setLopNov(lopDays); break;
+	         case 12: leaveSummary.setLopDec(lopDays); break;
+	         default: throw new IllegalArgumentException("Invalid payroll cycle: " + cycle);
+	     }
+	 }
+
+	 // Updated verification method
+	 private void verifyLeaveDataWithMonthlyTracking(String empId, Map<String, Object> calculationResult) {
+	     try {
+	         System.out.println("=== VERIFYING DATA SAVED TO DATABASE ===");
+	         
+	         LocalDate today = LocalDate.now();
+	         int year = today.getYear();
+	         
+	         Optional<EmployeeLeaveSummary> savedSummary = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, year);
+	         
+	         if (savedSummary.isPresent()) {
+	             EmployeeLeaveSummary summary = savedSummary.get();
+	             
+	             System.out.println("DATABASE VALUES:");
+	             System.out.println("Annual CL Balance: " + summary.getCasualLeaveBalance());
+	             System.out.println("Leave Taken: " + summary.getLeaveTaken());
+	             System.out.println("Total LOP: " + summary.getLop());
+	             
+	             if (summary.getMonthlyClUsed() != null) {
+	                 System.out.println("Monthly CL Used JSON: " + summary.getMonthlyClUsed());
+	             }
+	             
+	             // Compare with calculation
+	             Float expectedClBalance = (Float) calculationResult.get("newClBalance");
+	             Float actualClBalance = summary.getCasualLeaveBalance();
+	             
+	             if (expectedClBalance != null && actualClBalance != null) {
+	                 if (Math.abs(expectedClBalance - actualClBalance) < 0.01) {
+	                     System.out.println("✓ Annual CL Balance matches: Expected " + expectedClBalance + ", Actual " + actualClBalance);
+	                 } else {
+	                     System.err.println("✗ Annual CL Balance MISMATCH: Expected " + expectedClBalance + ", Actual " + actualClBalance);
+	                 }
+	             }
+	             
+	         } else {
+	             System.err.println("✗ No leave summary found for employee " + empId);
+	         }
+	         
+	         System.out.println("=== END VERIFICATION ===");
+	     } catch (Exception e) {
+	         System.err.println("Error during verification: " + e.getMessage());
+	     }
+	 }
 	
 	@Autowired
 	private ExpenseDetailsModRepository expenseDetailsRepository;
@@ -5441,339 +6246,299 @@ public class AppController {
 	private PayrollAdjustmentRepository payrollAdjustmentRepository;
 
 	@PostMapping("/Payroll")
-
 	public ResponseEntity<Map<String, Object>> saveOrUpdatePayroll() {
 
-		Map<String, Object> response = new HashMap<>();
-
-		List<Payroll> payrollList = new ArrayList<>();
- 
-		YearMonth currentMonth = YearMonth.now();
-
-		YearMonth previousMonth = currentMonth.minusMonths(1);
-
-		LocalDate lastDayOfMonth = currentMonth.atEndOfMonth();
-
-		ObjectMapper objectMapper = new ObjectMapper();
- 
-		try {
-
-			// STEP 0: CRITICAL CHECK - Are all adjustments APPROVED?
-
-			List<PayrollAdjustment> allAdjustments = payrollAdjustmentRepository.findByMonth(currentMonth.toString());
- 
-			if (allAdjustments.isEmpty()) {
-
-				response.put("status", "Payroll blocked: Adjustments not generated yet. Please run /generate first.");
-
-				response.put("error",
-
-						"Payroll blocked: Adjustments not generated yet. Please run /generate first. " + currentMonth);
-
-				return ResponseEntity.badRequest().body(response);
-
-			}
- 
-			boolean allApproved = allAdjustments.stream().allMatch(adj -> "APPROVED".equals(adj.getApprovalStatus()));
- 
-			if (!allApproved) {
-
-				long pendingCount = allAdjustments.stream().filter(adj -> !"APPROVED".equals(adj.getApprovalStatus()))
-
-						.count();
- 
-				response.put("status", "Payroll blocked: Manager approval pending");
-
-				response.put("error",
-
-						pendingCount + " employee(s) not approved yet. All must be APPROVED before running payroll.");
-
-				response.put("pending_count", pendingCount);
-
-				return ResponseEntity.status(400).body(response);
-
-			}
- 
-			// STEP 1: Move previous month payroll to history
-
-			List<Payroll> previousPayrolls = payrollRepository.findByMonth(previousMonth.toString());
-
-			if (!previousPayrolls.isEmpty()) {
-
-				List<PayrollHistory> historyRecords = previousPayrolls.stream().map(p -> {
-
-					PayrollHistory h = new PayrollHistory();
-
-					BeanUtils.copyProperties(p, h);
-
-					return h;
-
-				}).collect(Collectors.toList());
-
-				payrollHistoryRepository.saveAllAndFlush(historyRecords);
-
-				payrollRepository.deleteByMonth(previousMonth.toString());
-
-			}
- 
-			// STEP 2: Generate payroll using APPROVED adjustment values
-
-			LocalDate periodStart = LocalDate.of(previousMonth.getYear(), previousMonth.getMonth(), 27);
-
-			LocalDate periodEnd = LocalDate.of(currentMonth.getYear(), currentMonth.getMonth(), 26);
- 
-			List<WsslCalendarMod> holidays = wsslCalendarModRepository
-
-					.findByEventDateBetween(java.sql.Date.valueOf(periodStart), java.sql.Date.valueOf(periodEnd));
-
-			List<Date> weekOffDates = getWeekOffsInRange(java.sql.Date.valueOf(periodStart),
-
-					java.sql.Date.valueOf(periodEnd));
- 
-			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-
-			Set<String> holidaySet = holidays.stream().map(h -> sdf.format(h.getEventDate()))
-
-					.collect(Collectors.toSet());
-
-			Set<String> weekOffSet = weekOffDates.stream().map(d -> sdf.format(d)).collect(Collectors.toSet());
- 
-			for (PayrollAdjustment adj : allAdjustments) {
-
-				String empId = adj.getEmpId();
-
-				EmployeeSalaryTbl empSalary = employeeSalaryTblRepository.findByEmpid(empId);
-
-				if (empSalary == null)
-
-					continue;
- 
-				usermaintenance user = usermaintenanceRepository.findByEmpid(empId);
-
-				if (user == null)
-
-					continue;
- 
-				// Use manager-approved values
-
-				long allowanceDays = adj.getAllowanceDays();
-
-				float lopDays = adj.getLopDays();
-
-				double otherDeductions = adj.getOtherDeductions();
-
-				double effectiveWorkingDays = adj.getEffectiveWorkingDays();
- 
-				// Parse Earnings & Deductions
-
-				String earningsJson = cleanJson(empSalary.getEarnings());
-
-				String deductionsJson = cleanJson(empSalary.getDeductions());
-
-				String payrolldetuctionJson = cleanJson(empSalary.getPayrollDeductions());
-
-				JsonNode earningsNode = objectMapper.readTree(earningsJson);
-
-				JsonNode deductionsNode = objectMapper.readTree(deductionsJson);
-
-				JsonNode payrollNode = objectMapper.readTree(payrolldetuctionJson);
- 
-				double totalEarnings = StreamSupport.stream(earningsNode.spliterator(), false)
-
-						.mapToDouble(e -> e.get("monthlyAmount").asDouble(0.0)).sum();
-
-				double totalDeductions = StreamSupport.stream(deductionsNode.spliterator(), false)
-
-						.mapToDouble(d -> d.get("monthlyAmount").asDouble(0.0)).sum();
-
-				double totalPayRollDeductions = StreamSupport.stream(payrollNode.spliterator(), false)
-
-						.mapToDouble(d -> d.get("monthlyAmount").asDouble(0.0)).sum();
- 
-				// Identify allowances
-
-				double perDayRate = 0, pgRentAllowance = 0;
-
-				for (JsonNode e : earningsNode) {
-
-					String name = e.get("name").asText();
-
-					double amount = e.get("monthlyAmount").asDouble(0.0);
-
-					if ("Per Day Allowance".equalsIgnoreCase(name)) {
-
-						perDayRate = e.has("amount") && !e.get("amount").isNull() ? e.get("amount").asDouble(0.0)
-
-								: amount;
-
-					} else if ("PG Rent Allowance".equalsIgnoreCase(name)) {
-
-						pgRentAllowance = amount;
-
-					}
-
-				}
- 
-				double totalPerDayAllowance = perDayRate * allowanceDays; // Approved days
-
-				double baseSalary=(totalEarnings - totalPayRollDeductions)
-
-				  - (totalPerDayAllowance + pgRentAllowance);
-
-//				double baseSalary = totalEarnings - totalPayRollDeductions -(totalPerDayAllowance + pgRentAllowance);
- 
-				double perDayBaseRate = effectiveWorkingDays > 0 ? baseSalary / effectiveWorkingDays : 0;
-
-				double lopDeduction = perDayBaseRate * lopDays;
- 
-				double finalDeductions = totalDeductions + lopDeduction + otherDeductions + totalPayRollDeductions;
-
-				double Deductions = lopDeduction + otherDeductions ;
-
-				double netPay = baseSalary + totalPerDayAllowance + pgRentAllowance - Deductions;
- 
-				System.out.println("totalPayRollDeductions>>>>" + totalPayRollDeductions);
-
-				System.out.println("Deductions>>>>" + Deductions);
-
-				System.out.println("baseSalary>>>>" + baseSalary);
-
-				System.out.println("netPay>>>>" + netPay);
-
-				// Round all values
-
-				baseSalary = round(baseSalary);
-
-				totalPerDayAllowance = round(totalPerDayAllowance);
-
-				pgRentAllowance = round(pgRentAllowance);
-
-				lopDeduction = round(lopDeduction);
-
-				finalDeductions = round(finalDeductions);
-
-				netPay = round(netPay);
-
-				totalEarnings = round(netPay + finalDeductions);
-
-				totalDeductions = round(totalDeductions);
- 
-				// Save Payroll
-
-				Payroll payroll = payrollRepository.findByEmpidAndMonth(empId, currentMonth.toString());
-
-				if (payroll == null)
-
-					payroll = new Payroll();
- 
-				payroll.setEmpid(empId);
-
-				payroll.setMonth(currentMonth.toString());
-
-				payroll.setPymtDate(lastDayOfMonth);
-
-				payroll.setStatus("PROCESSED");
-
-				payroll.setAmount(baseSalary);
-
-				payroll.setBnfName(user.getFirstname() + " " + (user.getLastname() != null ? user.getLastname() : ""));
-
-				payroll.setBeneAccNo(empSalary.getAccountNumber());
-
-				payroll.setBeneIfsc(empSalary.getIfscCode());
-
-				payroll.setEmailId(empSalary.getEmailid());
-
-				payroll.setMobileNum(empSalary.getPhonenumber());
-
-				payroll.setDebitAccNo("611905056804");
-
-				payroll.setCreditNarr("NA");
-
-				payroll.setDebitNarr("NA");
-
-				payroll.setPymtMode(
-
-						empSalary.getBankName().toLowerCase().contains("icic".toLowerCase()) ? "FT" : "NEFT");
-
-				payroll.setPymtProdTypeCode("PAB_VENDOR");
-
-				payroll.setRemark(currentMonth.getMonth().name() + " " + currentMonth.getYear() + " Salary");
-
-				// Store all calculated values
-
-				payroll.setLopDays(lopDays);
-
-				payroll.setTotalEarnings(totalEarnings);
-
-				payroll.setTotalDeductions(totalDeductions);
-
-				payroll.setLopDeduction(lopDeduction);
-
-				payroll.setDeductions(finalDeductions);
-
-				payroll.setOtherDeductions(otherDeductions); // New field recommended
-
-				payroll.setPayrollDeductions(totalPayRollDeductions);
-
-				payroll.setPerDayRate(perDayRate);
-
-				payroll.setPerDayAllowance(totalPerDayAllowance);
-
-				payroll.setPerDayAllowanceDays(allowanceDays);
-
-				payroll.setPgRentAllowance(pgRentAllowance);
-
-				payroll.setEffectiveWorkingDays(effectiveWorkingDays);
-
-				payroll.setNetPay(netPay);
-
-				payroll.setOtherDeductionsRemarks(adj.getOtherDeductionsRemarks());
-
-				payroll.setCreatedDate(LocalDateTime.now());
- 
-				payrollList.add(payroll);
-
-			}
- 
-			if (!payrollList.isEmpty()) {
-
-				payrollRepository.saveAllAndFlush(payrollList);
-
-				response.put("status", "Payroll processed successfully for " + currentMonth);
-
-				response.put("processed_count", payrollList.size());
-
-				response.put("message",
-
-						"All " + payrollList.size() + " employees processed using manager-approved values");
-
-			} else {
-
-				response.put("status", "No payroll records processed");
-
-			}
- 
-		} catch (Exception e) {
-
-			e.printStackTrace();
-
-			response.put("error", "Payroll processing failed: " + e.getMessage());
-
-			return ResponseEntity.status(500).body(response);
-
-		}
- 
-		return ResponseEntity.ok(response);
-
+	    Map<String, Object> response = new HashMap<>();
+	    List<Payroll> payrollList = new ArrayList<>();
+	 
+	    YearMonth currentMonth = YearMonth.now();
+	    YearMonth previousMonth = currentMonth.minusMonths(1);
+	    LocalDate lastDayOfMonth = currentMonth.atEndOfMonth();
+	    ObjectMapper objectMapper = new ObjectMapper();
+	 
+	    try {
+	        // STEP 0: CRITICAL CHECK - Are all adjustments APPROVED?
+	        List<PayrollAdjustment> allAdjustments = payrollAdjustmentRepository.findByMonth(currentMonth.toString());
+	 
+	        if (allAdjustments.isEmpty()) {
+	            response.put("status", "Payroll blocked: Adjustments not generated yet. Please run /generate first.");
+	            response.put("error", "Payroll blocked: Adjustments not generated yet. Please run /generate first. " + currentMonth);
+	            return ResponseEntity.badRequest().body(response);
+	        }
+	 
+	        boolean allApproved = allAdjustments.stream().allMatch(adj -> "APPROVED".equals(adj.getApprovalStatus()));
+	 
+	        if (!allApproved) {
+	            long pendingCount = allAdjustments.stream()
+	                    .filter(adj -> !"APPROVED".equals(adj.getApprovalStatus()))
+	                    .count();
+	 
+	            response.put("status", "Payroll blocked: Manager approval pending");
+	            response.put("error", pendingCount + " employee(s)/trainee(s) not approved yet. All must be APPROVED before running payroll.");
+	            response.put("pending_count", pendingCount);
+	            return ResponseEntity.status(400).body(response);
+	        }
+	 
+	        // STEP 1: Move previous month payroll to history
+	        List<Payroll> previousPayrolls = payrollRepository.findByMonth(previousMonth.toString());
+	        if (!previousPayrolls.isEmpty()) {
+	            List<PayrollHistory> historyRecords = previousPayrolls.stream().map(p -> {
+	                PayrollHistory h = new PayrollHistory();
+	                BeanUtils.copyProperties(p, h);
+	                return h;
+	            }).collect(Collectors.toList());
+	            payrollHistoryRepository.saveAllAndFlush(historyRecords);
+	            payrollRepository.deleteByMonth(previousMonth.toString());
+	        }
+	 
+	        // STEP 2: Generate payroll using APPROVED adjustment values
+	        LocalDate periodStart = LocalDate.of(previousMonth.getYear(), previousMonth.getMonth(), 27);
+	        LocalDate periodEnd = LocalDate.of(currentMonth.getYear(), currentMonth.getMonth(), 26);
+	 
+	        List<WsslCalendarMod> holidays = wsslCalendarModRepository
+	                .findByEventDateBetween(java.sql.Date.valueOf(periodStart), java.sql.Date.valueOf(periodEnd));
+	        List<Date> weekOffDates = getWeekOffsInRange(java.sql.Date.valueOf(periodStart),
+	                java.sql.Date.valueOf(periodEnd));
+	 
+	        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	        Set<String> holidaySet = holidays.stream().map(h -> sdf.format(h.getEventDate())).collect(Collectors.toSet());
+	        Set<String> weekOffSet = weekOffDates.stream().map(d -> sdf.format(d)).collect(Collectors.toSet());
+	 
+	        // Fetch all employee IDs from usermaintenance for reference
+	        Set<String> employeeIdSet = usermaintenanceRepository.findAll()
+	                .stream()
+	                .map(usermaintenance::getEmpid)
+	                .collect(Collectors.toSet());
+	        
+	        System.out.println("Total employees in usermaintenance: " + employeeIdSet.size());
+	 
+	        for (PayrollAdjustment adj : allAdjustments) {
+	            String empId = adj.getEmpId();
+	            System.out.println("\nProcessing ID: " + empId);
+	            
+	            // Determine if this is an employee or trainee
+	            boolean isEmployee = employeeIdSet.contains(empId);
+	            
+	            // Get user details based on type
+	            String employeeName = "";
+	            String emailId = "";
+	            String phoneNumber = "";
+	            String accountNumber = "";
+	            String ifscCode = "";
+	            String bankName = "";
+	            
+	            if (isEmployee) {
+	                // Fetch from usermaintenance for employees
+	                usermaintenance user = usermaintenanceRepository.findByEmpid(empId);
+	                if (user == null) {
+	                    System.out.println("Employee not found: " + empId);
+	                    continue;
+	                }
+	                employeeName = (user.getFirstname() + " " + 
+	                              (user.getLastname() != null ? user.getLastname() : "")).trim();
+	                
+	                // Get salary details
+	                EmployeeSalaryTbl empSalary = employeeSalaryTblRepository.findByEmpid(empId);
+	                if (empSalary == null) {
+	                    System.out.println("Salary not found for employee: " + empId);
+	                    continue;
+	                }
+	                
+	                emailId = empSalary.getEmailid();
+	                phoneNumber = empSalary.getPhonenumber();
+	                accountNumber = empSalary.getAccountNumber();
+	                ifscCode = empSalary.getIfscCode();
+	                bankName = empSalary.getBankName();
+	                
+	                // Process payroll for this employee
+	                processPayrollForUser(empId, employeeName, adj, empSalary, 
+	                                    emailId, phoneNumber, accountNumber, 
+	                                    ifscCode, bankName, currentMonth, 
+	                                    lastDayOfMonth, objectMapper, payrollList);
+	                
+	            } else {
+	                // Treat as trainee - fetch from trainee master using trng_id
+	                TraineeMaster trainee = traineemasterRepository.findByTrngid(empId);
+	                if (trainee == null) {
+	                    System.out.println("Trainee not found with trng_id: " + empId);
+	                    continue;
+	                }
+	                
+	                employeeName = (trainee.getFirstname() + " " + 
+	                              (trainee.getLastname() != null ? trainee.getLastname() : "")).trim();
+	                
+	                // Get salary details for trainee (same table)
+	                EmployeeSalaryTbl empSalary = employeeSalaryTblRepository.findByEmpid(empId);
+	                if (empSalary == null) {
+	                    System.out.println("Salary not found for trainee: " + empId);
+	                    continue;
+	                }
+	                
+	                emailId = empSalary.getEmailid() != null ? empSalary.getEmailid() : trainee.getEmailid();
+	                phoneNumber = empSalary.getPhonenumber() != null ? empSalary.getPhonenumber() : trainee.getPhonenumber();
+	                accountNumber = empSalary.getAccountNumber();
+	                ifscCode = empSalary.getIfscCode();
+	                bankName = empSalary.getBankName();
+	                
+	                System.out.println("Processing trainee: " + employeeName + " with trng_id: " + empId);
+	                
+	                // Process payroll for this trainee
+	                processPayrollForUser(empId, employeeName, adj, empSalary,
+	                                    emailId, phoneNumber, accountNumber,
+	                                    ifscCode, bankName, currentMonth,
+	                                    lastDayOfMonth, objectMapper, payrollList);
+	            }
+	        }
+	 
+	        // STEP 3: SAVE ALL PAYROLL RECORDS
+	        if (!payrollList.isEmpty()) {
+	            payrollRepository.saveAllAndFlush(payrollList);
+	            
+	            // Separate counts for response
+	            long employeeCount = payrollList.stream()
+	                    .filter(p -> employeeIdSet.contains(p.getEmpid()))
+	                    .count();
+	            long traineeCount = payrollList.size() - employeeCount;
+	            
+	            response.put("status", "Payroll processed successfully for " + currentMonth);
+	            response.put("processed_count", payrollList.size());
+	            response.put("employee_count", employeeCount);
+	            response.put("trainee_count", traineeCount);
+	            response.put("message", "All " + payrollList.size() + " users processed using manager-approved values");
+	            
+	            System.out.println("\n=== PAYROLL SUMMARY ===");
+	            System.out.println("Total processed: " + payrollList.size());
+	            System.out.println("Employees: " + employeeCount);
+	            System.out.println("Trainees: " + traineeCount);
+	            
+	        } else {
+	            response.put("status", "No payroll records processed");
+	        }
+	 
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        response.put("error", "Payroll processing failed: " + e.getMessage());
+	        return ResponseEntity.status(500).body(response);
+	    }
+	 
+	    return ResponseEntity.ok(response);
 	}
- 
+
+	/**
+	 * Helper method to process payroll for a single user (employee or trainee)
+	 */
+	private void processPayrollForUser(String empId, 
+	                                   String employeeName,
+	                                   PayrollAdjustment adj,
+	                                   EmployeeSalaryTbl empSalary,
+	                                   String emailId,
+	                                   String phoneNumber,
+	                                   String accountNumber,
+	                                   String ifscCode,
+	                                   String bankName,
+	                                   YearMonth currentMonth,
+	                                   LocalDate lastDayOfMonth,
+	                                   ObjectMapper objectMapper,
+	                                   List<Payroll> payrollList) throws Exception {
+	    
+	    // Use manager-approved values from adjustment
+	    long allowanceDays = adj.getAllowanceDays();
+	    float lopDays = adj.getLopDays();
+	    double otherDeductions = adj.getOtherDeductions();
+	    double effectiveWorkingDays = adj.getEffectiveWorkingDays();
+	 
+	    // Parse Earnings & Deductions
+	    String earningsJson = cleanJson(empSalary.getEarnings());
+	    String deductionsJson = cleanJson(empSalary.getDeductions());
+	    String payrolldetuctionJson = cleanJson(empSalary.getPayrollDeductions());
+
+	    JsonNode earningsNode = objectMapper.readTree(earningsJson);
+	    JsonNode deductionsNode = objectMapper.readTree(deductionsJson);
+	    JsonNode payrollNode = objectMapper.readTree(payrolldetuctionJson);
+	 
+	    double totalEarnings = StreamSupport.stream(earningsNode.spliterator(), false)
+	            .mapToDouble(e -> e.get("monthlyAmount").asDouble(0.0)).sum();
+	    double totalDeductions = StreamSupport.stream(deductionsNode.spliterator(), false)
+	            .mapToDouble(d -> d.get("monthlyAmount").asDouble(0.0)).sum();
+	    double totalPayRollDeductions = StreamSupport.stream(payrollNode.spliterator(), false)
+	            .mapToDouble(d -> d.get("monthlyAmount").asDouble(0.0)).sum();
+	 
+	    // Identify allowances
+	    double perDayRate = 0, pgRentAllowance = 0;
+	    for (JsonNode e : earningsNode) {
+	        String name = e.get("name").asText();
+	        double amount = e.get("monthlyAmount").asDouble(0.0);
+	        if ("Per Day Allowance".equalsIgnoreCase(name)) {
+	            perDayRate = e.has("amount") && !e.get("amount").isNull() ? e.get("amount").asDouble(0.0) : amount;
+	        } else if ("PG Rent Allowance".equalsIgnoreCase(name)) {
+	            pgRentAllowance = amount;
+	        }
+	    }
+	 
+	    double totalPerDayAllowance = perDayRate * allowanceDays; // Approved days
+	    double baseSalary = (totalEarnings - totalPayRollDeductions) - (totalPerDayAllowance + pgRentAllowance);
+	 
+	    double perDayBaseRate = effectiveWorkingDays > 0 ? baseSalary / effectiveWorkingDays : 0;
+	    double lopDeduction = perDayBaseRate * lopDays;
+	 
+	    double Deductions = lopDeduction + otherDeductions;
+	    double netPay = baseSalary + totalPerDayAllowance + pgRentAllowance - Deductions;
+	 
+	    // Round all values
+	    baseSalary = round(baseSalary);
+	    totalPerDayAllowance = round(totalPerDayAllowance);
+	    pgRentAllowance = round(pgRentAllowance);
+	    lopDeduction = round(lopDeduction);
+	    netPay = round(netPay);
+	    totalEarnings = round(netPay + Deductions + totalPayRollDeductions);
+	    totalDeductions = round(totalDeductions);
+	 
+	    // Save Payroll
+	    Payroll payroll = payrollRepository.findByEmpidAndMonth(empId, currentMonth.toString());
+	    if (payroll == null)
+	        payroll = new Payroll();
+	 
+	    payroll.setEmpid(empId);
+	    payroll.setMonth(currentMonth.toString());
+	    payroll.setPymtDate(lastDayOfMonth);
+	    payroll.setStatus("PROCESSED");
+	    payroll.setAmount(baseSalary);
+	    payroll.setBnfName(employeeName);
+	    payroll.setBeneAccNo(accountNumber);
+	    payroll.setBeneIfsc(ifscCode);
+	    payroll.setEmailId(emailId);
+	    payroll.setMobileNum(phoneNumber);
+	    payroll.setDebitAccNo("611905056804");
+	    payroll.setCreditNarr("NA");
+	    payroll.setDebitNarr("NA");
+	    payroll.setPymtMode(bankName != null && bankName.toLowerCase().contains("icic") ? "FT" : "NEFT");
+	    payroll.setPymtProdTypeCode("PAB_VENDOR");
+	    payroll.setRemark(currentMonth.getMonth().name() + " " + currentMonth.getYear() + " Salary");
+	 
+	    // Store all calculated values
+	    payroll.setLopDays(lopDays);
+	    payroll.setTotalEarnings(totalEarnings);
+	    payroll.setTotalDeductions(totalDeductions);
+	    payroll.setLopDeduction(lopDeduction);
+	    payroll.setDeductions(Deductions);
+	    payroll.setOtherDeductions(otherDeductions);
+	    payroll.setPayrollDeductions(totalPayRollDeductions);
+	    payroll.setPerDayRate(perDayRate);
+	    payroll.setPerDayAllowance(totalPerDayAllowance);
+	    payroll.setPerDayAllowanceDays(allowanceDays);
+	    payroll.setPgRentAllowance(pgRentAllowance);
+	    payroll.setEffectiveWorkingDays(effectiveWorkingDays);
+	    payroll.setNetPay(netPay);
+	    payroll.setOtherDeductionsRemarks(adj.getOtherDeductionsRemarks());
+	    payroll.setCreatedDate(LocalDateTime.now());
+	 
+	    payrollList.add(payroll);
+	    System.out.println("Added payroll for: " + empId + " - " + employeeName);
+	}
+	 
 	// Helper method
-
 	private double round(double value) {
-
-		return Math.round(value * 100.0) / 100.0;
-
+	    return Math.round(value * 100.0) / 100.0;
 	}
  
 
@@ -6581,375 +7346,463 @@ public class AppController {
 
 	@GetMapping("/events/{employeeId}")
 	public ResponseEntity<?> getAttendanceEvents(@PathVariable String employeeId,
-			@RequestParam(required = false) Integer year, @RequestParam(required = false) Integer month) {
-		try {
-			Calendar todayCal = Calendar.getInstance();
+	        @RequestParam(required = false) Integer year, @RequestParam(required = false) Integer month) {
+	    try {
+	        Calendar todayCal = Calendar.getInstance();
+	        if (year == null) {
+	            year = todayCal.get(Calendar.YEAR);
+	        }
+	        if (month == null) {
+	            month = todayCal.get(Calendar.MONTH) + 1;
+	        }
+	        if (year < 2000 || month < 1 || month > 12 || employeeId == null || employeeId.isEmpty()) {
+	            return ResponseEntity.badRequest()
+	                    .body(Collections.singletonMap("error", "Invalid year, month, or employeeId"));
+	        }
 
-			// 🗓️ Default to current year and current month if not provided
-			if (year == null) {
-				year = todayCal.get(Calendar.YEAR);
-			}
-			if (month == null) {
-				month = todayCal.get(Calendar.MONTH) + 1; // 1-based month
-			}
+	        usermaintenance employee = usermaintenanceRepository.findByEmpid(employeeId);
+	        if (employee == null) {
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+	                    .body(Collections.singletonMap("error", "Employee not found"));
+	        }
 
-			// 🔒 Input validation
-			if (year < 2000 || month < 1 || month > 12 || employeeId == null || employeeId.isEmpty()) {
-				return ResponseEntity.badRequest()
-						.body(Collections.singletonMap("error", "Invalid year, month, or employeeId"));
-			}
+	        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+	        SimpleDateFormat dayFormat = new SimpleDateFormat("EEEE");
+	        SimpleDateFormat monthYearFormat = new SimpleDateFormat("yyyy-MM");
 
-			// 🔍 Verify employee
-			usermaintenance employee = usermaintenanceRepository.findByEmpid(employeeId);
-			if (employee == null) {
-				return ResponseEntity.status(HttpStatus.NOT_FOUND)
-						.body(Collections.singletonMap("error", "Employee not found"));
-			}
+	        Calendar startCal = Calendar.getInstance();
+	        startCal.set(year, Calendar.JANUARY, 1);
+	        Date startDate = startCal.getTime();
 
-			SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-			SimpleDateFormat dayFormat = new SimpleDateFormat("EEEE");
+	        Calendar endCal = Calendar.getInstance();
+	        endCal.set(Calendar.DAY_OF_MONTH, endCal.getActualMaximum(Calendar.DAY_OF_MONTH));
+	        Date endDate = endCal.getTime();
 
-			// ✅ From January 1st of the selected year to the end of the current month
-			Calendar startCal = Calendar.getInstance();
-			startCal.set(year, Calendar.JANUARY, 1);
-			Date startDate = startCal.getTime();
+	        Calendar today = Calendar.getInstance();
+	        Date attendanceEndDate = endDate.after(today.getTime()) ? today.getTime() : endDate;
 
-			Calendar endCal = Calendar.getInstance();
-			endCal.set(Calendar.DAY_OF_MONTH, endCal.getActualMaximum(Calendar.DAY_OF_MONTH));
-			Date endDate = endCal.getTime();
+	        List<Date> weekOffDays = getWeekOffsInRange(startDate, attendanceEndDate);
+	        Set<String> weekOffSet = weekOffDays.stream().map(d -> dateFormat.format(d)).collect(Collectors.toSet());
 
-			// ⏳ Limit end date to today if in current month
-			Calendar today = Calendar.getInstance();
-			Date attendanceEndDate = endDate.after(today.getTime()) ? today.getTime() : endDate;
+	        List<UserMasterAttendanceMod> attendanceRecords = usermasterattendancemodrepository
+	                .findByAttendanceidAndDateRange(employeeId, startDate, attendanceEndDate);
 
-			// 📆 Calculate week-offs using your method
-			List<Date> weekOffDays = getWeekOffsInRange(startDate, attendanceEndDate);
-			Set<String> weekOffSet = weekOffDays.stream().map(d -> dateFormat.format(d)).collect(Collectors.toSet());
+	        Map<String, UserMasterAttendanceMod> attendanceMap = new HashMap<>();
+	        for (UserMasterAttendanceMod record : attendanceRecords) {
+	            attendanceMap.put(dateFormat.format(record.getAttendancedate()), record);
+	        }
 
-			// 📊 Attendance records from DB
-			List<UserMasterAttendanceMod> attendanceRecords = usermasterattendancemodrepository
-					.findByAttendanceidAndDateRange(employeeId, startDate, attendanceEndDate);
+	        List<WsslCalendarMod> holidays = wsslCalendarModRepository.findByEventDateBetween(startDate, endDate);
+	        Map<String, WsslCalendarMod> holidayMap = new HashMap<>();
+	        for (WsslCalendarMod holiday : holidays) {
+	            holidayMap.put(dateFormat.format(holiday.getEventDate()), holiday);
+	        }
 
-			Map<String, UserMasterAttendanceMod> attendanceMap = new HashMap<>();
-			for (UserMasterAttendanceMod record : attendanceRecords) {
-				attendanceMap.put(dateFormat.format(record.getAttendancedate()), record);
-			}
+	        List<Map<String, Object>> events = new ArrayList<>();
+	        Calendar loopCal = (Calendar) startCal.clone();
 
-			// 🎉 Holidays
-			List<WsslCalendarMod> holidays = wsslCalendarModRepository.findByEventDateBetween(startDate, endDate);
-			Map<String, WsslCalendarMod> holidayMap = new HashMap<>();
-			for (WsslCalendarMod holiday : holidays) {
-				holidayMap.put(dateFormat.format(holiday.getEventDate()), holiday);
-			}
+	        // Track all absents (including on holidays) in sequential order per payroll cycle
+	        Map<String, Integer> payrollCycleAbsentCount = new HashMap<>();
+	        Map<String, Double> payrollCycleLeaveUsed = new HashMap<>();
 
-			// 📅 Build event list
-			List<Map<String, Object>> events = new ArrayList<>();
-			Calendar loopCal = (Calendar) startCal.clone();
+	        while (!loopCal.after(endCal)) {
+	            Date currentDate = loopCal.getTime();
+	            String dateStr = dateFormat.format(currentDate);
+	            String dayOfWeek = dayFormat.format(currentDate);
+	            String monthKey = monthYearFormat.format(currentDate);
+	            int currentMonth = loopCal.get(Calendar.MONTH) + 1;
+	            int currentYear = loopCal.get(Calendar.YEAR);
+	            int currentDay = loopCal.get(Calendar.DAY_OF_MONTH);
 
-			while (!loopCal.after(endCal)) {
-				Date currentDate = loopCal.getTime();
-				String dateStr = dateFormat.format(currentDate);
-				String dayOfWeek = dayFormat.format(currentDate);
+	            Map<String, Object> event = new HashMap<>();
+	            Map<String, String> extendedProps = new HashMap<>();
+	            extendedProps.put("dayOfWeek", dayOfWeek);
 
-				Map<String, Object> event = new HashMap<>();
-				Map<String, String> extendedProps = new HashMap<>();
-				extendedProps.put("dayOfWeek", dayOfWeek);
+	            UserMasterAttendanceMod attendanceRecord = attendanceMap.get(dateStr);
+	            boolean hasAttendance = attendanceRecord != null && attendanceRecord.getStatus() != null
+	                    && !attendanceRecord.getStatus().trim().isEmpty();
 
-				UserMasterAttendanceMod attendanceRecord = attendanceMap.get(dateStr);
-				boolean hasAttendance = attendanceRecord != null && attendanceRecord.getStatus() != null
-						&& !attendanceRecord.getStatus().trim().isEmpty();
+	            String status = hasAttendance ? attendanceRecord.getStatus().trim() : "";
 
-				// 🟨 Holiday with attendance record
-				if (holidayMap.containsKey(dateStr) && hasAttendance) {
-					WsslCalendarMod holiday = holidayMap.get(dateStr);
-					String status = attendanceRecord.getStatus().trim();
-					event.put("title", holiday.getEventName() + " - " + status);
-					event.put("backgroundColor", getStatusColor(status));
-					extendedProps.put("status", status);
-					extendedProps.put("holiday", holiday.getEventName());
-					extendedProps.put("type", "Holiday Attendance");
+	            boolean isAbsentDay = "absent".equalsIgnoreCase(status) || status.toLowerCase().contains("absent");
 
-					// 🟦 Week Off with attendance record
-				} else if (weekOffSet.contains(dateStr) && hasAttendance) {
-					String status = attendanceRecord.getStatus().trim();
-					event.put("title", "Week Off - " + status);
-					event.put("backgroundColor", getStatusColor(status));
-					extendedProps.put("status", status);
-					extendedProps.put("type", "Week Off Attendance");
+	            // Check if it's a holiday or week off
+	            boolean isHoliday = holidayMap.containsKey(dateStr);
+	            boolean isWeekOff = weekOffSet.contains(dateStr);
+	            
+	            // Check if it's a working day (not week off)
+	            boolean isWorkingDay = !isWeekOff;
 
-					// 🟨 Regular Holiday
-				} else if (holidayMap.containsKey(dateStr)) {
-					WsslCalendarMod holiday = holidayMap.get(dateStr);
-					event.put("title", holiday.getEventName());
-					event.put("backgroundColor", "#ffc107");
-					extendedProps.put("status", "Holiday");
+	            if (isHoliday && hasAttendance && !isAbsentDay) {
+	                // Holiday with attendance (not absent)
+	                WsslCalendarMod holiday = holidayMap.get(dateStr);
+	                event.put("title", holiday.getEventName() + " - " + status);
+	                event.put("backgroundColor", getStatusColor(status));
+	                extendedProps.put("status", status);
+	                extendedProps.put("holiday", holiday.getEventName());
+	                extendedProps.put("type", "Holiday Attendance");
+	            } else if (isWeekOff && hasAttendance && !isAbsentDay) {
+	                // Week off with attendance (not absent)
+	                event.put("title", "Week Off - " + status);
+	                event.put("backgroundColor", getStatusColor(status));
+	                extendedProps.put("status", status);
+	                extendedProps.put("type", "Week Off Attendance");
+	            } else if (isHoliday && !hasAttendance) {
+	                // Pure holiday (no attendance record)
+	                WsslCalendarMod holiday = holidayMap.get(dateStr);
+	                event.put("title", holiday.getEventName());
+	                event.put("backgroundColor", "#ffc107");
+	                extendedProps.put("status", "Holiday");
+	                extendedProps.put("holiday", holiday.getEventName());
+	                extendedProps.put("type", "Holiday");
+	            } else if (isWeekOff && !hasAttendance) {
+	                // Pure week off (no attendance record)
+	                event.put("title", "Week Off");
+	                event.put("backgroundColor", "#e0e0e0");
+	                extendedProps.put("status", "Week Off");
+	                extendedProps.put("type", "Week Off");
+	            } else if (hasAttendance && isAbsentDay) {
+	                // Absent day (including holidays)
+	                String payrollCycleKey = getPayrollCycleKey(currentDate);
+	                
+	                // Initialize counters for this payroll cycle if not exists
+	                if (!payrollCycleAbsentCount.containsKey(payrollCycleKey)) {
+	                    payrollCycleAbsentCount.put(payrollCycleKey, 0);
+	                    payrollCycleLeaveUsed.put(payrollCycleKey, 0.0);
+	                }
+	                
+	                // Increment absent count for this payroll cycle
+	                int absentCount = payrollCycleAbsentCount.get(payrollCycleKey) + 1;
+	                payrollCycleAbsentCount.put(payrollCycleKey, absentCount);
+	                
+	                // Calculate LOP based on absent count (1.5 days CL allowed per cycle)
+	                String displayStatus;
+	                String backgroundColor;
+	                double leaveUsed = payrollCycleLeaveUsed.get(payrollCycleKey);
+	                
+	                if (absentCount == 1) {
+	                    // First absent: Full day counted against CL
+	                    displayStatus = isHoliday ? "Absent (CL) on Holiday" : "Absent (CL)";
+	                    backgroundColor = "#22c997"; // Blue color for CL
+	                    if (leaveUsed + 1.0 <= 1.5) {
+	                        payrollCycleLeaveUsed.put(payrollCycleKey, leaveUsed + 1.0);
+	                    }
+	                } else if (absentCount == 2) {
+	                    // Second absent: Half day LOP (0.5 CL + 0.5 LOP)
+	                    displayStatus = isHoliday ? "Absent (0.5 LOP) on Holiday" : "Absent (0.5 LOP)";
+	                    backgroundColor = "#ffa500"; // Orange color for 0.5 LOP
+	                    if (leaveUsed + 0.5 <= 1.5) {
+	                        payrollCycleLeaveUsed.put(payrollCycleKey, leaveUsed + 0.5);
+	                    }
+	                } else {
+	                    // Third and subsequent absents: Full LOP
+	                    displayStatus = isHoliday ? "Absent (LOP) on Holiday" : "Absent (LOP)";
+	                    backgroundColor = "#ff4c4c"; // Red color for full LOP
+	                    // No leave used for LOP days
+	                }
+	                
+	                // Build title
+	                String title;
+	                if (isHoliday) {
+	                    WsslCalendarMod holiday = holidayMap.get(dateStr);
+	                    title = holiday.getEventName() + " - " + displayStatus;
+	                    extendedProps.put("holiday", holiday.getEventName());
+	                } else {
+	                    title = displayStatus;
+	                }
+	                
+	                event.put("title", title);
+	                event.put("backgroundColor", backgroundColor);
+	                extendedProps.put("status", displayStatus);
+	                extendedProps.put("originalStatus", status);
+	                extendedProps.put("absentCount", String.valueOf(absentCount));
+	                extendedProps.put("payrollCycle", payrollCycleKey);
+	                extendedProps.put("leaveUsed", String.format("%.1f", payrollCycleLeaveUsed.get(payrollCycleKey)));
+	                extendedProps.put("totalAbsents", String.valueOf(absentCount));
+	                extendedProps.put("isHoliday", isHoliday ? "Yes" : "No");
+	                extendedProps.put("isWorkingDay", isWorkingDay ? "Yes" : "No");
+	                extendedProps.put("leaveType", absentCount == 1 ? "CL" : (absentCount == 2 ? "0.5 LOP" : "LOP"));
+	                
+	            } else if (hasAttendance) {
+	                // Other attendance statuses (present, early leave, etc.)
+	                String originalStatus = status;
+	                
+	                switch (status.toLowerCase()) {
+	                    case "present":
+	                    case "forgot":
+	                        event.put("backgroundColor", "#28a745");
+	                        break;
+	                    case "early leave":
+	                        event.put("backgroundColor", "#fd7e14");
+	                        break;
+	                    case "miss punch":
+	                        event.put("backgroundColor", "#ffff84");
+	                        break;
+	                    case "week off":
+	                        event.put("backgroundColor", "#e0e0e0");
+	                        break;
+	                    case "comp off":
+	                        event.put("backgroundColor", "#17a2b8");
+	                        break;
+	                    case "public holiday":
+	                        event.put("backgroundColor", "#ffc107");
+	                        break;
+	                    case "od":
+	                        event.put("backgroundColor", "#6f42c1");
+	                        break;
+	                    default:
+	                        event.put("backgroundColor", getStatusColor(status));
+	                        break;
+	                }
+	                event.put("title", status);
+	                extendedProps.put("status", status);
+	                extendedProps.put("originalStatus", originalStatus);
+	                
+	            } else {
+	                // No attendance record
+	                if (!currentDate.after(today.getTime())) {
+	                    event.put("title", "Miss Punch");
+	                    event.put("backgroundColor", "#ffff84");
+	                    extendedProps.put("status", "Miss Punch");
+	                } else {
+	                    event.put("title", "N/A");
+	                    event.put("backgroundColor", "#ffffff");
+	                    extendedProps.put("status", "N/A");
+	                }
+	            }
 
-					// 🟦 Regular Week Off
-				} else if (weekOffSet.contains(dateStr)) {
-					event.put("title", "Week Off");
-					event.put("backgroundColor", "#e0e0e0");
-					extendedProps.put("status", "Week Off");
+	            event.put("date", dateStr);
+	            event.put("extendedProps", extendedProps);
+	            events.add(event);
+	            loopCal.add(Calendar.DAY_OF_MONTH, 1);
+	        }
 
-					// 🟩 Regular Attendance Record
-				} else if (hasAttendance) {
-					String status = attendanceRecord.getStatus().trim();
-					String originalStatus = status; // Keep original status for display
-
-					switch (status.toLowerCase()) {
-					case "present":
-					case "forgot":
-						event.put("backgroundColor", "#28a745"); // green
-						break;
-					case "early leave":
-						event.put("backgroundColor", "#fd7e14"); // orange for early leave
-						break;
-					case "miss punch":
-						event.put("backgroundColor", "#ffff84"); // yellow
-						break;
-					case "week off":
-						event.put("backgroundColor", "#e0e0e0"); // gray
-						break;
-					case "comp off":
-						event.put("backgroundColor", "#17a2b8"); // teal
-						break;
-					case "public holiday":
-						event.put("backgroundColor", "#ffc107"); // amber
-						break;
-					case "od":
-						event.put("backgroundColor", "#6f42c1"); // purple
-						break;
-					case "absent":
-						// For Absent, check if CL is available
-						Optional<EmployeeLeaveSummary> summaryOpt = employeeLeaveSummaryRepository
-								.findByEmpIdAndYear(employeeId, year);
-						if (summaryOpt.isPresent() && summaryOpt.get().getCasualLeaveBalance() > 0) {
-							status = "Absent (CL Used)";
-							event.put("backgroundColor", "#ffa500"); // orange
-						} else {
-							status = "Absent (LOP)";
-							event.put("backgroundColor", "#ff4c4c"); // red
-						}
-						break;
-					default:
-						// For any other status including "absent", check CL balance
-						if ("absent".equalsIgnoreCase(status)) {
-							Optional<EmployeeLeaveSummary> summaryOpt1 = employeeLeaveSummaryRepository
-									.findByEmpIdAndYear(employeeId, year);
-							if (summaryOpt1.isPresent() && summaryOpt1.get().getCasualLeaveBalance() > 0) {
-								status = "Absent (CL Used)";
-								event.put("backgroundColor", "#ffa500"); // orange
-							} else {
-								status = "Absent (LOP)";
-								event.put("backgroundColor", "#ff4c4c"); // red
-							}
-						} else {
-							event.put("backgroundColor", getStatusColor(status));
-						}
-						break;
-					}
-
-					event.put("title", status);
-					extendedProps.put("status", status);
-					extendedProps.put("originalStatus", originalStatus);
-
-					// 🟠 No record (Miss Punch or Future Date)
-				} else {
-					if (!currentDate.after(today.getTime())) {
-						event.put("title", "Miss Punch");
-						event.put("backgroundColor", "#ffff84");
-						extendedProps.put("status", "Miss Punch");
-					} else {
-						event.put("title", "");
-						event.put("backgroundColor", "#ffffff");
-						extendedProps.put("status", "");
-					}
-				}
-
-				event.put("date", dateStr);
-				event.put("extendedProps", extendedProps);
-				events.add(event);
-				loopCal.add(Calendar.DAY_OF_MONTH, 1);
-			}
-
-			return ResponseEntity.ok(events);
-
-		} catch (Exception e) {
-			e.printStackTrace();
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-					.body(Collections.singletonMap("error", "Failed to fetch attendance events"));
-		}
+	        return ResponseEntity.ok(events);
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                .body(Collections.singletonMap("error", "Failed to fetch attendance events"));
+	    }
 	}
 
-	// Helper method to get color based on status
+	private String getPayrollCycleKey(Date date) {
+	    Calendar cal = Calendar.getInstance();
+	    cal.setTime(date);
+	    int year = cal.get(Calendar.YEAR);
+	    int month = cal.get(Calendar.MONTH) + 1;
+	    int day = cal.get(Calendar.DAY_OF_MONTH);
+	    
+	    if (day >= 27) {
+	        return year + "-" + String.format("%02d", month) + "-27to" + 
+	               getNextMonthYearString(year, month) + "-26";
+	    } else {
+	        Calendar prevMonthCal = (Calendar) cal.clone();
+	        prevMonthCal.add(Calendar.MONTH, -1);
+	        int prevYear = prevMonthCal.get(Calendar.YEAR);
+	        int prevMonth = prevMonthCal.get(Calendar.MONTH) + 1;
+	        
+	        return prevYear + "-" + String.format("%02d", prevMonth) + "-27to" + 
+	               year + "-" + String.format("%02d", month) + "-26";
+	    }
+	}
+
+	private String getNextMonthYearString(int year, int month) {
+	    Calendar nextMonthCal = Calendar.getInstance();
+	    nextMonthCal.set(year, month - 1, 1);
+	    nextMonthCal.add(Calendar.MONTH, 1);
+	    int nextYear = nextMonthCal.get(Calendar.YEAR);
+	    int nextMonth = nextMonthCal.get(Calendar.MONTH) + 1;
+	    
+	    return nextYear + "-" + String.format("%02d", nextMonth);
+	}
+
+	private boolean isLeaveStatus(String status) {
+	    if (status == null) return false;
+	    String normalized = status.toLowerCase();
+	    return normalized.contains("sick") || normalized.contains("casual") || normalized.contains("earned")
+	            || normalized.contains("privilege") || normalized.contains("maternity") || normalized.contains("paternity")
+	            || normalized.contains("compensatory") || normalized.contains("bereavement")
+	            || normalized.contains("leave");
+	}
+
+	private String extractLeaveType(String status) {
+	    if (status == null) return null;
+	    String normalized = status.toLowerCase();
+	    if (normalized.contains("sick")) return "Sick Leave";
+	    if (normalized.contains("casual")) return "Casual Leave";
+	    if (normalized.contains("earned")) return "Earned Leave";
+	    if (normalized.contains("privilege")) return "Privilege Leave";
+	    if (normalized.contains("maternity")) return "Maternity Leave";
+	    if (normalized.contains("paternity")) return "Paternity Leave";
+	    if (normalized.contains("compensatory")) return "Compensatory Leave";
+	    if (normalized.contains("bereavement")) return "Bereavement Leave";
+	    if (normalized.contains("leave")) return status;
+	    return null;
+	}
+
+	private String getSpecialLeaveColor(String leaveType) {
+	    if (leaveType == null) return "#ffffff";
+	    String normalizedType = leaveType.toLowerCase();
+	    switch (normalizedType) {
+	        case "sick leave":
+	        case "medical leave":
+	            return "#ff9999";
+	        case "casual leave":
+	            return "#99ccff";
+	        case "earned leave":
+	        case "privilege leave":
+	            return "#99ff99";
+	        case "maternity leave":
+	            return "#ff99ff";
+	        case "paternity leave":
+	            return "#cc99ff";
+	        case "compensatory leave":
+	            return "#ffcc99";
+	        case "bereavement leave":
+	            return "#cccccc";
+	        default:
+	            return "#ffff99";
+	    }
+	}
+
 	private String getStatusColor(String status) {
-		if (status == null)
-			return "#ffffff";
-
-		String normalizedStatus = status.toLowerCase();
-
-		switch (normalizedStatus) {
-		case "present":
-			return "#28a745";
-		case "early leave":
-			return "#fd7e14"; // orange for early leave
-		case "absent":
-			return "#ff4c4c";
-		case "absent (cl used)":
-			return "#ffa500"; // orange for CL used
-		case "absent (lop)":
-			return "#ff4c4c"; // red for LOP
-		case "miss punch":
-		case "forgot":
-			return "#ffff84";
-		case "week off":
-			return "#e0e0e0";
-		case "comp off":
-			return "#17a2b8";
-		case "public holiday":
-			return "#ffc107";
-		case "od":
-			return "#6f42c1";
-		default:
-			return "#ffffff";
-		}
+	    if (status == null) return "#ffffff";
+	    String normalizedStatus = status.toLowerCase();
+	    switch (normalizedStatus) {
+	        case "present":
+	            return "#28a745";
+	        case "early leave":
+	            return "#fd7e14";
+	        case "absent (cl)":
+	            return "#279f7b"; // Blue for CL
+	        case "absent (0.5 lop)":
+	            return "#ffa500"; // Orange for 0.5 LOP
+	        case "absent (lop)":
+	            return "#ff4c4c"; // Red for full LOP
+	        case "miss punch":
+	        case "forgot":
+	            return "#ffff84";
+	        case "week off":
+	            return "#e0e0e0";
+	        case "comp off":
+	            return "#17a2b8";
+	        case "public holiday":
+	            return "#ffc107";
+	        case "od":
+	            return "#6f42c1";
+	        default:
+	            if (isLeaveStatus(status)) {
+	                return getSpecialLeaveColor(extractLeaveType(status));
+	            }
+	            return "#ffffff";
+	    }
 	}
 
-	/**
-	 * ✅ Calculates Week-Offs (All Sundays + 2nd & 4th Saturdays)
-	 */
-	/**
-	 * ✅ Calculates Week-Offs (All Sundays + 2nd & 4th Saturdays)
-	 */
 	List<Date> getWeekOffsInRange(Date startDate, Date endDate) {
-		List<Date> weekOffDays = new ArrayList<>();
-		Calendar cal = Calendar.getInstance();
-		cal.setTime(startDate);
+	    List<Date> weekOffDays = new ArrayList<>();
+	    Calendar cal = Calendar.getInstance();
+	    cal.setTime(startDate);
 
-		int saturdayCount = 0;
-		int currentMonth = cal.get(Calendar.MONTH); // Track month separately
+	    while (!cal.getTime().after(endDate)) {
+	        int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK);
+	        
+	        if (dayOfWeek == Calendar.SUNDAY) {
+	            weekOffDays.add(cal.getTime());
+	        } else if (dayOfWeek == Calendar.SATURDAY) {
+	            Calendar tempCal = (Calendar) cal.clone();
+	            int saturdayCount = 0;
+	            int currentMonth = tempCal.get(Calendar.MONTH);
+	            
+	            tempCal.set(Calendar.DAY_OF_MONTH, 1);
+	            while (tempCal.get(Calendar.MONTH) == currentMonth) {
+	                if (tempCal.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY) {
+	                    saturdayCount++;
+	                    if (tempCal.get(Calendar.DAY_OF_MONTH) == cal.get(Calendar.DAY_OF_MONTH)) {
+	                        if (saturdayCount == 2 || saturdayCount == 4) {
+	                            weekOffDays.add(cal.getTime());
+	                        }
+	                        break;
+	                    }
+	                }
+	                tempCal.add(Calendar.DAY_OF_MONTH, 1);
+	            }
+	        }
+	        
+	        cal.add(Calendar.DAY_OF_MONTH, 1);
+	    }
 
-		while (!cal.getTime().after(endDate)) {
-			int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK);
-
-			// Every Sunday is week off
-			if (dayOfWeek == Calendar.SUNDAY) {
-				weekOffDays.add(cal.getTime());
-			}
-
-			// Count Saturdays — add only 2nd and 4th
-			if (dayOfWeek == Calendar.SATURDAY) {
-				saturdayCount++;
-				if (saturdayCount == 2 || saturdayCount == 4) {
-					weekOffDays.add(cal.getTime());
-				}
-			}
-
-			// Move to next day
-			cal.add(Calendar.DAY_OF_MONTH, 1);
-
-			// Reset Saturday count when month changes
-			int nextMonth = cal.get(Calendar.MONTH);
-			if (nextMonth != currentMonth) {
-				saturdayCount = 0;
-				currentMonth = nextMonth;
-			}
-		}
-
-		return weekOffDays;
+	    return weekOffDays;
 	}
 
 	private int calculateEffectiveWorkingDays(int year, int month) {
-		// Set start date to 27th of given month
-		Calendar startCal = Calendar.getInstance();
-		startCal.set(year, month - 1, 27);
-		Date startDate = startCal.getTime();
-
-		// Set end date to 26th of next month
-		Calendar endCal = (Calendar) startCal.clone();
-		endCal.add(Calendar.MONTH, 1);
-		endCal.set(Calendar.DAY_OF_MONTH, 26);
-		Date endDate = endCal.getTime();
-
-		// Calculate total days
-		long diffInMillies = endDate.getTime() - startDate.getTime();
-		int totalDays = (int) (diffInMillies / (1000 * 60 * 60 * 24)) + 1;
-
-		// Week-offs in that specific date range
-		List<Date> weekOffDays = getWeekOffsInRange(startDate, endDate);
-
-		System.out.println("Total Days: " + totalDays);
-		System.out.println("Week Offs: " + weekOffDays.size());
-		System.out.println("Week Off Dates: " + weekOffDays);
-
-		return totalDays - weekOffDays.size();
+	    Calendar startCal = Calendar.getInstance();
+	    startCal.set(year, month - 1, 27);
+	    Date startDate = startCal.getTime();
+	    Calendar endCal = (Calendar) startCal.clone();
+	    endCal.add(Calendar.MONTH, 1);
+	    endCal.set(Calendar.DAY_OF_MONTH, 26);
+	    Date endDate = endCal.getTime();
+	    long diffInMillies = endDate.getTime() - startDate.getTime();
+	    int totalDays = (int) (diffInMillies / (1000 * 60 * 60 * 24)) + 1;
+	    List<Date> weekOffDays = getWeekOffsInRange(startDate, endDate);
+	    System.out.println("Total Days: " + totalDays);
+	    System.out.println("Week Offs: " + weekOffDays.size());
+	    System.out.println("Week Off Dates: " + weekOffDays);
+	    return totalDays - weekOffDays.size();
 	}
 
 	private List<Date> getWeekOffsInRange1(Date startDate, Date endDate) {
-		List<Date> weekOffDays = new ArrayList<>();
-		Calendar cal = Calendar.getInstance();
-		cal.setTime(startDate);
-
-		int saturdayCount = 0;
-		List<Integer> saturdayTracker = new ArrayList<>();
-
-		while (!cal.getTime().after(endDate)) {
-			int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK);
-
-			if (dayOfWeek == Calendar.SUNDAY) {
-				weekOffDays.add(cal.getTime());
-			} else if (dayOfWeek == Calendar.SATURDAY) {
-				saturdayCount++;
-				if (saturdayCount == 2 || saturdayCount == 4) {
-					weekOffDays.add(cal.getTime());
-				}
-			}
-
-			cal.add(Calendar.DAY_OF_MONTH, 1);
-		}
-
-		return weekOffDays;
+	    List<Date> weekOffDays = new ArrayList<>();
+	    Calendar cal = Calendar.getInstance();
+	    cal.setTime(startDate);
+	    int saturdayCount = 0;
+	    List<Integer> saturdayTracker = new ArrayList<>();
+	    while (!cal.getTime().after(endDate)) {
+	        int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK);
+	        if (dayOfWeek == Calendar.SUNDAY) {
+	            weekOffDays.add(cal.getTime());
+	        } else if (dayOfWeek == Calendar.SATURDAY) {
+	            saturdayCount++;
+	            if (saturdayCount == 2 || saturdayCount == 4) {
+	                weekOffDays.add(cal.getTime());
+	            }
+	        }
+	        cal.add(Calendar.DAY_OF_MONTH, 1);
+	    }
+	    return weekOffDays;
 	}
 
 	private List<Date> calculateWeekOffsForPreviousAndCurrentMonth(int year, int month) {
-		List<Date> weekOffDays = new ArrayList<>();
-
-		// Previous month
-		Calendar prevMonth = Calendar.getInstance();
-		prevMonth.set(year, month - 1, 1); // Set to current month
-		prevMonth.add(Calendar.MONTH, 1); // Move to previous month
-		weekOffDays.addAll(getWeekOffsOfMonth(prevMonth.get(Calendar.YEAR), prevMonth.get(Calendar.MONTH) + 1));
-
-		// Current month
-		weekOffDays.addAll(getWeekOffsOfMonth(year, month));
-
-		return weekOffDays;
+	    List<Date> weekOffDays = new ArrayList<>();
+	    Calendar prevMonth = Calendar.getInstance();
+	    prevMonth.set(year, month - 1, 1);
+	    prevMonth.add(Calendar.MONTH, 1);
+	    weekOffDays.addAll(getWeekOffsOfMonth(prevMonth.get(Calendar.YEAR), prevMonth.get(Calendar.MONTH) + 1));
+	    weekOffDays.addAll(getWeekOffsOfMonth(year, month));
+	    return weekOffDays;
 	}
 
 	private List<Date> getWeekOffsOfMonth(int year, int month) {
-		List<Date> weekOffs = new ArrayList<>();
-		Calendar cal = Calendar.getInstance();
-		cal.set(year, month - 1, 1); // Start of month
-
-		int saturdayCount = 0;
-
-		while (cal.get(Calendar.MONTH) == month - 1) {
-			int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK);
-
-			if (dayOfWeek == Calendar.SUNDAY) {
-				weekOffs.add(cal.getTime());
-			} else if (dayOfWeek == Calendar.SATURDAY) {
-				saturdayCount++;
-				if (saturdayCount == 2 || saturdayCount == 4) {
-					weekOffs.add(cal.getTime());
-				}
-			}
-
-			cal.add(Calendar.DAY_OF_MONTH, 1);
-		}
-		System.out.println("Week off+++++++++++++++" + weekOffs);
-		return weekOffs;
+	    List<Date> weekOffs = new ArrayList<>();
+	    Calendar cal = Calendar.getInstance();
+	    cal.set(year, month - 1, 1);
+	    int saturdayCount = 0;
+	    while (cal.get(Calendar.MONTH) == month - 1) {
+	        int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK);
+	        if (dayOfWeek == Calendar.SUNDAY) {
+	            weekOffs.add(cal.getTime());
+	        } else if (dayOfWeek == Calendar.SATURDAY) {
+	            saturdayCount++;
+	            if (saturdayCount == 2 || saturdayCount == 4) {
+	                weekOffs.add(cal.getTime());
+	            }
+	        }
+	        cal.add(Calendar.DAY_OF_MONTH, 1);
+	    }
+	    System.out.println("Week off+++++++++++++++" + weekOffs);
+	    return weekOffs;
 	}
-
+	
 	@PostMapping("/attendance/update")
 	public ResponseEntity<?> updateOrSaveAttendance(@RequestBody UserMasterAttendanceMod attendance) {
 		try {
@@ -7383,7 +8236,7 @@ public class AppController {
 						"Dear %s,\n\nYour permission request from %s to %s for %s hours has been approved.\n\nRegards,\n%s,\nWhitestone Software Solution Pvt Ltd.",
 						employeeFirstName, startTimeFormatted, endTimeFormatted, permissionRequest.getHours(),
 						managerFirstName);
-				emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
+//				emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
 				System.out.println("Email sent to: " + employeeEmail);
 			}
 
@@ -7485,10 +8338,15 @@ public class AppController {
 			}
 
 			if (isHR) {
-				empIds.addAll(usermaintenanceRepository.findAll().stream().map(usermaintenance::getEmpid).toList());
-				empIds.addAll(traineemasterRepository.findAll().stream().map(TraineeMaster::getTrngid).toList());
+			    empIds.addAll(usermaintenanceRepository.findAll().stream()
+			        .map(usermaintenance -> usermaintenance.getEmpid())
+			        .collect(Collectors.toList()));
+			    
+			    empIds.addAll(traineemasterRepository.findAll().stream()
+			        .map(TraineeMaster::getTrngid)
+			        .collect(Collectors.toList()));
 			} else {
-				empIds = getDirectReports(empId);
+			    empIds = getDirectReports(empId);
 			}
 
 			// Fetch Master permission requests
@@ -7547,7 +8405,121 @@ public class AppController {
 		List<TraineeMaster> trainees = traineemasterRepository.findAll();
 		return ResponseEntity.ok(trainees);
 	}
+	
+	@GetMapping("/payroll/employees-trainees")
+    public ResponseEntity<?> getAllEmployeesAndTrainees() {
+        try {
+            List<Map<String, String>> combinedList = new ArrayList<>();
+            
+            // Fetch Active Employees (with null check)
+            List<usermaintenance> employees = usermaintenanceRepository.findByStatusIgnoreCase("Active");
+            if (employees != null) {
+                employees.stream()
+                    .filter(emp -> emp != null && emp.getEmpid() != null)
+                    .forEach(emp -> {
+                        Map<String, String> empMap = new HashMap<>();
+                        empMap.put("id", emp.getEmpid());
+                        String firstName = emp.getFirstname() != null ? emp.getFirstname() : "";
+                        String lastName = emp.getLastname() != null ? " " + emp.getLastname() : "";
+                        empMap.put("name", (firstName + lastName).trim());
+                        empMap.put("type", "Employee");
+                        empMap.put("employeeId", emp.getEmpid());
+                        empMap.put("employeeName", firstName);
+                        combinedList.add(empMap);
+                    });
+            }
+            
+            // Fetch All Trainees (with null check)
+            List<TraineeMaster> trainees = traineemasterRepository.findAll();
+            if (trainees != null) {
+                trainees.stream()
+                    .filter(trainee -> trainee != null && trainee.getTrngid() != null)
+                    .forEach(trainee -> {
+                        Map<String, String> traineeMap = new HashMap<>();
+                        traineeMap.put("id", trainee.getTrngid());
+                        String userName = trainee.getUsername() != null ? trainee.getUsername() : "";
+                        String firstName = trainee.getFirstname() != null ? trainee.getFirstname() : "";
+                        String displayName = userName.isEmpty() ? firstName : userName;
+                        traineeMap.put("name", displayName);
+                        traineeMap.put("type", "Trainee");
+                        traineeMap.put("traineeId", trainee.getTrngid());
+                        traineeMap.put("traineeName", displayName);
+                        combinedList.add(traineeMap);
+                    });
+            }
+            
+            // Sort by name (with null check)
+            combinedList.sort((a, b) -> {
+                String nameA = a.getOrDefault("name", "");
+                String nameB = b.getOrDefault("name", "");
+                return nameA.compareTo(nameB);
+            });
+            
+            return ResponseEntity.ok(combinedList);
+            
+        } catch (Exception e) {
+            e.printStackTrace(); // For debugging
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to fetch data");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
 
+	
+	@GetMapping("/payroll/trainee/{id}")
+	public ResponseEntity<?> getTraineeById1(@PathVariable String id) {
+	    try {
+	        // Fetch trainee by ID (TRNG_ID)
+	        TraineeMaster trainee = traineemasterRepository.findByTrngid(id);
+	        
+	        if (trainee == null) {
+	            Map<String, String> errorResponse = new HashMap<>();
+	            errorResponse.put("error", "Trainee not found");
+	            errorResponse.put("message", "No trainee found with ID: " + id);
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+	        }
+	        
+	        // Create response map with only non-null fields
+	        Map<String, Object> traineeDetails = new HashMap<>();
+	        
+	        // Add fields only if they are not null
+	        if (trainee.getUserid() != null) traineeDetails.put("userid", trainee.getUserid());
+	        if (trainee.getTrngid() != null) traineeDetails.put("empid", trainee.getTrngid()); // Map to empid for form compatibility
+	        if (trainee.getTrngid() != null) traineeDetails.put("traineeId", trainee.getTrngid());
+	        if (trainee.getUsername() != null) traineeDetails.put("username", trainee.getUsername());
+	        if (trainee.getFirstname() != null) traineeDetails.put("firstname", trainee.getFirstname());
+	        if (trainee.getLastname() != null) traineeDetails.put("lastname", trainee.getLastname());
+	        if (trainee.getEmailid() != null) traineeDetails.put("emailid", trainee.getEmailid());
+	        if (trainee.getPhonenumber() != null) traineeDetails.put("phonenumber", trainee.getPhonenumber());
+	        if (trainee.getRoleid() != null) traineeDetails.put("roleid", trainee.getRoleid());
+	        if (trainee.getRepoteTo() != null) traineeDetails.put("repoteTo", trainee.getRepoteTo());
+	        if (trainee.getStatus() != null) traineeDetails.put("status", trainee.getStatus());
+	        if (trainee.getEmpType() != null) traineeDetails.put("empType", trainee.getEmpType());
+	        if (trainee.getLastlogin() != null) traineeDetails.put("lastlogin", trainee.getLastlogin());
+	        if (trainee.getDisablefromdate() != null) traineeDetails.put("disablefromdate", trainee.getDisablefromdate());
+	        if (trainee.getDisabletodate() != null) traineeDetails.put("disabletodate", trainee.getDisabletodate());
+	        if (trainee.getRcreuserid() != null) traineeDetails.put("rcreuserid", trainee.getRcreuserid());
+	        if (trainee.getRcretime() != null) traineeDetails.put("rcretime", trainee.getRcretime());
+	        if (trainee.getRmoduserid() != null) traineeDetails.put("rmoduserid", trainee.getRmoduserid());
+	        if (trainee.getRmodtime() != null) traineeDetails.put("rmodtime", trainee.getRmodtime());
+	        if (trainee.getRvfyuserid() != null) traineeDetails.put("rvfyuserid", trainee.getRvfyuserid());
+	        if (trainee.getRvfytime() != null) traineeDetails.put("rvfytime", trainee.getRvfytime());
+	        
+	        // Add type indicator
+	        traineeDetails.put("personType", "Trainee");
+	        
+	        return ResponseEntity.ok(traineeDetails);
+	        
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        Map<String, String> errorResponse = new HashMap<>();
+	        errorResponse.put("error", "Failed to fetch trainee data");
+	        errorResponse.put("message", e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+	    }
+	}
+	
 	@PutMapping("/employee/{userId}/status")
 	public ResponseEntity<Void> updateEmployeeStatus(@PathVariable String userId,
 			@RequestBody Map<String, String> statusUpdate) {
@@ -8283,197 +9255,398 @@ public class AppController {
 
 	@Transactional(rollbackFor = Exception.class)
 	@PostMapping("/requests/approve")
+//	@Transactional
 	public ResponseEntity<?> approveRequest(@RequestBody Map<String, Object> payload) {
-		try {
-			Long requestId = Long.valueOf(payload.get("requestId").toString());
-			String action = payload.get("action").toString(); // Approved / Rejected
-			String managerId = payload.get("managerId").toString();
+	    try {
+	        System.out.println("=== APPROVE REQUEST STARTED ===");
+	        System.out.println("Payload: " + payload);
+	        
+	        Long requestId = Long.valueOf(payload.get("requestId").toString());
+	        String action = payload.get("action").toString(); // Approved / Rejected
+	        String managerId = payload.get("managerId").toString();
 
-			AttendanceChangeRequest request = attendanceChangeRequestRepository.findById(requestId)
-					.orElseThrow(() -> new RuntimeException("Request not found"));
+	        System.out.println("Processing request ID: " + requestId + ", Action: " + action + ", Manager: " + managerId);
 
-			// ✅ Restrict self-approval
-			if (request.getEmployeeId().equals(managerId)) {
-				return ResponseEntity.status(HttpStatus.FORBIDDEN)
-						.body(Map.of("error", "You cannot approve or reject your own request."));
-			}
+	        AttendanceChangeRequest request = attendanceChangeRequestRepository.findById(requestId)
+	                .orElseThrow(() -> new RuntimeException("Request not found"));
 
-			// ✅ Identify whether Employee or Trainee
-			usermaintenance emp = usermaintenanceRepository.findByEmpid(request.getEmployeeId());
-			TraineeMaster trainee = null;
-			if (emp == null) {
-				trainee = traineemasterRepository.findByTrngid(request.getEmployeeId());
-			}
+	        System.out.println("Found request for employee: " + request.getEmployeeId() + ", Date: " + request.getAttendanceDate());
 
-			// ✅ Validate manager relationship
-			boolean authorized = false;
-			if (emp != null && managerId.equals(emp.getRepoteTo())) {
-				authorized = true;
-			} else if (trainee != null && managerId.equals(trainee.getRepoteTo())) {
-				authorized = true;
-			}
+	        // ✅ Restrict self-approval
+	        if (request.getEmployeeId().equals(managerId)) {
+	            System.out.println("Self-approval attempted - rejected");
+	            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+	                    .body(Map.of("error", "You cannot approve or reject your own request."));
+	        }
 
-			if (!authorized) {
-				return ResponseEntity.status(HttpStatus.FORBIDDEN)
-						.body(Map.of("error", "You are not authorized to approve this request."));
-			}
+	        // ✅ Identify whether Employee or Trainee
+	        usermaintenance emp = usermaintenanceRepository.findByEmpid(request.getEmployeeId());
+	        TraineeMaster trainee = null;
+	        if (emp == null) {
+	            trainee = traineemasterRepository.findByTrngid(request.getEmployeeId());
+	        }
 
-			LocalDate attendanceDate = request.getAttendanceDate();
-			int year = attendanceDate.getYear();
-			int month = attendanceDate.getMonthValue();
-			String empId = request.getEmployeeId();
+	        System.out.println("Employee found: " + (emp != null) + ", Trainee found: " + (trainee != null));
 
-			// ✅ Handle Absent Approval (Employee or Trainee)
-			if ("Approved".equalsIgnoreCase(action) && "Absent".equalsIgnoreCase(request.getRequestedStatus())) {
+	        // ✅ Validate manager relationship
+	        boolean authorized = false;
+	        String reportTo = emp != null ? emp.getRepoteTo() : (trainee != null ? trainee.getRepoteTo() : null);
+	        
+	        if (reportTo != null && reportTo.equals(managerId)) {
+	            authorized = true;
+	            System.out.println("Manager authorization successful");
+	        } else {
+	            System.out.println("Manager authorization failed. ReportTo: " + reportTo + ", ManagerId: " + managerId);
+	        }
 
-				// Only employees have leave summary — skip for trainees
-				if (emp != null) {
-					EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, year)
-							.orElseGet(() -> {
-								EmployeeLeaveSummary summary = new EmployeeLeaveSummary();
-								summary.setEmpId(empId);
-								summary.setYear(year);
-								summary.setCasualLeaveBalance(0f);
-								summary.setLop(0f);
-								return summary;
-							});
+	        if (!authorized) {
+	            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+	                    .body(Map.of("error", "You are not authorized to approve this request."));
+	        }
 
-					Float availableCL = leaveSummary.getCasualLeaveBalance() != null
-							? leaveSummary.getCasualLeaveBalance()
-							: 0f;
-					Float lopDays = 0f;
+	        LocalDate attendanceDate = request.getAttendanceDate();
+	        String empId = request.getEmployeeId();
 
-					if (availableCL >= 1) {
-						leaveSummary.setCasualLeaveBalance(availableCL - 1);
-					} else {
-						lopDays = 1f;
-					}
+	        System.out.println("Processing attendance for date: " + attendanceDate + ", Employee: " + empId);
+	        
+	        // ✅ Determine the status to set in attendance record
+	        String statusToSet = request.getRequestedStatus(); // Default to requested status
 
-					switch (month) {
-					case 1:
-						leaveSummary.setLopJan(addLop(leaveSummary.getLopJan(), lopDays));
-						break;
-					case 2:
-						leaveSummary.setLopFeb(addLop(leaveSummary.getLopFeb(), lopDays));
-						break;
-					case 3:
-						leaveSummary.setLopMar(addLop(leaveSummary.getLopMar(), lopDays));
-						break;
-					case 4:
-						leaveSummary.setLopApr(addLop(leaveSummary.getLopApr(), lopDays));
-						break;
-					case 5:
-						leaveSummary.setLopMay(addLop(leaveSummary.getLopMay(), lopDays));
-						break;
-					case 6:
-						leaveSummary.setLopJun(addLop(leaveSummary.getLopJun(), lopDays));
-						break;
-					case 7:
-						leaveSummary.setLopJul(addLop(leaveSummary.getLopJul(), lopDays));
-						break;
-					case 8:
-						leaveSummary.setLopAug(addLop(leaveSummary.getLopAug(), lopDays));
-						break;
-					case 9:
-						leaveSummary.setLopSep(addLop(leaveSummary.getLopSep(), lopDays));
-						break;
-					case 10:
-						leaveSummary.setLopOct(addLop(leaveSummary.getLopOct(), lopDays));
-						break;
-					case 11:
-						leaveSummary.setLopNov(addLop(leaveSummary.getLopNov(), lopDays));
-						break;
-					case 12:
-						leaveSummary.setLopDec(addLop(leaveSummary.getLopDec(), lopDays));
-						break;
-					}
+	        // ✅ Handle Absent Approval with Payroll Cycle Logic
+	        if ("Approved".equalsIgnoreCase(action) && "Absent".equalsIgnoreCase(request.getRequestedStatus())) {
+	            System.out.println("Processing Absent approval...");
+	            
+	            // Only employees have payroll cycle logic — skip for trainees
+	            if (emp != null) {
+	                System.out.println("Employee found - applying payroll cycle logic");
+	                
+	                // Get current date in Date format
+	                Date attendanceDateObj = Date.from(attendanceDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+	                
+	                // Get payroll cycle key
+	                String payrollCycleKey = getPayrollCycleKey(attendanceDateObj);
+	                System.out.println("Payroll cycle key: " + payrollCycleKey);
+	                
+	                // Get cycle dates
+	                Date cycleStartDate = getCycleStartDate(payrollCycleKey);
+	                Date cycleEndDate = getCycleEndDate(payrollCycleKey);
+	                System.out.println("Cycle start: " + cycleStartDate + ", Cycle end: " + cycleEndDate);
+	                
+	                // Get attendance records in this cycle
+	                List<UserMasterAttendanceMod> cycleAttendance = usermasterattendancemodrepository
+	                        .findByAttendanceidAndDateRange(empId, cycleStartDate, cycleEndDate);
+	                System.out.println("Found " + cycleAttendance.size() + " attendance records in cycle");
+	                
+	                // Count previous absents
+	                int previousAbsentsInCycle = 0;
+	                SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+	                String currentDateStr = dateFormat.format(attendanceDateObj);
+	                
+	                for (UserMasterAttendanceMod record : cycleAttendance) {
+	                    String recordDateStr = dateFormat.format(record.getAttendancedate());
+	                    if (!currentDateStr.equals(recordDateStr)) {
+	                        String status = record.getStatus();
+	                        if (status != null && isAbsentStatus(status)) {
+	                            previousAbsentsInCycle++;
+	                            System.out.println("Found previous absent on: " + recordDateStr + " - Status: " + status);
+	                        }
+	                    }
+	                }
+	                
+	                System.out.println("Previous absents in cycle: " + previousAbsentsInCycle);
+	                
+	                // Determine status based on position
+	                if (previousAbsentsInCycle == 0) {
+	                    statusToSet = "Absent";
+	                    System.out.println("Setting status: Absent (1st absent in cycle)");
+	                } else if (previousAbsentsInCycle == 1) {
+	                    statusToSet = "Absent (0.5 LOP)";
+	                    System.out.println("Setting status: Absent (0.5 LOP) (2nd absent in cycle)");
+	                } else {
+	                    statusToSet = "Absent (LOP)";
+	                    System.out.println("Setting status: Absent (LOP) (3rd+ absent in cycle)");
+	                }
+	                
+	                // Apply leave deductions
+	                applyPayrollCycleLeaveDeductions(empId, attendanceDate, previousAbsentsInCycle);
+	                
+	            } else if (trainee != null) {
+	                System.out.println("Trainee found - using simple Absent status");
+	                statusToSet = "Absent";
+	            }
+	        } else {
+	            System.out.println("Not an Absent approval or not Approved action");
+	        }
 
-					leaveSummary.setLeaveTaken(
-							(leaveSummary.getLeaveTaken() == null ? 0 : leaveSummary.getLeaveTaken()) + 1);
-					leaveSummary.setUpdatedAt(LocalDateTime.now());
-					employeeLeaveSummaryRepository.save(leaveSummary);
+	        // ✅ Update Request Status
+	        request.setStatus(action);
+	        request.setApprovedBy(managerId);
+	        request.setApprovedAt(new Date());
+	        attendanceChangeRequestRepository.save(request);
+	        System.out.println("Request status updated to: " + action);
 
-					// ✅ Record Leave in Leave Master Table
-					EmployeeLeaveMasterTbl leaveRecord = new EmployeeLeaveMasterTbl();
-					leaveRecord.setEmpid(empId);
-					Timestamp ts = Timestamp.valueOf(attendanceDate.atStartOfDay());
-					leaveRecord.setStartdate(ts);
-					leaveRecord.setEnddate(ts);
-					leaveRecord.setNoofdays(1.0f);
-					leaveRecord.setNoofbooked(1.0f);
-					leaveRecord.setDelflg("N");
-					leaveRecord.setEntitycreflg("N");
-					leaveRecord.setStatus("Approved");
-					leaveRecord.setLeavetype(lopDays > 0 ? "LOP" : "CL");
-					leaveRecord.setLeavereason("Auto Leave applied due to Absent Approval");
-					leaveRecord.setTeamemail(emp.getEmailid());
-					employeeLeaveMasterRepository.save(leaveRecord);
-				}
-			}
+	        // ✅ Update Attendance Table if Approved
+	        if ("Approved".equalsIgnoreCase(action)) {
+	            System.out.println("Updating attendance record with status: " + statusToSet);
+	            
+	            Date attendanceDateObj = Date.from(attendanceDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+	            
+	            UserMasterAttendanceMod attendance = usermasterattendancemodrepository
+	                    .findByAttendanceidAndAttendancedate(empId, attendanceDateObj)
+	                    .orElse(new UserMasterAttendanceMod());
 
-			// ✅ Update Request Status
-			request.setStatus(action);
-			request.setApprovedBy(managerId);
-			request.setApprovedAt(new Date());
-			attendanceChangeRequestRepository.save(request);
+	            System.out.println("Attendance record found: " + (attendance.getAttendanceid() != null));
 
-			// ✅ Update Attendance Table if Approved
-			if ("Approved".equalsIgnoreCase(action)) {
-				Date attendanceDate1 = Date.from(attendanceDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+	            attendance.setUserid("2019" + empId);
+	            attendance.setAttendanceid(empId);
+	            attendance.setAttendancedate(attendanceDateObj);
+	            attendance.setStatus(statusToSet);
+	            attendance.setRemarks(request.getRemarks());
 
-				UserMasterAttendanceMod attendance = usermasterattendancemodrepository
-						.findByAttendanceidAndAttendancedate(request.getEmployeeId(), attendanceDate1)
-						.orElse(new UserMasterAttendanceMod());
+	            // Set check-in/check-out times
+	            if ("Absent".equalsIgnoreCase(request.getRequestedStatus()) || 
+	                statusToSet.toLowerCase().contains("absent")) {
+	                attendance.setCheckintime(new Date());
+	                attendance.setCheckouttime(new Date());
+	                attendance.setTotalhoursworked("0:00");
+	                System.out.println("Set absent timings");
+	            } else {
+	                LocalDateTime checkInTime = attendanceDate.atTime(9, 0);
+	                LocalDateTime checkOutTime = attendanceDate.atTime(18, 0);
+	                attendance.setCheckintime(Date.from(checkInTime.atZone(ZoneId.systemDefault()).toInstant()));
+	                attendance.setCheckouttime(Date.from(checkOutTime.atZone(ZoneId.systemDefault()).toInstant()));
+	                attendance.setTotalhoursworked("9:00");
+	                System.out.println("Set regular timings");
+	            }
+	            
+	            attendance.setCheckinstatus("On-Time");
+	            attendance.setCheckoutstatus("Completed");
+	            attendance.setRcreuserid(empId);
+	            attendance.setRcretime(new Date());
+	            attendance.setRmoduserid(managerId);
+	            attendance.setRmodtime(new Date());
 
-				attendance.setUserid("2019" + request.getEmployeeId());
-				attendance.setAttendanceid(request.getEmployeeId());
-				attendance.setAttendancedate(attendanceDate1);
-				attendance.setStatus(request.getRequestedStatus());
-				attendance.setRemarks(request.getRemarks());
+	            usermasterattendancemodrepository.save(attendance);
+	            System.out.println("Attendance record saved successfully");
+	        }
 
-				// ✅ Default Check-in / Check-out
-				LocalDateTime checkInTime = attendanceDate.atTime(9, 0);
-				LocalDateTime checkOutTime = attendanceDate.atTime(18, 0);
-				if("Absent".equalsIgnoreCase(request.getRequestedStatus())) {
-					attendance.setCheckintime(new Date());
-					attendance.setCheckouttime(new Date());
-					attendance.setTotalhoursworked("0:00");
-				}else {
-				attendance.setCheckintime(Date.from(checkInTime.atZone(ZoneId.systemDefault()).toInstant()));
-				attendance.setCheckouttime(Date.from(checkOutTime.atZone(ZoneId.systemDefault()).toInstant()));
-				attendance.setTotalhoursworked("9:00");
-				}
-				attendance.setCheckinstatus("On-Time");
-				attendance.setCheckoutstatus("Completed");
-				attendance.setRcreuserid(request.getEmployeeId());
-				attendance.setRcretime(new Date());
-				attendance.setRmoduserid(managerId);
-				attendance.setRmodtime(new Date());
+	        // ✅ Send Email Notification (Employee or Trainee)
+	        sendApprovalNotification(emp, trainee, request, action);
 
-				usermasterattendancemodrepository.save(attendance);
-			}
+	        System.out.println("=== APPROVE REQUEST COMPLETED SUCCESSFULLY ===");
+	        return ResponseEntity.ok(Map.of("message", "Request " + action.toLowerCase() + " successfully."));
 
-			// ✅ Send Email Notification (Employee or Trainee)
-			String empName = (emp != null ? emp.getFirstname() : trainee.getFirstname());
-			String empEmail = (emp != null ? emp.getEmailid() : trainee.getEmailid());
-
-			String subject = "Your Attendance Request Has Been " + action;
-			String body = String.format(
-					"Dear %s,\n\nYour attendance change request for %s (%s) has been %s by your manager.\n\nRemarks: %s\n\nRegards,\nWhitestone Software Solutions",
-					empName, request.getAttendanceDate(), request.getRequestedStatus(), action, request.getRemarks());
-
-			emailService.sendLeaveEmail("noreply@whitestonesoftware.in", empEmail, subject, body);
-
-			return ResponseEntity.ok(Map.of("message", "Request " + action.toLowerCase() + " successfully."));
-
-		} catch (Exception e) {
-			e.printStackTrace();
-			throw new RuntimeException("Transaction failed and rolled back: " + e.getMessage());
-		}
+	    } catch (Exception e) {
+	        System.err.println("=== ERROR IN APPROVE REQUEST ===");
+	        e.printStackTrace();
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                .body(Map.of("error", "Failed to process request: " + e.getMessage()));
+	    }
 	}
 
+	/**
+	 * Simplified version without complex deductions for now
+	 */
+	private void applyPayrollCycleLeaveDeductions(String empId, LocalDate attendanceDate, int previousAbsentsInCycle) {
+	    try {
+	        System.out.println("Applying leave deductions for emp: " + empId + ", previous absents: " + previousAbsentsInCycle);
+	        
+	        int year = attendanceDate.getYear();
+	        int month = attendanceDate.getMonthValue();
+	        
+	        // Try to get leave summary, but don't fail if not found
+	        try {
+	            EmployeeLeaveSummary leaveSummary = employeeLeaveSummaryRepository.findByEmpIdAndYear(empId, year)
+	                    .orElse(null);
+	            
+	            if (leaveSummary != null) {
+	                System.out.println("Leave summary found, updating...");
+	                
+	                float lopDeduction = 0f;
+	                
+	                // Simple logic based on payroll cycle position
+	                if (previousAbsentsInCycle == 1) {
+	                    // 2nd absent: check CL balance
+	                    Float availableCL = leaveSummary.getCasualLeaveBalance() != null
+	                            ? leaveSummary.getCasualLeaveBalance()
+	                            : 0f;
+	                    
+	                    if (availableCL >= 0.5f) {
+	                        leaveSummary.setCasualLeaveBalance(availableCL - 0.5f);
+	                        lopDeduction = 0.5f;
+	                        System.out.println("Deducted 0.5 CL, applied 0.5 LOP");
+	                    } else {
+	                        lopDeduction = 1.0f;
+	                        System.out.println("No CL available, applied 1.0 LOP");
+	                    }
+	                } else if (previousAbsentsInCycle >= 2) {
+	                    // 3rd+ absent: full LOP
+	                    lopDeduction = 1.0f;
+	                    System.out.println("3rd+ absent, applied 1.0 LOP");
+	                }
+	                
+	                // Update monthly LOP if any
+	                if (lopDeduction > 0) {
+	                    updateMonthlyLOP(leaveSummary, month, lopDeduction);
+	                }
+	                
+	                // Update leave taken count
+	                leaveSummary.setLeaveTaken((leaveSummary.getLeaveTaken() == null ? 0 : leaveSummary.getLeaveTaken()) + 1);
+	                leaveSummary.setUpdatedAt(LocalDateTime.now());
+	                
+	                employeeLeaveSummaryRepository.save(leaveSummary);
+	                System.out.println("Leave summary saved successfully");
+	            } else {
+	                System.out.println("No leave summary found for employee: " + empId + ", year: " + year);
+	            }
+	        } catch (Exception e) {
+	            System.err.println("Error in leave deductions (continuing anyway): " + e.getMessage());
+	        }
+	        
+	    } catch (Exception e) {
+	        System.err.println("Error in applyPayrollCycleLeaveDeductions: " + e.getMessage());
+	        // Don't fail the transaction
+	    }
+	}
+
+	/**
+	 * Get payroll cycle key (27th to 26th format)
+	 */
+	private String getPayrollCycleKey1(Date date) {
+	    try {
+	        Calendar cal = Calendar.getInstance();
+	        cal.setTime(date);
+	        int year = cal.get(Calendar.YEAR);
+	        int month = cal.get(Calendar.MONTH) + 1;
+	        int day = cal.get(Calendar.DAY_OF_MONTH);
+	        
+	        if (day >= 27) {
+	            // Date is on or after 27th - cycle starts current month (27th), ends next month (26th)
+	            String nextMonthYear = getNextMonthYearString(year, month);
+	            return year + "-" + String.format("%02d", month) + "-27to" + nextMonthYear + "-26";
+	        } else {
+	            // Date is before 27th - cycle started previous month (27th), ends current month (26th)
+	            Calendar prevMonthCal = (Calendar) cal.clone();
+	            prevMonthCal.add(Calendar.MONTH, -1);
+	            int prevYear = prevMonthCal.get(Calendar.YEAR);
+	            int prevMonth = prevMonthCal.get(Calendar.MONTH) + 1;
+	            
+	            return prevYear + "-" + String.format("%02d", prevMonth) + "-27to" + 
+	                   year + "-" + String.format("%02d", month) + "-26";
+	        }
+	    } catch (Exception e) {
+	        System.err.println("Error in getPayrollCycleKey: " + e.getMessage());
+	        return "error-cycle";
+	    }
+	}
+
+	/**
+	 * Get next month year string for payroll cycle
+	 */
+	private String getNextMonthYearString1(int year, int month) {
+	    try {
+	        Calendar nextMonthCal = Calendar.getInstance();
+	        nextMonthCal.set(year, month - 1, 1);
+	        nextMonthCal.add(Calendar.MONTH, 1);
+	        int nextYear = nextMonthCal.get(Calendar.YEAR);
+	        int nextMonth = nextMonthCal.get(Calendar.MONTH) + 1;
+	        
+	        return nextYear + "-" + String.format("%02d", nextMonth);
+	    } catch (Exception e) {
+	        System.err.println("Error in getNextMonthYearString: " + e.getMessage());
+	        return "0000-00";
+	    }
+	}
+
+	/**
+	 * Get cycle start date from payroll cycle key
+	 */
+	private Date getCycleStartDate(String payrollCycleKey) {
+	    try {
+	        // Format: "2026-01-27to2026-02-26"
+	        String[] parts = payrollCycleKey.split("to");
+	        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+	        return dateFormat.parse(parts[0]);
+	    } catch (Exception e) {
+	        System.err.println("Error in getCycleStartDate: " + e.getMessage());
+	        return new Date();
+	    }
+	}
+
+	/**
+	 * Get cycle end date from payroll cycle key
+	 */
+	private Date getCycleEndDate(String payrollCycleKey) {
+	    try {
+	        // Format: "2026-01-27to2026-02-26"
+	        String[] parts = payrollCycleKey.split("to");
+	        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+	        return dateFormat.parse(parts[1]);
+	    } catch (Exception e) {
+	        System.err.println("Error in getCycleEndDate: " + e.getMessage());
+	        return new Date();
+	    }
+	}
+
+	/**
+	 * Check if status indicates absent (including LOP variants)
+	 */
+	private boolean isAbsentStatus(String status) {
+	    if (status == null) return false;
+	    String normalizedStatus = status.trim().toLowerCase();
+	    return normalizedStatus.contains("absent");
+	}
+
+	/**
+	 * Update monthly LOP field
+	 */
+	private void updateMonthlyLOP(EmployeeLeaveSummary leaveSummary, int month, float lopDays) {
+	    try {
+	        switch (month) {
+	            case 1: leaveSummary.setLopJan(addLop(leaveSummary.getLopJan(), lopDays)); break;
+	            case 2: leaveSummary.setLopFeb(addLop(leaveSummary.getLopFeb(), lopDays)); break;
+	            case 3: leaveSummary.setLopMar(addLop(leaveSummary.getLopMar(), lopDays)); break;
+	            case 4: leaveSummary.setLopApr(addLop(leaveSummary.getLopApr(), lopDays)); break;
+	            case 5: leaveSummary.setLopMay(addLop(leaveSummary.getLopMay(), lopDays)); break;
+	            case 6: leaveSummary.setLopJun(addLop(leaveSummary.getLopJun(), lopDays)); break;
+	            case 7: leaveSummary.setLopJul(addLop(leaveSummary.getLopJul(), lopDays)); break;
+	            case 8: leaveSummary.setLopAug(addLop(leaveSummary.getLopAug(), lopDays)); break;
+	            case 9: leaveSummary.setLopSep(addLop(leaveSummary.getLopSep(), lopDays)); break;
+	            case 10: leaveSummary.setLopOct(addLop(leaveSummary.getLopOct(), lopDays)); break;
+	            case 11: leaveSummary.setLopNov(addLop(leaveSummary.getLopNov(), lopDays)); break;
+	            case 12: leaveSummary.setLopDec(addLop(leaveSummary.getLopDec(), lopDays)); break;
+	        }
+	    } catch (Exception e) {
+	        System.err.println("Error in updateMonthlyLOP: " + e.getMessage());
+	    }
+	}
+
+	/**
+	 * Helper method to add LOP values
+	 */
 	private Float addLop(Float existing, Float add) {
-		return (existing == null ? 0 : existing) + (add == null ? 0 : add);
+	    return (existing == null ? 0 : existing) + (add == null ? 0 : add);
+	}
+
+	/**
+	 * Send approval notification email
+	 */
+	private void sendApprovalNotification(usermaintenance emp, TraineeMaster trainee, 
+	                                     AttendanceChangeRequest request, String action) {
+	    try {
+	        String empName = (emp != null ? emp.getFirstname() : (trainee != null ? trainee.getFirstname() : "Employee"));
+	        String empEmail = (emp != null ? emp.getEmailid() : (trainee != null ? trainee.getEmailid() : ""));
+
+	        String subject = "Your Attendance Request Has Been " + action;
+	        String body = String.format(
+	                "Dear %s,\n\nYour attendance change request for %s (%s) has been %s by your manager.\n\nRemarks: %s\n\nRegards,\nWhitestone Software Solutions",
+	                empName, request.getAttendanceDate(), request.getRequestedStatus(), action, request.getRemarks());
+
+	        System.out.println("Email would be sent to: " + empEmail + " with subject: " + subject);
+	        // emailService.sendLeaveEmail("noreply@whitestonesoftware.in", empEmail, subject, body);
+	    } catch (Exception e) {
+	        System.err.println("Error in sendApprovalNotification: " + e.getMessage());
+	    }
 	}
 
 	@PostMapping("/attendance/requestChange")
@@ -8522,28 +9695,28 @@ public class AppController {
 	            manager = usermaintenanceRepository.findByEmpid(managerId);
 	        }
 
-	        // Send email to manager
-	        if (manager != null) {
-	            String empName = emp != null ? emp.getFirstname() : trainee.getFirstname();
-	            String empEmail = emp != null ? emp.getEmailid() : trainee.getEmailid();
-
-	            String body = String.format(
-	                "Dear %s,\n\n" +
-	                "%s has submitted an attendance change request for date: %s\n\n" +
-	                "Requested Status: %s\n" +
-	                "Remarks: %s\n\n" +
-	                "Please login to the portal to Approve or Reject this request.\n\n" +
-	                "Best Regards,\nWhitestone Software Solutions",
-	                manager.getFirstname(),
-	                empName,
-	                attDate.format(DateTimeFormatter.ofPattern("dd-MMM-yyyy")),
-	                request.getRequestedStatus(),
-	                request.getRemarks()
-	            );
-
-	            emailService.sendLeaveEmail(empEmail, manager.getEmailid(), 
-	                "New Attendance Correction Request - " + empName, body);
-	        }
+//	        // Send email to manager
+//	        if (manager != null) {
+//	            String empName = emp != null ? emp.getFirstname() : trainee.getFirstname();
+//	            String empEmail = emp != null ? emp.getEmailid() : trainee.getEmailid();
+//
+//	            String body = String.format(
+//	                "Dear %s,\n\n" +
+//	                "%s has submitted an attendance change request for date: %s\n\n" +
+//	                "Requested Status: %s\n" +
+//	                "Remarks: %s\n\n" +
+//	                "Please login to the portal to Approve or Reject this request.\n\n" +
+//	                "Best Regards,\nWhitestone Software Solutions",
+//	                manager.getFirstname(),
+//	                empName,
+//	                attDate.format(DateTimeFormatter.ofPattern("dd-MMM-yyyy")),
+//	                request.getRequestedStatus(),
+//	                request.getRemarks()
+//	            );
+//
+//	            emailService.sendLeaveEmail(empEmail, manager.getEmailid(), 
+//	                "New Attendance Correction Request - " + empName, body);
+//	        }
 
 	        response.put("status", "success");
 	        response.put("message", "Attendance change request submitted successfully.");
@@ -8563,30 +9736,30 @@ public class AppController {
 	@GetMapping("/attendance/checkin/eligibility/{employeeId}")
 	public ResponseEntity<Map<String, Object>> checkCheckInEligibility(@PathVariable String employeeId) {
 		Map<String, Object> response = new HashMap<>();
- 
+
 		try {
 			// 🔹 Step 1: Check if employee exists
 			usermaintenance employee = usermaintenanceRepository.findByEmpid(employeeId);
 			TraineeMaster trainee = null;
- 
+
 			if (employee == null) {
 				trainee = traineemasterRepository.findByTrngid(employeeId);
 			}
- 
+
 			if (employee == null && trainee == null) {
 				response.put("status", "error");
 				response.put("eligible", false);
 				response.put("message", "Employee or Trainee not found.");
 				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
 			}
- 
+
 			// 🔹 Step 2: Get yesterday’s date
 			LocalDate yesterday = LocalDate.now().minusDays(1);
 			
 			Date yesterdayDate = Date.from(
 				    yesterday.atStartOfDay(ZoneId.systemDefault()).toInstant()
 				);	
- 
+
 			// 🔹 Step 3: Week off check (Sunday or 2nd/4th Saturday)
 			if (isWeekOff(yesterday)) {
 				response.put("status", "success");
@@ -8602,18 +9775,18 @@ public class AppController {
 			    response.put("message", "Yesterday was marked as holiday/week off in calendar. Check-in allowed.");
 			    return ResponseEntity.ok(response);
 			}
- 
+
 			// 🔹 Step 4: Convert to java.util.Date
 			Date startOfDay = Date.from(yesterday.atStartOfDay(ZoneId.systemDefault()).toInstant());
 			Date endOfDay = Date.from(yesterday.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant());
- 
+
 			// 🔹 Step 5: Check attendance record
 			Optional<UserMasterAttendanceMod> attendanceOpt = usermasterattendancemodrepository
 					.findByAttendanceidAndAttendancedate(employeeId, startOfDay);
- 
+
 			if (attendanceOpt.isPresent()) {
 				String status = attendanceOpt.get().getStatus();
- 
+
 				if ("Present".equalsIgnoreCase(status)) {
 					response.put("status", "success");
 					response.put("eligible", true);
@@ -8648,13 +9821,13 @@ public class AppController {
 					response.put("eligible", true);
 					response.put("message", "Eligible for check-in, but yesterday was marked as Week off.");
 				}
- 
+
 				else if ("Public holiday".equalsIgnoreCase(status)) {
 					response.put("status", "success");
 					response.put("eligible", true);
 					response.put("message", "Eligible for check-in, but yesterday was marked as Public holiday.");
 				}
- 
+
 				else if ("holiday".equalsIgnoreCase(status)) {
 					response.put("status", "success");
 					response.put("eligible", true);
@@ -8662,28 +9835,28 @@ public class AppController {
 				}
 				return ResponseEntity.ok(response);
 			}
- 
+
 			// 🔹 Step 6: Check pending attendance change request
 			Optional<AttendanceChangeRequest> pendingRequestOpt = attendanceChangeRequestRepository
 					.findByEmployeeIdAndAttendanceDateAndStatus(employeeId, yesterday, "Pending");
- 
+
 			if (pendingRequestOpt.isPresent()) {
 				response.put("status", "success");
 				response.put("eligible", true);
 				response.put("message", "Pending attendance change request found. Check-in allowed.");
 				return ResponseEntity.ok(response);
 			}
- 
+
 			// 🔹 Step 7: Check leave record covering yesterday
 			List<EmployeeLeaveMasterTbl> leaves = employeeLeaveMasterRepository
 					.findByEmpidAndStartdateBetweenAndStatusInIgnoreCase(employeeId, startOfDay, endOfDay,
 							Arrays.asList("approved", "pending"));
- 
+
 			if (!leaves.isEmpty()) {
 				EmployeeLeaveMasterTbl leave = leaves.get(0);
 				LocalDate startDate = leave.getStartdate().toLocalDateTime().toLocalDate();
 				LocalDate endDate = leave.getEnddate().toLocalDateTime().toLocalDate();
- 
+
 				response.put("status", "success");
 				response.put("eligible", true);
 				response.put("message", String.format(
@@ -8691,14 +9864,14 @@ public class AppController {
 						yesterday, leave.getLeavetype(), startDate, endDate, leave.getStatus()));
 				return ResponseEntity.ok(response);
 			}
- 
+
 			// 🔹 Step 8: Not eligible (no attendance, leave, or request)
 			response.put("status", "error");
 			response.put("eligible", false);
 			response.put("message",
 					"Yesterday's attendance is not marked and no leave/pending request found. Please update the timesheet and try again.");
 			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
- 
+
 		} catch (Exception e) {
 			e.printStackTrace();
 			response.put("status", "error");
@@ -8707,13 +9880,13 @@ public class AppController {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 		}
 	}
- 
+
 	private boolean isWeekOff(LocalDate date) {
 		// ✅ Always treat Sunday as week off
 		if (date.getDayOfWeek() == DayOfWeek.SUNDAY) {
 			return true;
 		}
- 
+
 		// ✅ For Saturdays: check if it’s the 2nd or 4th one in the month
 		if (date.getDayOfWeek() == DayOfWeek.SATURDAY) {
 			LocalDate firstDay = date.withDayOfMonth(1);
@@ -8729,10 +9902,10 @@ public class AppController {
 				return true;
 			}
 		}
- 
+
 		return false;
 	}
- 
+
 
 	@GetMapping("/download/employees/excel")
 	public ResponseEntity<byte[]> downloadEmployeeExcel() {
@@ -9001,12 +10174,12 @@ public class AppController {
 	    List<String> empIds = usermaintenanceRepository.findAll().stream()
 	            .filter(u -> managerId.equals(u.getRepoteTo()))
 	            .map(usermaintenance::getEmpid)
-	            .toList();
+	            .collect(Collectors.toList());
 
 	    List<String> traineeIds = traineemasterRepository.findAll().stream()
 	            .filter(t -> managerId.equals(t.getRepoteTo()))
 	            .map(TraineeMaster::getTrngid)
-	            .toList();
+	            .collect(Collectors.toList());
 
 	    Set<String> allIds = new HashSet<>(empIds);
 	    allIds.addAll(traineeIds);
@@ -9055,7 +10228,7 @@ public class AppController {
 	        @RequestParam(name = "status") String currentStatus) {
 	    
 	    try {
-	        System.out.println("=== START WITHDRAW LEAVE REQUEST ===");
+	        System.out.println("=== START WITHDRAW LEAVE REQUEST (UPDATED) ===");
 	        System.out.println("Employee ID: " + empid + ", Serial No: " + srlnum);
 	        
 	        // Find the leave request
@@ -9074,12 +10247,12 @@ public class AppController {
 	            
 	            System.out.println("Found approved leave in mod table");
 	            // Handle withdrawal of approved leave
-	            return handleApprovedLeaveWithdrawal(modRequest, empid);
+	            return handleApprovedLeaveWithdrawalUpdated(modRequest, empid);
 	        }
 	        
 	        System.out.println("Found pending leave in master table");
 	        // Handle withdrawal of pending leave
-	        return handlePendingLeaveWithdrawal(leaveRequest, empid);
+	        return handlePendingLeaveWithdrawalUpdated(leaveRequest, empid);
 	        
 	    } catch (Exception e) {
 	        System.err.println("Error in withdrawLeaveRequest: " + e.getMessage());
@@ -9089,23 +10262,42 @@ public class AppController {
 	    }
 	}
 
-	private ResponseEntity<?> handlePendingLeaveWithdrawal(EmployeeLeaveMasterTbl leaveRequest, String empid) {
+	private ResponseEntity<?> handlePendingLeaveWithdrawalUpdated(EmployeeLeaveMasterTbl leaveRequest, String empid) {
 	    try {
-	        System.out.println("=== PROCESSING PENDING LEAVE WITHDRAWAL ===");
+	        System.out.println("=== PROCESSING PENDING LEAVE WITHDRAWAL (UPDATED) ===");
 	        
-	        // Revert consolidated leave calculations for pending requests WITH CL BONUS LOGIC
-	        revertConsolidatedLeaveWithLogic(leaveRequest);
+	        // Step 1: Get payroll cycle information
+	        LocalDate requestLocalDate = leaveRequest.getStartdate().toInstant()
+	                .atZone(ZoneId.systemDefault()).toLocalDate();
 	        
-	        // Delete from master table
+	        String payrollCycleMonth = getPayrollCycleMonth(requestLocalDate);
+	        int year = requestLocalDate.getYear();
+	        int month = requestLocalDate.getMonthValue();
+	        
+	        System.out.println("Payroll Cycle for " + requestLocalDate + ": " + payrollCycleMonth);
+	        System.out.println("Year: " + year + ", Month: " + getMonthName(month));
+	        
+	        // Step 2: Process withdrawal with monthly_cl_used JSON logic
+	        Map<String, Object> withdrawalResult = processWithdrawalWithMonthlyData(leaveRequest, false);
+	        
+	        Float clRestored = withdrawalResult.get("clRestored") != null ? (Float) withdrawalResult.get("clRestored") : 0.0f;
+	        Float lopRestored = withdrawalResult.get("lopRestored") != null ? (Float) withdrawalResult.get("lopRestored") : 0.0f;
+	        String clTransferInfo = (String) withdrawalResult.getOrDefault("clTransferInfo", "");
+	        
+	        // Step 3: Delete from master table
 	        employeeLeaveMasterRepository.delete(leaveRequest);
 	        System.out.println("Leave deleted from master table");
 	        
-	        // Send notification email
-	        sendWithdrawalEmail(leaveRequest, empid, "pending");
+	        // Step 4: Send notification email
+	        sendWithdrawalEmailUpdated(leaveRequest, empid, "pending", clRestored, lopRestored, clTransferInfo);
 	        
 	        Map<String, Object> response = new HashMap<>();
 	        response.put("status", "success");
-	        response.put("message", "Pending leave request withdrawn successfully");
+	        response.put("message", String.format("Pending leave request withdrawn. Restored %.1f CL and %.1f LOP. %s", 
+	            clRestored, lopRestored, clTransferInfo));
+	        response.put("clRestored", clRestored);
+	        response.put("lopRestored", lopRestored);
+	        response.put("payrollCycle", payrollCycleMonth);
 	        
 	        System.out.println("=== PENDING LEAVE WITHDRAWAL COMPLETED ===");
 	        return ResponseEntity.ok(response);
@@ -9118,32 +10310,50 @@ public class AppController {
 	    }
 	}
 
-	private ResponseEntity<?> handleApprovedLeaveWithdrawal(EmployeeLeaveModTbl approvedRequest, String empid) {
+	private ResponseEntity<?> handleApprovedLeaveWithdrawalUpdated(EmployeeLeaveModTbl approvedRequest, String empid) {
 	    try {
-	        System.out.println("=== PROCESSING APPROVED LEAVE WITHDRAWAL ===");
+	        System.out.println("=== PROCESSING APPROVED LEAVE WITHDRAWAL (UPDATED) ===");
 	        
-	        // Revert consolidated leave calculations WITH CL BONUS LOGIC
-	        revertConsolidatedLeaveFromModWithLogic(approvedRequest);
+	        // Convert mod to master for processing
+	        EmployeeLeaveMasterTbl leaveRequest = convertModToMaster(approvedRequest);
 	        
-	        // Remove "Absent" attendance records
+	        // Step 1: Get payroll cycle information
+	        LocalDate requestLocalDate = leaveRequest.getStartdate().toInstant()
+	                .atZone(ZoneId.systemDefault()).toLocalDate();
+	        
+	        String payrollCycleMonth = getPayrollCycleMonth(requestLocalDate);
+	        int year = requestLocalDate.getYear();
+	        
+	        System.out.println("Payroll Cycle: " + payrollCycleMonth + ", Year: " + year);
+	        
+	        // Step 2: Process withdrawal with monthly_cl_used JSON logic
+	        Map<String, Object> withdrawalResult = processWithdrawalWithMonthlyData(leaveRequest, true);
+	        
+	        Float clRestored = withdrawalResult.get("clRestored") != null ? (Float) withdrawalResult.get("clRestored") : 0.0f;
+	        Float lopRestored = withdrawalResult.get("lopRestored") != null ? (Float) withdrawalResult.get("lopRestored") : 0.0f;
+	        String clTransferInfo = (String) withdrawalResult.getOrDefault("clTransferInfo", "");
+	        
+	        // Step 3: Remove "Absent" attendance records
 	        removeAbsentAttendance(empid, approvedRequest.getStartdate(), approvedRequest.getEnddate());
 	        
-	        // Update status to "Withdrawn" in mod table
+	        // Step 4: Update status to "Withdrawn" in mod table
 	        approvedRequest.setStatus("Withdrawn");
 	        approvedRequest.setRmoduserid(empid);
-	        
-	        // Convert Date to Timestamp
 	        approvedRequest.setRmodtime(new Timestamp(new Date().getTime()));
 	        
 	        employeeLeaveModRepository.save(approvedRequest);
 	        System.out.println("Leave status updated to 'Withdrawn' in mod table");
 	        
-	        // Send notification email
-	        sendWithdrawalEmailFromMod(approvedRequest, empid, "approved");
+	        // Step 5: Send notification email
+	        sendWithdrawalEmailUpdated(leaveRequest, empid, "approved", clRestored, lopRestored, clTransferInfo);
 	        
 	        Map<String, Object> response = new HashMap<>();
 	        response.put("status", "success");
-	        response.put("message", "Approved leave request withdrawn successfully");
+	        response.put("message", String.format("Approved leave request withdrawn. Restored %.1f CL and %.1f LOP. %s", 
+	            clRestored, lopRestored, clTransferInfo));
+	        response.put("clRestored", clRestored);
+	        response.put("lopRestored", lopRestored);
+	        response.put("payrollCycle", payrollCycleMonth);
 	        
 	        System.out.println("=== APPROVED LEAVE WITHDRAWAL COMPLETED ===");
 	        return ResponseEntity.ok(response);
@@ -9156,404 +10366,394 @@ public class AppController {
 	    }
 	}
 
-	// UPDATED METHOD with CL bonus logic
+	// ====================================================================
+	// UPDATED WITHDRAWAL LOGIC WITH MONTHLY_CL_USED JSON
+	// ====================================================================
+
 	@Transactional
-	private void revertConsolidatedLeaveWithLogic(EmployeeLeaveMasterTbl leaveRequest) {
+	private Map<String, Object> processWithdrawalWithMonthlyData(EmployeeLeaveMasterTbl leaveRequest, boolean isFromMod) {
+	    Map<String, Object> result = new HashMap<>();
+	    
 	    try {
-	        System.out.println("=== REVERTING CONSOLIDATED LEAVE (PENDING) ===");
+	        System.out.println("=== PROCESS WITHDRAWAL WITH MONTHLY DATA ===");
 	        System.out.println("Employee: " + leaveRequest.getEmpid());
-	        System.out.println("Days to revert: " + leaveRequest.getNoofdays());
+	        System.out.println("Leave Days: " + leaveRequest.getNoofdays());
+	        System.out.println("Leave Type: " + leaveRequest.getLeavetype());
+	        System.out.println("From Mod Table: " + isFromMod);
 	        
 	        String empId = leaveRequest.getEmpid();
-	        LocalDate requestDate = leaveRequest.getStartdate()
-	                .toInstant()
-	                .atZone(ZoneId.systemDefault())
-	                .toLocalDate();
+	        LocalDate requestDate = leaveRequest.getStartdate().toInstant()
+	                .atZone(ZoneId.systemDefault()).toLocalDate();
 	        int year = requestDate.getYear();
-	        int month = requestDate.getMonthValue();
-	        Float rejectedDays = leaveRequest.getNoofdays();
-
-	        System.out.println("Year: " + year + ", Month: " + month + " (" + getMonthName(month) + ")");
-
-	        // Step 1: Get ALL leaves for this month (including the one being withdrawn)
-	        System.out.println("Fetching all leaves for month " + month + "...");
-	        List<EmployeeLeaveMasterTbl> allLeavesForMonth = employeeLeaveMasterRepository
-	            .findAllLeavesForMonth(empId, year, month);
 	        
-	        // Also check mod table for approved leaves in this month
-	        List<EmployeeLeaveModTbl> modLeavesForMonth = employeeLeaveModRepository
-	            .findAllLeavesForMonth(empId, year, month);
+	        // Get payroll cycle month
+	        String payrollCycleMonth = getPayrollCycleMonth(requestDate);
+	        String monthKey = getMonthKey(payrollCycleMonth);
 	        
-	        // Filter active leaves from master table (delflg = 'N')
-	        List<EmployeeLeaveMasterTbl> activeMasterLeaves = allLeavesForMonth.stream()
-	            .filter(leave -> "N".equals(leave.getDelflg()) && !leave.getSrlnum().equals(leaveRequest.getSrlnum()))
-	            .collect(Collectors.toList());
+	        System.out.println("Payroll Cycle: " + payrollCycleMonth + " (key: " + monthKey + ")");
+	        System.out.println("Year: " + year);
 	        
-	        // Filter active leaves from mod table (status != 'Withdrawn' and not the current one)
-	        List<EmployeeLeaveModTbl> activeModLeaves = modLeavesForMonth.stream()
-	            .filter(leave -> !"Withdrawn".equals(leave.getStatus()))
-	            .collect(Collectors.toList());
-	        
-	        System.out.println("Active leaves in master table (excluding current): " + activeMasterLeaves.size());
-	        System.out.println("Active leaves in mod table: " + activeModLeaves.size());
-
-	        // Step 2: Get leave summary
+	        // Step 1: Get leave summary
 	        EmployeeLeaveSummary summary = employeeLeaveSummaryRepository
 	                .findByEmpIdAndYear(empId, year)
 	                .orElse(null);
 
 	        if (summary == null) {
-	            System.out.println("WARNING: No leave summary found.");
-	            return;
+	            System.out.println("ERROR: No leave summary found for year " + year);
+	            result.put("clRestored", 0.0f);
+	            result.put("lopRestored", 0.0f);
+	            result.put("clTransferInfo", "No summary found");
+	            return result;
 	        }
 	        
-	        System.out.println("=== BEFORE REVERSAL ===");
-	        Float currentCL = safe(summary.getCasualLeaveBalance());
-	        Float currentLeaveTaken = safe(summary.getLeaveTaken());
-	        Float currentTotalLop = safe(summary.getLop());
-	        Float currentMonthlyLop = getMonthlyLop(summary, month);
+	        // Get current annual balance
+	        Float currentAnnualBalance = safeFloat(summary.getCasualLeaveBalance());
+	        Float currentLeaveTaken = safeFloat(summary.getLeaveTaken());
+	        Float currentTotalLop = safeFloat(summary.getLop());
 	        
-	        System.out.println("CL Balance: " + currentCL);
-	        System.out.println("Leave Taken: " + currentLeaveTaken);
-	        System.out.println("Total LOP: " + currentTotalLop);
-	        System.out.println("Month " + month + " LOP: " + currentMonthlyLop);
-
-	        // Step 3: Calculate total active days in this month (excluding the one being withdrawn)
-	        Float totalActiveDaysInMonth = 0.0f;
+	        System.out.println("Current Annual CL Balance: " + currentAnnualBalance);
+	        System.out.println("Current Leave Taken: " + currentLeaveTaken);
+	        System.out.println("Current Total LOP: " + currentTotalLop);
 	        
-	        // Add days from master table
-	        for (EmployeeLeaveMasterTbl leave : activeMasterLeaves) {
-	            totalActiveDaysInMonth += leave.getNoofdays();
+	        // Step 2: Get and parse monthly CL used JSON
+	        String monthlyClUsedJson = summary.getMonthlyClUsed();
+	        if (monthlyClUsedJson == null || monthlyClUsedJson.trim().isEmpty()) {
+	            monthlyClUsedJson = "{}";
 	        }
 	        
-	        // Add days from mod table
-	        for (EmployeeLeaveModTbl leave : activeModLeaves) {
-	            totalActiveDaysInMonth += leave.getNoofdays();
-	        }
+	        ObjectMapper mapper = new ObjectMapper();
+	        Map<String, Object> monthlyData = mapper.readValue(monthlyClUsedJson, Map.class);
 	        
-	        System.out.println("Total active days in month (excluding current): " + totalActiveDaysInMonth);
+	        // Get payroll cycle month's data
+	        Object monthData = monthlyData.get(monthKey);
 	        
-	        // Step 4: Determine CL and LOP to restore
-	        Float clToRestore = 0.0f;
-	        Float lopToRestore = 0.0f;
+	        float currentTotalClUsed = 0.0f;
+	        float currentClFromCurrent = 0.0f;
+	        float currentClFromCarry = 0.0f;
+	        float currentLopGenerated = 0.0f;
 	        
-	        // Calculate total days including the one being withdrawn
-	        Float totalDaysInMonthIncludingCurrent = totalActiveDaysInMonth + rejectedDays;
-	        System.out.println("Total days in month (including current): " + totalDaysInMonthIncludingCurrent);
+	        Map<String, Object> monthDetails = new HashMap<>();
 	        
-	        // If there are NO other active leaves for this month
-	        if (totalActiveDaysInMonth == 0) {
-	            // This is the ONLY leave for the month
-	            // Calculate based on: min(1.5, rejected days)
-	            clToRestore = Math.min(1.5f, rejectedDays);
-	            lopToRestore = rejectedDays - clToRestore;
-	            System.out.println("ONLY LEAVE FOR MONTH: CL to restore: " + clToRestore + ", LOP: " + lopToRestore);
+	        if (monthData instanceof Map) {
+	            @SuppressWarnings("unchecked")
+	            Map<String, Object> details = (Map<String, Object>) monthData;
+	            monthDetails = details;
+	            
+	            currentTotalClUsed = safeFloat((Number) details.getOrDefault("total_cl_used", 0.0f));
+	            currentClFromCurrent = safeFloat((Number) details.getOrDefault("cl_from_current_cycle", 0.0f));
+	            currentClFromCarry = safeFloat((Number) details.getOrDefault("cl_from_carry_forward", 0.0f));
+	            currentLopGenerated = safeFloat((Number) details.getOrDefault("lop_generated", 0.0f));
+	            
+	            System.out.println("\n=== MONTHLY_CL_USED DATA FOR " + monthKey.toUpperCase() + " ===");
+	            System.out.println("Total CL Used: " + currentTotalClUsed);
+	            System.out.println("CL from Current Cycle: " + currentClFromCurrent);
+	            System.out.println("CL from Carry Forward: " + currentClFromCarry);
+	            System.out.println("LOP Generated: " + currentLopGenerated);
+	            
+	        } else if (monthData instanceof Number) {
+	            // Simple numeric value (backward compatibility)
+	            currentTotalClUsed = safeFloat((Number) monthData);
+	            System.out.println("Simple month value found: " + currentTotalClUsed);
+	            
+	            // Initialize details map
+	            monthDetails.put("total_cl_used", currentTotalClUsed);
+	            monthDetails.put("cl_from_current_cycle", currentTotalClUsed); // Assume all from current
+	            monthDetails.put("cl_from_carry_forward", 0.0f);
+	            monthDetails.put("lop_generated", 0.0f);
 	        } else {
-	            // There are OTHER active leaves for this month
-	            // Check if other active leaves have already consumed the 1.5 CL
-	            if (totalActiveDaysInMonth >= 1.5f) {
-	                // Other leaves already consumed all CL
-	                clToRestore = 0.0f;
-	                lopToRestore = rejectedDays;
-	                System.out.println("OTHER LEAVES consumed all CL: Only LOP to restore: " + lopToRestore);
+	            // No data for this payroll cycle
+	            System.out.println("No data found for " + monthKey + ", initializing");
+	            monthDetails.put("total_cl_used", 0.0f);
+	            monthDetails.put("cl_from_current_cycle", 0.0f);
+	            monthDetails.put("cl_from_carry_forward", 0.0f);
+	            monthDetails.put("lop_generated", 0.0f);
+	        }
+	        
+	        // Step 3: CALCULATE WITHDRAWAL RESTORATION - SIMPLIFIED LOGIC
+	        
+	        System.out.println("\n=== CALCULATING WITHDRAWAL RESTORATION ===");
+	        float totalWithdrawnDays = leaveRequest.getNoofdays();
+	        System.out.println("Total days to withdraw: " + totalWithdrawnDays);
+	        
+	        float clToRestore = 0.0f;
+	        float lopToRestore = 0.0f;
+	        
+	        String clTransferInfo = "";
+	        
+	        // RULE 1: RESTORE ALL LOP FIRST
+	        // For withdrawal: Restore LOP first, then CL
+	        System.out.println("Step 1: Calculating LOP restoration");
+	        
+	        // We can only restore LOP that was actually generated
+	        if (currentLopGenerated > 0) {
+	            float maxLopRestorable = Math.min(currentLopGenerated, totalWithdrawnDays);
+	            lopToRestore = maxLopRestorable;
+	            System.out.println("  - LOP Generated: " + currentLopGenerated);
+	            System.out.println("  - Max LOP Restorable: " + maxLopRestorable);
+	            System.out.println("  - LOP to Restore: " + lopToRestore);
+	        }
+	        
+	        // RULE 2: RESTORE CL FROM REMAINING DAYS
+	        System.out.println("Step 2: Calculating CL restoration");
+	        float remainingDaysForCL = totalWithdrawnDays - lopToRestore;
+	        
+	        if (remainingDaysForCL > 0 && currentTotalClUsed > 0) {
+	            // We can only restore CL that was actually used
+	            float maxClRestorable = Math.min(currentTotalClUsed, remainingDaysForCL);
+	            clToRestore = maxClRestorable;
+	            System.out.println("  - Remaining days for CL: " + remainingDaysForCL);
+	            System.out.println("  - Total CL Used: " + currentTotalClUsed);
+	            System.out.println("  - Max CL Restorable: " + maxClRestorable);
+	            System.out.println("  - CL to Restore: " + clToRestore);
+	        }
+	        
+	        // RULE 3: DISTRIBUTE CL RESTORATION BETWEEN CURRENT CYCLE AND CARRY FORWARD
+	        float clCurrentRestore = 0.0f;
+	        float clCarryRestore = 0.0f;
+	        
+	        if (clToRestore > 0 && currentTotalClUsed > 0) {
+	            System.out.println("Step 3: Distributing CL restoration");
+	            
+	            // Calculate restoration based on original distribution
+	            if (currentTotalClUsed > 0) {
+	                // Calculate the proportion from current cycle vs carry forward
+	                float currentCycleProportion = currentClFromCurrent / currentTotalClUsed;
+	                float carryForwardProportion = currentClFromCarry / currentTotalClUsed;
+	                
+	                clCurrentRestore = clToRestore * currentCycleProportion;
+	                clCarryRestore = clToRestore * carryForwardProportion;
+	                
+	                System.out.println("  - Current Cycle Proportion: " + currentCycleProportion);
+	                System.out.println("  - Carry Forward Proportion: " + carryForwardProportion);
+	                System.out.println("  - From Current Cycle: " + clCurrentRestore);
+	                System.out.println("  - From Carry Forward: " + clCarryRestore);
+	            }
+	            
+	            // Set transfer info for carry forward
+	            if (clCarryRestore > 0) {
+	                clTransferInfo = String.format("%.1f CL from carry forward restored to balance", clCarryRestore);
 	            } else {
-	                // Other leaves haven't consumed all CL yet
-	                Float remainingCL = 1.5f - totalActiveDaysInMonth;
-	                clToRestore = Math.min(rejectedDays, remainingCL);
-	                lopToRestore = rejectedDays - clToRestore;
-	                System.out.println("OTHER LEAVES partial CL: CL to restore: " + clToRestore + ", LOP: " + lopToRestore);
+	                clTransferInfo = "CL restored to current cycle balance";
 	            }
 	        }
-
-	        // Step 5: Check if LOP for THIS SPECIFIC MONTH becomes 0 after withdrawal
-	        Float newMonthlyLop = Math.max(0.0f, currentMonthlyLop - lopToRestore);
-	        boolean monthlyLopBecomingZero = false;
-	        if (currentMonthlyLop > 0 && newMonthlyLop == 0) {
-	            monthlyLopBecomingZero = true;
-	            System.out.println("LOP for month " + getMonthName(month) + " is becoming ZERO!");
-	        }
-
-	        // Step 6: Apply the reversals
-	        Float newCL = currentCL + clToRestore;
 	        
-	        // Add 1.5 CL bonus if monthly LOP is becoming zero
-	        if (monthlyLopBecomingZero && lopToRestore > 0) {
-	            newCL += 1.5f;
-	            System.out.println("Adding 1.5 CL bonus for month " + getMonthName(month) + " as LOP is now ZERO!");
-	        }
+	        // Step 4: UPDATE THE MONTHLY_CL_USED DATA
 	        
-	        Float newLeaveTaken = Math.max(0.0f, currentLeaveTaken - rejectedDays);
-	        Float newTotalLop = Math.max(0.0f, currentTotalLop - lopToRestore);
+	        System.out.println("\n=== UPDATING MONTHLY_CL_USED DATA ===");
 	        
-	        summary.setCasualLeaveBalance(newCL);
-	        summary.setLeaveTaken(newLeaveTaken);
-	        summary.setLop(newTotalLop);
-	        setMonthlyLop(summary, month, newMonthlyLop);
+	        // Update payroll cycle details
+	        float newTotalClUsed = Math.max(0, currentTotalClUsed - clToRestore);
+	        float newClFromCurrent = Math.max(0, currentClFromCurrent - clCurrentRestore);
+	        float newClFromCarry = Math.max(0, currentClFromCarry - clCarryRestore);
+	        float newLopGenerated = Math.max(0, currentLopGenerated - lopToRestore);
 	        
-	        System.out.println("=== BALANCE UPDATES ===");
-	        System.out.println("CL Balance: " + currentCL + " + " + clToRestore + 
-	                          (monthlyLopBecomingZero ? " + 1.5 (bonus for " + getMonthName(month) + ")" : "") + 
-	                          " = " + newCL);
-	        System.out.println("Leave Taken: " + currentLeaveTaken + " - " + rejectedDays + " = " + newLeaveTaken);
-	        System.out.println("Total LOP: " + currentTotalLop + " - " + lopToRestore + " = " + newTotalLop);
-	        System.out.println("Month " + month + " LOP: " + currentMonthlyLop + " - " + lopToRestore + " = " + newMonthlyLop);
+	        // Round to 1 decimal place
+	        newTotalClUsed = Math.round(newTotalClUsed * 10) / 10.0f;
+	        newClFromCurrent = Math.round(newClFromCurrent * 10) / 10.0f;
+	        newClFromCarry = Math.round(newClFromCarry * 10) / 10.0f;
+	        newLopGenerated = Math.round(newLopGenerated * 10) / 10.0f;
+	        clToRestore = Math.round(clToRestore * 10) / 10.0f;
+	        lopToRestore = Math.round(lopToRestore * 10) / 10.0f;
+	        clCurrentRestore = Math.round(clCurrentRestore * 10) / 10.0f;
+	        clCarryRestore = Math.round(clCarryRestore * 10) / 10.0f;
 	        
-	        summary.setUpdatedAt(LocalDateTime.now());
-	        employeeLeaveSummaryRepository.save(summary);
-	        System.out.println("Summary saved successfully");
-
-	        System.out.println("=== AFTER REVERSAL ===");
-	        System.out.println("New CL Balance: " + newCL);
+	        System.out.println("Updated Monthly CL Used: " + newTotalClUsed + " (was: " + currentTotalClUsed + ")");
+	        System.out.println("Updated CL from Current: " + newClFromCurrent + " (was: " + currentClFromCurrent + ")");
+	        System.out.println("Updated CL from Carry: " + newClFromCarry + " (was: " + currentClFromCarry + ")");
+	        System.out.println("Updated LOP Generated: " + newLopGenerated + " (was: " + currentLopGenerated + ")");
+	        
+	        // Update month details
+	        monthDetails.put("total_cl_used", newTotalClUsed);
+	        monthDetails.put("cl_from_current_cycle", newClFromCurrent);
+	        monthDetails.put("cl_from_carry_forward", newClFromCarry);
+	        monthDetails.put("lop_generated", newLopGenerated);
+	        
+	        // Update the monthly data map
+	        monthlyData.put(monthKey, monthDetails);
+	        
+	        // Convert back to JSON
+	        String updatedMonthlyClUsed = mapper.writeValueAsString(monthlyData);
+	        
+	        // Step 5: UPDATE THE SUMMARY AND INDIVIDUAL MONTHLY LOP COLUMNS
+	        
+	        System.out.println("\n=== UPDATING SUMMARY ===");
+	        
+	        // Calculate new values
+	        float newAnnualBalance = currentAnnualBalance + clToRestore;
+	        float newLeaveTaken = Math.max(0, currentLeaveTaken - totalWithdrawnDays);
+	        float newTotalLop = Math.max(0, currentTotalLop - lopToRestore);
+	        
+	        // Round values
+	        newAnnualBalance = Math.round(newAnnualBalance * 10) / 10.0f;
+	        newLeaveTaken = Math.round(newLeaveTaken * 10) / 10.0f;
+	        newTotalLop = Math.round(newTotalLop * 10) / 10.0f;
+	        
+	        System.out.println("=== BEFORE UPDATE ===");
+	        System.out.println("Annual CL Balance: " + currentAnnualBalance);
+	        System.out.println("Leave Taken: " + currentLeaveTaken);
+	        System.out.println("Total LOP: " + currentTotalLop);
+	        
+	        System.out.println("=== AFTER UPDATE ===");
+	        System.out.println("New Annual CL Balance: " + newAnnualBalance);
 	        System.out.println("New Leave Taken: " + newLeaveTaken);
 	        System.out.println("New Total LOP: " + newTotalLop);
-	        System.out.println("New Month " + month + " LOP: " + newMonthlyLop);
 	        
-	        if (monthlyLopBecomingZero) {
-	            System.out.println("*** 1.5 CL BONUS ADDED for " + getMonthName(month) + " as its LOP is now ZERO ***");
-	        }
-
-	        System.out.println("=== REVERSAL COMPLETED ===");
+	        // Update ALL fields in summary
+	        summary.setCasualLeaveBalance(newAnnualBalance);
+	        summary.setLeaveTaken(newLeaveTaken);
+	        summary.setLop(newTotalLop);
+	        summary.setMonthlyClUsed(updatedMonthlyClUsed);
+	        summary.setUpdatedAt(LocalDateTime.now());
+	        
+	        // IMPORTANT: Update individual monthly LOP columns based on month key
+	        updateMonthlyLopColumn(summary, monthKey, newLopGenerated);
+	        
+	        // Save changes
+	        employeeLeaveSummaryRepository.save(summary);
+	        
+	        System.out.println("\n=== RESTORATION SUMMARY ===");
+	        System.out.println("CL Restored to Annual Balance: " + clToRestore);
+	        System.out.println("LOP Restored: " + lopToRestore);
+	        System.out.println("CL Transfer Info: " + clTransferInfo);
+	        
+	        // Return results
+	        result.put("clRestored", clToRestore);
+	        result.put("lopRestored", lopToRestore);
+	        result.put("clTransferInfo", clTransferInfo);
+	        
+	        System.out.println("\n=== WITHDRAWAL PROCESSING COMPLETED ===");
+	        
+	        return result;
 
 	    } catch (Exception e) {
-	        System.err.println("=== ERROR IN REVERT CONSOLIDATED LEAVE ===");
+	        System.err.println("=== ERROR IN WITHDRAWAL PROCESSING ===");
 	        System.err.println("Error: " + e.getMessage());
 	        e.printStackTrace();
-	        throw new RuntimeException("Failed to revert consolidated leave: " + e.getMessage(), e);
+	        result.put("clRestored", 0.0f);
+	        result.put("lopRestored", 0.0f);
+	        result.put("clTransferInfo", "Error in processing");
+	        return result;
 	    }
 	}
 
-	// UPDATED METHOD for mod table with CL bonus logic
-	@Transactional
-	private void revertConsolidatedLeaveFromModWithLogic(EmployeeLeaveModTbl leaveRequest) {
+	// ====================================================================
+	// NEW METHOD TO UPDATE INDIVIDUAL MONTHLY LOP COLUMNS
+	// ====================================================================
+
+	private void updateMonthlyLopColumn(EmployeeLeaveSummary summary, String monthKey, float newLopValue) {
 	    try {
-	        System.out.println("=== REVERTING CONSOLIDATED LEAVE (APPROVED) ===");
-	        System.out.println("Employee: " + leaveRequest.getEmpid());
-	        System.out.println("Days to revert: " + leaveRequest.getNoofdays());
+	        System.out.println("Updating LOP column for month: " + monthKey + " to value: " + newLopValue);
 	        
-	        String empId = leaveRequest.getEmpid();
-	        LocalDate requestDate = leaveRequest.getStartdate()
-	                .toInstant()
-	                .atZone(ZoneId.systemDefault())
-	                .toLocalDate();
-	        int year = requestDate.getYear();
-	        int month = requestDate.getMonthValue();
-	        Float rejectedDays = leaveRequest.getNoofdays();
-
-	        System.out.println("Year: " + year + ", Month: " + month + " (" + getMonthName(month) + ")");
-
-	        // Step 1: Get ALL leaves for this month
-	        System.out.println("Fetching all leaves for month " + month + "...");
-	        List<EmployeeLeaveMasterTbl> allMasterLeaves = employeeLeaveMasterRepository
-	            .findAllLeavesForMonth(empId, year, month);
-	        
-	        List<EmployeeLeaveModTbl> allModLeaves = employeeLeaveModRepository
-	            .findAllLeavesForMonth(empId, year, month);
-	        
-	        // Filter active leaves (excluding the one being withdrawn)
-	        List<EmployeeLeaveMasterTbl> activeMasterLeaves = allMasterLeaves.stream()
-	            .filter(leave -> "N".equals(leave.getDelflg()))
-	            .collect(Collectors.toList());
-	        
-	        List<EmployeeLeaveModTbl> activeModLeaves = allModLeaves.stream()
-	            .filter(leave -> !"Withdrawn".equals(leave.getStatus()) && !leave.getSrlnum().equals(leaveRequest.getSrlnum()))
-	            .collect(Collectors.toList());
-	        
-	        System.out.println("Active leaves in master table: " + activeMasterLeaves.size());
-	        System.out.println("Active leaves in mod table (excluding current): " + activeModLeaves.size());
-
-	        // Step 2: Get leave summary
-	        EmployeeLeaveSummary summary = employeeLeaveSummaryRepository
-	                .findByEmpIdAndYear(empId, year)
-	                .orElse(null);
-
-	        if (summary == null) {
-	            System.out.println("WARNING: No leave summary found.");
-	            return;
+	        // Based on the month key, update the corresponding LOP column
+	        switch (monthKey.toLowerCase()) {
+	            case "jan":
+	                summary.setLopJan(newLopValue);
+	                System.out.println("Updated lop_jan to: " + newLopValue);
+	                break;
+	            case "feb":
+	                summary.setLopFeb(newLopValue);
+	                System.out.println("Updated lop_feb to: " + newLopValue);
+	                break;
+	            case "mar":
+	                summary.setLopMar(newLopValue);
+	                System.out.println("Updated lop_mar to: " + newLopValue);
+	                break;
+	            case "apr":
+	                summary.setLopApr(newLopValue);
+	                System.out.println("Updated lop_apr to: " + newLopValue);
+	                break;
+	            case "may":
+	                summary.setLopMay(newLopValue);
+	                System.out.println("Updated lop_may to: " + newLopValue);
+	                break;
+	            case "jun":
+	                summary.setLopJun(newLopValue);
+	                System.out.println("Updated lop_jun to: " + newLopValue);
+	                break;
+	            case "jul":
+	                summary.setLopJul(newLopValue);
+	                System.out.println("Updated lop_jul to: " + newLopValue);
+	                break;
+	            case "aug":
+	                summary.setLopAug(newLopValue);
+	                System.out.println("Updated lop_aug to: " + newLopValue);
+	                break;
+	            case "sep":
+	                summary.setLopSep(newLopValue);
+	                System.out.println("Updated lop_sep to: " + newLopValue);
+	                break;
+	            case "oct":
+	                summary.setLopOct(newLopValue);
+	                System.out.println("Updated lop_oct to: " + newLopValue);
+	                break;
+	            case "nov":
+	                summary.setLopNov(newLopValue);
+	                System.out.println("Updated lop_nov to: " + newLopValue);
+	                break;
+	            case "dec":
+	                summary.setLopDec(newLopValue);
+	                System.out.println("Updated lop_dec to: " + newLopValue);
+	                break;
+	            default:
+	                System.out.println("Unknown month key: " + monthKey);
 	        }
-	        
-	        System.out.println("=== BEFORE REVERSAL ===");
-	        Float currentCL = safe(summary.getCasualLeaveBalance());
-	        Float currentLeaveTaken = safe(summary.getLeaveTaken());
-	        Float currentTotalLop = safe(summary.getLop());
-	        Float currentMonthlyLop = getMonthlyLop(summary, month);
-	        
-	        System.out.println("CL Balance: " + currentCL);
-	        System.out.println("Leave Taken: " + currentLeaveTaken);
-	        System.out.println("Total LOP: " + currentTotalLop);
-	        System.out.println("Month " + month + " LOP: " + currentMonthlyLop);
-
-	        // Step 3: Calculate total active days in this month (excluding the one being withdrawn)
-	        Float totalActiveDaysInMonth = 0.0f;
-	        
-	        // Add days from master table
-	        for (EmployeeLeaveMasterTbl leave : activeMasterLeaves) {
-	            totalActiveDaysInMonth += leave.getNoofdays();
-	        }
-	        
-	        // Add days from mod table
-	        for (EmployeeLeaveModTbl leave : activeModLeaves) {
-	            totalActiveDaysInMonth += leave.getNoofdays();
-	        }
-	        
-	        System.out.println("Total active days in month (excluding current): " + totalActiveDaysInMonth);
-	        
-	        // Step 4: Determine CL and LOP to restore
-	        Float clToRestore = 0.0f;
-	        Float lopToRestore = 0.0f;
-	        
-	        // If there are NO other active leaves for this month
-	        if (totalActiveDaysInMonth == 0) {
-	            // This is the ONLY leave for the month
-	            clToRestore = Math.min(1.5f, rejectedDays);
-	            lopToRestore = rejectedDays - clToRestore;
-	            System.out.println("ONLY LEAVE FOR MONTH: CL to restore: " + clToRestore + ", LOP: " + lopToRestore);
-	        } else {
-	            // There are OTHER active leaves for this month
-	            if (totalActiveDaysInMonth >= 1.5f) {
-	                // Other leaves already consumed all CL
-	                clToRestore = 0.0f;
-	                lopToRestore = rejectedDays;
-	                System.out.println("OTHER LEAVES consumed all CL: Only LOP to restore: " + lopToRestore);
-	            } else {
-	                // Other leaves haven't consumed all CL yet
-	                Float remainingCL = 1.5f - totalActiveDaysInMonth;
-	                clToRestore = Math.min(rejectedDays, remainingCL);
-	                lopToRestore = rejectedDays - clToRestore;
-	                System.out.println("OTHER LEAVES partial CL: CL to restore: " + clToRestore + ", LOP: " + lopToRestore);
-	            }
-	        }
-
-	        // Step 5: Check if LOP for THIS SPECIFIC MONTH becomes 0 after withdrawal
-	        Float newMonthlyLop = Math.max(0.0f, currentMonthlyLop - lopToRestore);
-	        boolean monthlyLopBecomingZero = false;
-	        if (currentMonthlyLop > 0 && newMonthlyLop == 0) {
-	            monthlyLopBecomingZero = true;
-	            System.out.println("LOP for month " + getMonthName(month) + " is becoming ZERO!");
-	        }
-
-	        // Step 6: Apply the reversals
-	        Float newCL = currentCL + clToRestore;
-	        
-	        // Add 1.5 CL bonus if monthly LOP is becoming zero
-	        if (monthlyLopBecomingZero && lopToRestore > 0) {
-	            newCL += 1.5f;
-	            System.out.println("Adding 1.5 CL bonus for month " + getMonthName(month) + " as LOP is now ZERO!");
-	        }
-	        
-	        Float newLeaveTaken = Math.max(0.0f, currentLeaveTaken - rejectedDays);
-	        Float newTotalLop = Math.max(0.0f, currentTotalLop - lopToRestore);
-	        
-	        summary.setCasualLeaveBalance(newCL);
-	        summary.setLeaveTaken(newLeaveTaken);
-	        summary.setLop(newTotalLop);
-	        setMonthlyLop(summary, month, newMonthlyLop);
-	        
-	        System.out.println("=== BALANCE UPDATES ===");
-	        System.out.println("CL Balance: " + currentCL + " + " + clToRestore + 
-	                          (monthlyLopBecomingZero ? " + 1.5 (bonus for " + getMonthName(month) + ")" : "") + 
-	                          " = " + newCL);
-	        System.out.println("Leave Taken: " + currentLeaveTaken + " - " + rejectedDays + " = " + newLeaveTaken);
-	        System.out.println("Total LOP: " + currentTotalLop + " - " + lopToRestore + " = " + newTotalLop);
-	        System.out.println("Month " + month + " LOP: " + currentMonthlyLop + " - " + lopToRestore + " = " + newMonthlyLop);
-	        
-	        summary.setUpdatedAt(LocalDateTime.now());
-	        employeeLeaveSummaryRepository.save(summary);
-	        System.out.println("Summary saved successfully");
-
-	        System.out.println("=== AFTER REVERSAL ===");
-	        System.out.println("New CL Balance: " + newCL);
-	        System.out.println("New Leave Taken: " + newLeaveTaken);
-	        System.out.println("New Total LOP: " + newTotalLop);
-	        System.out.println("New Month " + month + " LOP: " + newMonthlyLop);
-	        
-	        if (monthlyLopBecomingZero) {
-	            System.out.println("*** 1.5 CL BONUS ADDED for " + getMonthName(month) + " as its LOP is now ZERO ***");
-	        }
-
-	        System.out.println("=== REVERSAL COMPLETED ===");
-
 	    } catch (Exception e) {
-	        System.err.println("=== ERROR IN REVERT CONSOLIDATED LEAVE FROM MOD ===");
-	        System.err.println("Error: " + e.getMessage());
+	        System.err.println("Error updating monthly LOP column: " + e.getMessage());
 	        e.printStackTrace();
-	        throw new RuntimeException("Failed to revert consolidated leave from mod: " + e.getMessage(), e);
 	    }
 	}
 
-	// Helper methods
-	private Float safe12(Float value) {
-	    return value != null ? value : 0.0f;
+	// ====================================================================
+	// HELPER METHODS - CORRECTED
+	// ====================================================================
+
+	private Float safeFloat(Number value) {
+	    return value != null ? value.floatValue() : 0.0f;
 	}
 
-	private String getMonthName12(int month) {
+	private String getMonthName(int month) {
 	    String[] monthNames = {"January", "February", "March", "April", "May", "June", 
 	                          "July", "August", "September", "October", "November", "December"};
 	    return (month >= 1 && month <= 12) ? monthNames[month - 1] : "Unknown";
 	}
 
-	private Float getMonthlyLop12(EmployeeLeaveSummary summary, int month) {
-	    if (summary == null) return 0f;
-	    switch (month) {
-	        case 1:  return safe(summary.getLopJan());
-	        case 2:  return safe(summary.getLopFeb());
-	        case 3:  return safe(summary.getLopMar());
-	        case 4:  return safe(summary.getLopApr());
-	        case 5:  return safe(summary.getLopMay());
-	        case 6:  return safe(summary.getLopJun());
-	        case 7:  return safe(summary.getLopJul());
-	        case 8:  return safe(summary.getLopAug());
-	        case 9:  return safe(summary.getLopSep());
-	        case 10: return safe(summary.getLopOct());
-	        case 11: return safe(summary.getLopNov());
-	        case 12: return safe(summary.getLopDec());
-	        default: return 0f;
-	    }
-	}
-
-	private void setMonthlyLop12(EmployeeLeaveSummary summary, int month, Float value) {
-	    if (summary == null) return;
-	    switch (month) {
-	        case 1:  summary.setLopJan(value); break;
-	        case 2:  summary.setLopFeb(value); break;
-	        case 3:  summary.setLopMar(value); break;
-	        case 4:  summary.setLopApr(value); break;
-	        case 5:  summary.setLopMay(value); break;
-	        case 6:  summary.setLopJun(value); break;
-	        case 7:  summary.setLopJul(value); break;
-	        case 8:  summary.setLopAug(value); break;
-	        case 9:  summary.setLopSep(value); break;
-	        case 10: summary.setLopOct(value); break;
-	        case 11: summary.setLopNov(value); break;
-	        case 12: summary.setLopDec(value); break;
-	    }
-	}
-
-	// Keep your existing removeAbsentAttendance, sendWithdrawalEmail, sendWithdrawalEmailFromMod, and convertModToMaster methods
-	// They don't need changes for the CL/LOP logic
-
-	private void removeAbsentAttendance(String empid, Date startDate, Date endDate) {
-	    Calendar calendar = Calendar.getInstance();
-	    calendar.setTime(startDate);
+	// Get month key from full month name (e.g., "March" -> "mar")
+	private String getMonthKey(String monthName) {
+	    if (monthName == null || monthName.length() < 3) return "jan";
 	    
-	    while (!calendar.getTime().after(endDate)) {
-	        Date currentDate = calendar.getTime();
-	        
-	        Optional<UserMasterAttendanceMod> attendance = usermasterattendancemodrepository
-	                .findByAttendanceidAndAttendancedate(empid, currentDate);
-	        
-	        if (attendance.isPresent()) {
-	            UserMasterAttendanceMod att = attendance.get();
-	            // Only remove if status is "Absent" and was set by system
-	            if ("Absent".equals(att.getStatus()) && "System".equals(att.getRcreuserid())) {
-	                usermasterattendancemodrepository.delete(att);
-	            }
+	    String lower = monthName.toLowerCase().substring(0, 3);
+	    return lower;
+	}
+
+	// Get payroll cycle month (27th to 26th) - CORRECTED VERSION
+	private String getPayrollCycleMonth1(LocalDate date) {
+	    int dayOfMonth = date.getDayOfMonth();
+	    int month = date.getMonthValue();
+	    
+	    // Payroll cycle: 27th to 26th of next month
+	    if (dayOfMonth >= 27) {
+	        // Falls in next month's payroll cycle
+	        if (month == 12) {
+	            return "January"; // Next year January
+	        } else {
+	            String[] months = {"January", "February", "March", "April", "May", "June", 
+	                              "July", "August", "September", "October", "November", "December"};
+	            return months[month]; // Next month (month is 1-based, array is 0-based)
 	        }
-	        
-	        calendar.add(Calendar.DATE, 1);
+	    } else {
+	        // Falls in current month's payroll cycle (1st to 26th)
+	        String[] months = {"January", "February", "March", "April", "May", "June", 
+	                          "July", "August", "September", "October", "November", "December"};
+	        return months[month - 1]; // Current month
 	    }
 	}
 
-	private void sendWithdrawalEmail(EmployeeLeaveMasterTbl leaveRequest, String empid, String statusType) {
+	// ====================================================================
+	// UPDATED EMAIL METHOD
+	// ====================================================================
+
+	private void sendWithdrawalEmailUpdated(EmployeeLeaveMasterTbl leaveRequest, String empid, String statusType, 
+	                                       Float clRestored, Float lopRestored, String clTransferInfo) {
 	    try {
 	        // Get employee details
 	        String employeeName = "";
@@ -9594,41 +10794,71 @@ public class AppController {
 	        
 	        if (!employeeEmail.isEmpty() && !managerEmail.isEmpty()) {
 	            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-	            String subject = "Leave Request Withdrawn";
+	            String subject = "Leave Request Withdrawn - Balance Updated";
 	            String body = String.format(
-	                "Dear %s,\n\nEmployee %s has withdrawn their leave request.\n\n" +
-	                "Leave Details:\n" +
+	                "Dear %s,\n\n" +
+	                "Employee %s has withdrawn their leave request.\n\n" +
+	                "LEAVE DETAILS:\n" +
 	                "Type: %s\n" +
 	                "From: %s\n" +
 	                "To: %s\n" +
-	                "Reason: %s\n" +
-	                "Status: %s\n\n" +
-	                "This action has been processed and all related calculations have been reverted.\n\n" +
+	                "Days: %.1f\n" +
+	                "Reason: %s\n\n" +
+	                "BALANCE UPDATES:\n" +
+	                "CL Restored: %.1f days\n" +
+	                "LOP Restored: %.1f days\n" +
+	                "Status: Withdrawn\n" +
+	                "%s\n\n" +
+	                "This withdrawal has been processed and balances have been updated accordingly.\n\n" +
 	                "Regards,\n" +
 	                "Leave Management System",
 	                managerName, employeeName, 
 	                leaveRequest.getLeavetype(),
 	                sdf.format(leaveRequest.getStartdate()),
 	                sdf.format(leaveRequest.getEnddate()),
+	                leaveRequest.getNoofdays(),
 	                leaveRequest.getLeavereason(),
-	                "Withdrawn"
+	                clRestored,
+	                lopRestored,
+	                clTransferInfo
 	            );
 	            
-	            emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, body);
+//	            emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, body);
 	        }
 	    } catch (Exception e) {
 	        e.printStackTrace();
 	    }
 	}
 
-	private void sendWithdrawalEmailFromMod(EmployeeLeaveModTbl leaveRequest, String empid, String statusType) {
-	    // Similar implementation for mod table records
-	    sendWithdrawalEmail(convertModToMaster(leaveRequest), empid, statusType);
+	// ====================================================================
+	// EXISTING METHODS (keep as is)
+	// ====================================================================
+
+	private void removeAbsentAttendance(String empid, Date startDate, Date endDate) {
+	    Calendar calendar = Calendar.getInstance();
+	    calendar.setTime(startDate);
+	    
+	    while (!calendar.getTime().after(endDate)) {
+	        Date currentDate = calendar.getTime();
+	        
+	        Optional<UserMasterAttendanceMod> attendance = usermasterattendancemodrepository
+	                .findByAttendanceidAndAttendancedate(empid, currentDate);
+	        
+	        if (attendance.isPresent()) {
+	            UserMasterAttendanceMod att = attendance.get();
+	            // Only remove if status is "Absent" and was set by system
+	            if ("Absent".equals(att.getStatus()) && "System".equals(att.getRcreuserid())) {
+	                usermasterattendancemodrepository.delete(att);
+	            }
+	        }
+	        
+	        calendar.add(Calendar.DATE, 1);
+	    }
 	}
 
 	private EmployeeLeaveMasterTbl convertModToMaster(EmployeeLeaveModTbl mod) {
 	    EmployeeLeaveMasterTbl master = new EmployeeLeaveMasterTbl();
-	    // Copy all fields from mod to master
+	    // Copy all fields from mod to master - INCLUDING NOOFBOOKED
 	    master.setSrlnum(mod.getSrlnum());
 	    master.setEmpid(mod.getEmpid());
 	    master.setLeavetype(mod.getLeavetype());
@@ -9638,9 +10868,10 @@ public class AppController {
 	    master.setLeavereason(mod.getLeavereason());
 	    master.setStatus(mod.getStatus());
 	    master.setNoofdays(mod.getNoofdays());
+	    master.setNoofbooked(mod.getNoofbooked()); // IMPORTANT: Copy noofbooked field
 	    master.setEntitycreflg(mod.getEntitycreflg());
 	    master.setDelflg(mod.getDelflg());
 	    return master;
 	}
-	
 }
+

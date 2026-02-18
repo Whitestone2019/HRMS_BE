@@ -15,7 +15,7 @@ import javax.persistence.Table;
 public class ExitFormMaster {
 
     @Id
-    private String id;   // EX0001, EX0002,...
+    private String id;   
 
     // EXIT FORM DETAILS
     private String employeeId;
@@ -23,7 +23,7 @@ public class ExitFormMaster {
     private LocalDate noticeStartDate;
     private String reason;
     private String comments;
-    private String status;  // 0 pending, 1 approved, 2 reject, etc.
+    private String status;  
     private int noticePeriod;
     private LocalDate noticeEndDate;
     private String attachment;

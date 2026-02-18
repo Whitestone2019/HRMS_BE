@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
@@ -419,7 +420,7 @@ public class CalendarController {
             // Filter public events
             List<WsslCalendarMod> publicEvents = allEvents.stream()
                     .filter(event -> "Y".equalsIgnoreCase(event.getIsPublic()))
-                    .toList();
+                    .collect(Collectors.toList());
             
             response.put("success", true);
             response.put("data", publicEvents);

@@ -15,10 +15,10 @@ import javax.persistence.UniqueConstraint;
 @Table(name = "employee_leave_summary", uniqueConstraints = @UniqueConstraint(columnNames = {"emp_id", "year"}))
 public class EmployeeLeaveSummary {
 
-	  @Id
-	    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "leave_summary_seq")
-	    @SequenceGenerator(name = "leave_summary_seq", sequenceName = "EMPLOYEE_LEAVE_SUMMARY_SEQ", allocationSize = 1)
-	    private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "leave_summary_seq")
+    @SequenceGenerator(name = "leave_summary_seq", sequenceName = "EMPLOYEE_LEAVE_SUMMARY_SEQ", allocationSize = 1)
+    private Long id;
 
     @Column(name = "emp_id", nullable = false)
     private String empId;
@@ -37,6 +37,11 @@ public class EmployeeLeaveSummary {
     // CHANGED: Added columnDefinition
     @Column(nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
     private Float lop = 0.0f; // Total Loss of Pay (LOP)
+
+    // NEW: Single column to store monthly CL usage as JSON
+    // Format: {"jan":0.0,"feb":1.5,"mar":0.5,"apr":0.0,"may":0.0,"jun":0.0,"jul":0.0,"aug":0.0,"sep":0.0,"oct":0.0,"nov":0.0,"dec":0.0}
+    @Column(name = "monthly_cl_used", length = 1000, columnDefinition = "VARCHAR(1000) DEFAULT '{\"jan\":0.0,\"feb\":0.0,\"mar\":0.0,\"apr\":0.0,\"may\":0.0,\"jun\":0.0,\"jul\":0.0,\"aug\":0.0,\"sep\":0.0,\"oct\":0.0,\"nov\":0.0,\"dec\":0.0}'")
+    private String monthlyClUsed = "{\"jan\":0.0,\"feb\":0.0,\"mar\":0.0,\"apr\":0.0,\"may\":0.0,\"jun\":0.0,\"jul\":0.0,\"aug\":0.0,\"sep\":0.0,\"oct\":0.0,\"nov\":0.0,\"dec\":0.0}";
 
     // CHANGED: Added columnDefinition to all LOP fields
     @Column(name = "lop_jan", nullable = false, columnDefinition = "DECIMAL(5,1) DEFAULT 0.0")
@@ -146,6 +151,15 @@ public class EmployeeLeaveSummary {
 
     public void setLopDec(Float lopDec) {
         this.lopDec = formatToOneDecimal(lopDec);
+    }
+
+    // Getters and Setters for monthlyClUsed
+    public String getMonthlyClUsed() {
+        return monthlyClUsed;
+    }
+
+    public void setMonthlyClUsed(String monthlyClUsed) {
+        this.monthlyClUsed = monthlyClUsed;
     }
 
     // Getters remain the same

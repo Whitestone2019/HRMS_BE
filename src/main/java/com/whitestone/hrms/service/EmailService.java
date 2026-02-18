@@ -4,6 +4,7 @@ import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 
 import javax.mail.MessagingException;
+import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,6 +82,28 @@ public class EmailService {
         }
     }
     
+    public void sendCelebrationEmail(String fromEmail, String fromName, String toEmail, String subject, String htmlBody) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            
+            // Set FROM with name - THIS IS THE KEY FIX
+            helper.setFrom(new InternetAddress(fromEmail, fromName));
+            
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(htmlBody, true); // true indicates HTML
+            
+            mailSender.send(message);
+            System.out.println("🎉 Celebration email sent successfully!");
+            System.out.println("From: " + fromEmail + " (" + fromName + ")");
+            System.out.println("To: " + toEmail);
+            System.out.println("Subject: " + subject);
+        } catch (Exception e) {
+            System.err.println("❌ Failed to send celebration email: " + e.getMessage());
+            throw new RuntimeException("Failed to send celebration email", e);
+        }
+    }
     
     public void sendAdvanceEmail(String From,String email, String subject, String body) {
         try {

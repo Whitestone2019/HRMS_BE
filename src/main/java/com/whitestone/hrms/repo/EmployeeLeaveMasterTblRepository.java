@@ -23,7 +23,7 @@ public interface EmployeeLeaveMasterTblRepository extends JpaRepository<Employee
 
 	// EmployeeLeaveMasterTbl findByEmpid(String empid); // Correct field name
 
-	EmployeeLeaveMasterTbl findByEmpid(String empid);
+	List<EmployeeLeaveMasterTbl> findByEmpid(String empid);
 
 	EmployeeLeaveMasterTbl findByEmpidAndLeavetype(String empid, String leavetype);
 
