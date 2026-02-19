@@ -2707,7 +2707,7 @@ public class AppController {
 	    String body = String.format(
 	            "Dear %s,\n\nYour leave request for %s from %s to %s has been approved by your manager, %s.\n\nRegards,\n%s,\nWhitestone Software Solution Pvt Ltd",
 	            employeeName, leaveType, sdf.format(startDate), sdf.format(endDate), managerName, managerName);
-	    // emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
+	     emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
 	}
 	
 	
@@ -2923,7 +2923,7 @@ public class AppController {
 	                            );
 
 	                            // Uncomment to send email
-	                            // emailService.sendLeaveEmail("hr@company.com", employee.getEmailid(), subject, body);
+	                             emailService.sendLeaveEmail("hr@company.com", employee.getEmailid(), subject, body);
 	                        }
 	                    } else {
 	                        // Try trainee table
@@ -2962,7 +2962,7 @@ public class AppController {
 	                                );
 
 	                                // Uncomment to send email
-	                                // emailService.sendLeaveEmail("hr@company.com", employee.getEmailid(), subject, body);
+	                                 emailService.sendLeaveEmail("hr@company.com", employee.getEmailid(), subject, body);
 	                            }
 	                        }
 	                    }
@@ -3819,7 +3819,7 @@ public class AppController {
 	             emailBody.append("Whitestone Software Solution Pvt Ltd.\n");
 	             
 	             // Uncomment to send email
-	             // emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, emailBody.toString());
+	              emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, emailBody.toString());
 	             response.put("emailStatus", "Email sent to manager: " + managerEmail);
 	         } else {
 	             response.put("emailStatus", "Manager email not found");
@@ -8236,7 +8236,7 @@ public class AppController {
 						"Dear %s,\n\nYour permission request from %s to %s for %s hours has been approved.\n\nRegards,\n%s,\nWhitestone Software Solution Pvt Ltd.",
 						employeeFirstName, startTimeFormatted, endTimeFormatted, permissionRequest.getHours(),
 						managerFirstName);
-//				emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
+				emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
 				System.out.println("Email sent to: " + employeeEmail);
 			}
 
@@ -9643,7 +9643,7 @@ public class AppController {
 	                empName, request.getAttendanceDate(), request.getRequestedStatus(), action, request.getRemarks());
 
 	        System.out.println("Email would be sent to: " + empEmail + " with subject: " + subject);
-	        // emailService.sendLeaveEmail("noreply@whitestonesoftware.in", empEmail, subject, body);
+	         emailService.sendLeaveEmail("noreply@whitestonesoftware.in", empEmail, subject, body);
 	    } catch (Exception e) {
 	        System.err.println("Error in sendApprovalNotification: " + e.getMessage());
 	    }
@@ -9695,28 +9695,28 @@ public class AppController {
 	            manager = usermaintenanceRepository.findByEmpid(managerId);
 	        }
 
-//	        // Send email to manager
-//	        if (manager != null) {
-//	            String empName = emp != null ? emp.getFirstname() : trainee.getFirstname();
-//	            String empEmail = emp != null ? emp.getEmailid() : trainee.getEmailid();
-//
-//	            String body = String.format(
-//	                "Dear %s,\n\n" +
-//	                "%s has submitted an attendance change request for date: %s\n\n" +
-//	                "Requested Status: %s\n" +
-//	                "Remarks: %s\n\n" +
-//	                "Please login to the portal to Approve or Reject this request.\n\n" +
-//	                "Best Regards,\nWhitestone Software Solutions",
-//	                manager.getFirstname(),
-//	                empName,
-//	                attDate.format(DateTimeFormatter.ofPattern("dd-MMM-yyyy")),
-//	                request.getRequestedStatus(),
-//	                request.getRemarks()
-//	            );
-//
-//	            emailService.sendLeaveEmail(empEmail, manager.getEmailid(), 
-//	                "New Attendance Correction Request - " + empName, body);
-//	        }
+	        // Send email to manager
+	        if (manager != null) {
+	            String empName = emp != null ? emp.getFirstname() : trainee.getFirstname();
+	            String empEmail = emp != null ? emp.getEmailid() : trainee.getEmailid();
+
+	            String body = String.format(
+	                "Dear %s,\n\n" +
+	                "%s has submitted an attendance change request for date: %s\n\n" +
+	                "Requested Status: %s\n" +
+	                "Remarks: %s\n\n" +
+	                "Please login to the portal to Approve or Reject this request.\n\n" +
+	                "Best Regards,\nWhitestone Software Solutions",
+	                manager.getFirstname(),
+	                empName,
+	                attDate.format(DateTimeFormatter.ofPattern("dd-MMM-yyyy")),
+	                request.getRequestedStatus(),
+	                request.getRemarks()
+	            );
+
+	            emailService.sendLeaveEmail(empEmail, manager.getEmailid(), 
+	                "New Attendance Correction Request - " + empName, body);
+	        }
 
 	        response.put("status", "success");
 	        response.put("message", "Attendance change request submitted successfully.");
@@ -10823,7 +10823,7 @@ public class AppController {
 	                clTransferInfo
 	            );
 	            
-//	            emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, body);
+	            emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, body);
 	        }
 	    } catch (Exception e) {
 	        e.printStackTrace();

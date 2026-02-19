@@ -172,7 +172,7 @@ public class HrLeaveApprovalController {
 	            }
 	            emailBody.append("Whitestone Software Solution Pvt Ltd.\n");
 //	            
-//	            emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, emailBody.toString());
+	            emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, emailBody.toString());
 	            response.put("emailStatus", "Email sent to manager: " + managerEmail);
 	        } else {
 	            response.put("emailStatus", "Manager email not found");
@@ -489,10 +489,10 @@ public class HrLeaveApprovalController {
                     System.out.println("emailService found, sending email...");
                     if (managerEmail != null && !managerEmail.isEmpty()) {
                         System.out.println("Sending with manager CC: " + managerEmail);
-//                        emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
+                        emailService.sendLeaveEmail(managerEmail, employeeEmail, subject, body);
                     } else {
                         System.out.println("Sending directly to employee");
-//                        emailService.sendEmail(employeeEmail, subject, body);
+                        emailService.sendEmail(employeeEmail, subject, body);
                     }
                     System.out.println("✅ Email sent successfully!");
                 }
