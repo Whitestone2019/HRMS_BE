@@ -6220,6 +6220,57 @@ public class AppController {
 		}
 	}
 
+	@DeleteMapping("/employeesalarydetail/{empid}")
+@Transactional
+public ResponseEntity<Void> deleteEmployeeSalary(@PathVariable String empid) {
+    try {
+        EmployeeSalaryTbl existing = employeeSalaryTblRepository.findByEmpid(empid);
+        
+        if (existing == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // Move to history (almost same logic as your update)
+        EmployeeSalaryHistory history = new EmployeeSalaryHistory();
+        history.setEmpId(existing.getEmpid());
+        history.setFirstName(existing.getFirstname());
+        history.setLastName(existing.getLastname());
+        history.setDateOfBirth(existing.getDateofbirth());
+        history.setDateOfJoin(existing.getDateOfJoin());
+        history.setOfficialEmail(existing.getOfficialemail());
+        history.setEmailId(existing.getEmailid());
+        history.setPhonenumber(existing.getPhonenumber());
+        history.setLocationType(existing.getLocationType());
+        history.setDepartment(existing.getDepartment());
+        history.setAnnualCTC(existing.getAnnualCTC());
+        history.setEarnings(existing.getEarnings());
+        history.setDeductions(existing.getDeductions());
+        // If you later add payrollDeductions to main table → also copy it here
+        // history.setPayrollDeductions(existing.getPayrollDeductions());
+        
+        history.setBankName(existing.getBankName());
+        history.setAccountNumber(existing.getAccountNumber());
+        history.setIfscCode(existing.getIfscCode());
+        history.setModifiedBy(existing.getModifiedBy() != null ? existing.getModifiedBy() : "SYSTEM_DELETE");
+        history.setModifiedAt(LocalDateTime.now());
+        // Optional: add deletion reason / deletedBy field if needed later
+        // history.setDeletedBy(currentUser); 
+        // history.setDeletionReason("Manual deletion by admin");
+
+        employeeSalaryHistoryTblRepository.save(history);
+
+        // Now remove from active table
+        employeeSalaryTblRepository.deleteByEmpid(empid);
+        // or: employeeSalaryTblRepository.delete(existing);
+
+        return ResponseEntity.noContent().build(); // 204 No Content = success delete
+
+    } catch (Exception e) {
+        e.printStackTrace();
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+    }
+}
+
 	@GetMapping("/employeesalarydetail") // Ensure this annotation exists
 	public ResponseEntity<List<EmployeeSalaryTbl>> getAllEmployeeSalaries() {
 		List<EmployeeSalaryTbl> salaryDetails = employeeSalaryTblRepository.findAll();
