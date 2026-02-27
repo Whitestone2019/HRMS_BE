@@ -7348,38 +7348,30 @@ public class AppController {
 	public ResponseEntity<?> getAttendanceEvents(@PathVariable String employeeId,
 	        @RequestParam(required = false) Integer year) {
 	    try {
-	        // Validate employee ID
 	        if (employeeId == null || employeeId.isEmpty()) {
 	            return ResponseEntity.badRequest()
 	                    .body(Collections.singletonMap("error", "Invalid employeeId"));
 	        }
 
-	        // Check if employee exists
 	        usermaintenance employee = usermaintenanceRepository.findByEmpid(employeeId);
 	        if (employee == null) {
 	            return ResponseEntity.status(HttpStatus.NOT_FOUND)
 	                    .body(Collections.singletonMap("error", "Employee not found"));
 	        }
 
-	        // If year is provided, fetch only that year's data
-	        // If no year provided, fetch multiple years (last 3 years including current)
 	        List<Map<String, Object>> allEvents = new ArrayList<>();
-	        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
 	        
 	        if (year != null) {
-	            // Fetch single year
 	            allEvents = fetchYearData(employeeId, year);
 	        } else {
-	            // Fetch multiple years (2024, 2025, 2026)
 	            int currentYear = Calendar.getInstance().get(Calendar.YEAR);
-	            int startYear = currentYear - 2; // 2 years back (2024 if current is 2026)
+	            int startYear = currentYear - 2;
 	            
 	            for (int y = startYear; y <= currentYear; y++) {
 	                List<Map<String, Object>> yearEvents = fetchYearData(employeeId, y);
 	                allEvents.addAll(yearEvents);
 	            }
 	            
-	            // Sort events by date
 	            allEvents.sort((e1, e2) -> {
 	                String date1 = (String) e1.get("date");
 	                String date2 = (String) e2.get("date");
@@ -7401,7 +7393,6 @@ public class AppController {
 	    Calendar endCal = Calendar.getInstance();
 	    Calendar today = Calendar.getInstance();
 
-	    // Set cycle for the specific year (27th December of previous year to 26th December of current year)
 	    startCal.set(year - 1, Calendar.DECEMBER, 27, 0, 0, 0);
 	    startCal.set(Calendar.MILLISECOND, 0);
 	    
@@ -7410,52 +7401,219 @@ public class AppController {
 
 	    Date startDate = startCal.getTime();
 	    Date endDate = endCal.getTime();
-	    
-	    // Don't fetch future dates beyond today
 	    Date attendanceEndDate = endDate.after(today.getTime()) ? today.getTime() : endDate;
 
 	    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
 	    SimpleDateFormat dayFormat = new SimpleDateFormat("EEEE");
 	    SimpleDateFormat monthYearFormat = new SimpleDateFormat("yyyy-MM");
-
-	    // Get week offs for the entire cycle
+	    
 	    List<Date> weekOffDays = getWeekOffsInRange(startDate, attendanceEndDate);
 	    Set<String> weekOffSet = weekOffDays.stream().map(d -> dateFormat.format(d)).collect(Collectors.toSet());
 
-	    // Get attendance records for the entire cycle
 	    List<UserMasterAttendanceMod> attendanceRecords = usermasterattendancemodrepository
 	            .findByAttendanceidAndDateRange(employeeId, startDate, attendanceEndDate);
 
 	    Map<String, UserMasterAttendanceMod> attendanceMap = new HashMap<>();
+	    Map<String, List<UserMasterAttendanceMod>> attendanceHistoryMap = new HashMap<>();
+	    
 	    for (UserMasterAttendanceMod record : attendanceRecords) {
-	        attendanceMap.put(dateFormat.format(record.getAttendancedate()), record);
+	        String dateStr = dateFormat.format(record.getAttendancedate());
+	        attendanceMap.put(dateStr, record);
+	        
+	        if (!attendanceHistoryMap.containsKey(dateStr)) {
+	            attendanceHistoryMap.put(dateStr, new ArrayList<>());
+	        }
+	        attendanceHistoryMap.get(dateStr).add(record);
 	    }
 
-	    // Get holidays for the entire cycle
 	    List<WsslCalendarMod> holidays = wsslCalendarModRepository.findByEventDateBetween(startDate, endDate);
 	    Map<String, WsslCalendarMod> holidayMap = new HashMap<>();
 	    for (WsslCalendarMod holiday : holidays) {
 	        holidayMap.put(dateFormat.format(holiday.getEventDate()), holiday);
 	    }
 
+	    Map<String, List<Date>> datesByPayrollCycle = new LinkedHashMap<>();
+	    Map<String, CycleInfo> cycleInfoMap = new LinkedHashMap<>();
+	    
+	    Calendar cycleCal = (Calendar) startCal.clone();
+	    while (!cycleCal.after(endCal) && !cycleCal.getTime().after(today.getTime())) {
+	        Date currentDate = cycleCal.getTime();
+	        String cycleKey = getPayrollCycleKey(currentDate);
+	        
+	        if (!datesByPayrollCycle.containsKey(cycleKey)) {
+	            datesByPayrollCycle.put(cycleKey, new ArrayList<>());
+	            cycleInfoMap.put(cycleKey, new CycleInfo(cycleKey, 1.5));
+	        }
+	        datesByPayrollCycle.get(cycleKey).add(currentDate);
+	        
+	        cycleCal.add(Calendar.DAY_OF_MONTH, 1);
+	    }
+	    
+	    Map<String, List<AbsentDay>> absentDaysByCycle = new LinkedHashMap<>();
+	    
+	    for (Map.Entry<String, List<Date>> entry : datesByPayrollCycle.entrySet()) {
+	        String cycleKey = entry.getKey();
+	        List<Date> datesInCycle = entry.getValue();
+	        
+	        datesInCycle.sort((d1, d2) -> d1.compareTo(d2));
+	        
+	        List<AbsentDay> cycleAbsentDays = new ArrayList<>();
+	        
+	        for (Date date : datesInCycle) {
+	            String dateStr = dateFormat.format(date);
+	            String monthKey = monthYearFormat.format(date);
+	            
+	            UserMasterAttendanceMod attendanceRecord = attendanceMap.get(dateStr);
+	            boolean hasAttendance = attendanceRecord != null && attendanceRecord.getStatus() != null
+	                    && !attendanceRecord.getStatus().trim().isEmpty();
+	            
+	            if (hasAttendance) {
+	                String status = attendanceRecord.getStatus().trim();
+	                boolean isAbsentDay = "absent".equalsIgnoreCase(status) || status.toLowerCase().contains("absent");
+	                
+	                if (isAbsentDay) {
+	                    boolean isHoliday = holidayMap.containsKey(dateStr);
+	                    boolean isWeekOff = weekOffSet.contains(dateStr);
+	                    
+	                    if (!isHoliday && !isWeekOff) {
+	                        boolean wasWithdrawn = checkIfLeaveWasWithdrawn(attendanceHistoryMap.get(dateStr));
+	                        
+	                        cycleAbsentDays.add(new AbsentDay(
+	                            dateStr, 
+	                            date, 
+	                            monthKey, 
+	                            isHoliday, 
+	                            isWeekOff,
+	                            status,
+	                            wasWithdrawn
+	                        ));
+	                    }
+	                }
+	            }
+	        }
+	        
+	        absentDaysByCycle.put(cycleKey, cycleAbsentDays);
+	    }
+	    
+	    Map<String, Map<String, Object>> leaveDetailsByDate = new LinkedHashMap<>();
+	    List<String> sortedCycleKeys = new ArrayList<>(absentDaysByCycle.keySet());
+	    Collections.sort(sortedCycleKeys);
+	    
+	    double globalCarryForward = 0.0;
+	    
+	    for (String cycleKey : sortedCycleKeys) {
+	        List<AbsentDay> cycleAbsentDays = absentDaysByCycle.get(cycleKey);
+	        
+	        cycleAbsentDays.sort((a1, a2) -> a1.date.compareTo(a2.date));
+	        
+	        double cycleBaseCL = 1.5;
+	        double availableCL = cycleBaseCL + globalCarryForward;
+	        
+	        List<AbsentDay> leavesToProcess = new ArrayList<>();
+	        
+	        for (AbsentDay absent : cycleAbsentDays) {
+	            if (!absent.wasWithdrawn) {
+	                leavesToProcess.add(absent);
+	            }
+	        }
+	        
+	        double remainingCL = availableCL;
+	        int leaveCounter = 0;
+	        
+	        for (AbsentDay absent : leavesToProcess) {
+	            leaveCounter++;
+	            Map<String, Object> leaveDetail = new HashMap<>();
+	            leaveDetail.put("date", absent.dateStr);
+	            leaveDetail.put("originalStatus", absent.originalStatus);
+	            
+	            String displayStatus;
+	            String bgColor;
+	            String leaveType;
+	            double deduction;
+	            double balanceAfter;
+	            
+	            if (remainingCL >= 1.0) {
+	                displayStatus = "Absent (CL)";
+	                bgColor = "#22c997";
+	                leaveType = "CL";
+	                deduction = 1.0;
+	                balanceAfter = remainingCL - 1.0;
+	                remainingCL -= 1.0;
+	            } else if (remainingCL > 0) {
+	                displayStatus = "Absent (0.5 CL)";
+	                bgColor = "#ffa500";
+	                leaveType = "0.5 CL";
+	                deduction = remainingCL;
+	                balanceAfter = 0.0;
+	                remainingCL = 0.0;
+	            } else {
+	                displayStatus = "Absent (LOP)";
+	                bgColor = "#ff4c4c";
+	                leaveType = "LOP";
+	                deduction = 0.0;
+	                balanceAfter = 0.0;
+	            }
+	            
+	            leaveDetail.put("displayStatus", displayStatus);
+	            leaveDetail.put("backgroundColor", bgColor);
+	            leaveDetail.put("leaveType", leaveType);
+	            leaveDetail.put("deduction", deduction);
+	            leaveDetail.put("balanceAfter", balanceAfter);
+	            leaveDetail.put("cycleKey", cycleKey);
+	            leaveDetail.put("availableCLBefore", availableCL);
+	            leaveDetail.put("remainingCLAfterCycle", remainingCL);
+	            
+	            leaveDetailsByDate.put(absent.dateStr, leaveDetail);
+	        }
+	        
+	        globalCarryForward = remainingCL;
+	    }
+
+	    for (String cycleKey : sortedCycleKeys) {
+	        List<AbsentDay> cycleAbsentDays = absentDaysByCycle.get(cycleKey);
+	        
+	        for (AbsentDay absent : cycleAbsentDays) {
+	            if (absent.wasWithdrawn) {
+	                String withdrawnDate = absent.dateStr;
+	                
+	                AbsentDay nextLeave = null;
+	                for (AbsentDay ad : cycleAbsentDays) {
+	                    if (ad.date.after(absent.date) && !ad.wasWithdrawn) {
+	                        nextLeave = ad;
+	                        break;
+	                    }
+	                }
+	                
+	                if (nextLeave != null) {
+	                    Map<String, Object> nextLeaveDetail = leaveDetailsByDate.get(nextLeave.dateStr);
+	                    if (nextLeaveDetail != null) {
+	                        String currentType = (String) nextLeaveDetail.get("leaveType");
+	                        if ("LOP".equals(currentType)) {
+	                            nextLeaveDetail.put("displayStatus", "Absent (CL)");
+	                            nextLeaveDetail.put("backgroundColor", "#22c997");
+	                            nextLeaveDetail.put("leaveType", "CL");
+	                            nextLeaveDetail.put("deduction", 1.0);
+	                        }
+	                    }
+	                }
+	            }
+	        }
+	    }
+
 	    List<Map<String, Object>> events = new ArrayList<>();
 	    Calendar loopCal = (Calendar) startCal.clone();
-
-	    // Track all absents (including on holidays) in sequential order per payroll cycle
-	    Map<String, Integer> payrollCycleAbsentCount = new HashMap<>();
-	    Map<String, Double> payrollCycleLeaveUsed = new HashMap<>();
-
+	    
 	    while (!loopCal.after(endCal) && !loopCal.getTime().after(today.getTime())) {
 	        Date currentDate = loopCal.getTime();
 	        String dateStr = dateFormat.format(currentDate);
 	        String dayOfWeek = dayFormat.format(currentDate);
-	        String monthKey = monthYearFormat.format(currentDate);
 	        int currentMonth = loopCal.get(Calendar.MONTH) + 1;
 	        int currentYear = loopCal.get(Calendar.YEAR);
 	        int currentDay = loopCal.get(Calendar.DAY_OF_MONTH);
 
 	        Map<String, Object> event = new HashMap<>();
 	        Map<String, String> extendedProps = new HashMap<>();
+	        
 	        extendedProps.put("dayOfWeek", dayOfWeek);
 	        extendedProps.put("month", String.valueOf(currentMonth));
 	        extendedProps.put("year", String.valueOf(currentYear));
@@ -7466,18 +7624,14 @@ public class AppController {
 	                && !attendanceRecord.getStatus().trim().isEmpty();
 
 	        String status = hasAttendance ? attendanceRecord.getStatus().trim() : "";
-
 	        boolean isAbsentDay = "absent".equalsIgnoreCase(status) || status.toLowerCase().contains("absent");
 
-	        // Check if it's a holiday or week off
 	        boolean isHoliday = holidayMap.containsKey(dateStr);
 	        boolean isWeekOff = weekOffSet.contains(dateStr);
 	        
-	        // Check if it's a working day (not week off)
-	        boolean isWorkingDay = !isWeekOff;
-
+	        Map<String, Object> leaveDetail = leaveDetailsByDate.get(dateStr);
+	        
 	        if (isHoliday && hasAttendance && !isAbsentDay) {
-	            // Holiday with attendance (not absent)
 	            WsslCalendarMod holiday = holidayMap.get(dateStr);
 	            event.put("title", holiday.getEventName() + " - " + status);
 	            event.put("backgroundColor", getStatusColor(status));
@@ -7486,16 +7640,16 @@ public class AppController {
 	            extendedProps.put("type", "Holiday Attendance");
 	            extendedProps.put("isHoliday", "Yes");
 	            extendedProps.put("isWeekOff", "No");
+	            
 	        } else if (isWeekOff && hasAttendance && !isAbsentDay) {
-	            // Week off with attendance (not absent)
 	            event.put("title", "Week Off - " + status);
 	            event.put("backgroundColor", getStatusColor(status));
 	            extendedProps.put("status", status);
 	            extendedProps.put("type", "Week Off Attendance");
 	            extendedProps.put("isHoliday", "No");
 	            extendedProps.put("isWeekOff", "Yes");
+	            
 	        } else if (isHoliday && !hasAttendance) {
-	            // Pure holiday (no attendance record)
 	            WsslCalendarMod holiday = holidayMap.get(dateStr);
 	            event.put("title", holiday.getEventName());
 	            event.put("backgroundColor", "#ffc107");
@@ -7504,55 +7658,25 @@ public class AppController {
 	            extendedProps.put("type", "Holiday");
 	            extendedProps.put("isHoliday", "Yes");
 	            extendedProps.put("isWeekOff", "No");
+	            
 	        } else if (isWeekOff && !hasAttendance) {
-	            // Pure week off (no attendance record)
 	            event.put("title", "Week Off");
 	            event.put("backgroundColor", "#e0e0e0");
 	            extendedProps.put("status", "Week Off");
 	            extendedProps.put("type", "Week Off");
 	            extendedProps.put("isHoliday", "No");
 	            extendedProps.put("isWeekOff", "Yes");
-	        } else if (hasAttendance && isAbsentDay) {
-	            // Absent day (including holidays)
-	            String payrollCycleKey = getPayrollCycleKey(currentDate);
 	            
-	            // Initialize counters for this payroll cycle if not exists
-	            if (!payrollCycleAbsentCount.containsKey(payrollCycleKey)) {
-	                payrollCycleAbsentCount.put(payrollCycleKey, 0);
-	                payrollCycleLeaveUsed.put(payrollCycleKey, 0.0);
-	            }
+	        } else if (hasAttendance && isAbsentDay && leaveDetail != null) {
+	            String displayStatus = (String) leaveDetail.get("displayStatus");
+	            String bgColor = (String) leaveDetail.get("backgroundColor");
+	            String leaveType = (String) leaveDetail.get("leaveType");
+	            Double deduction = (Double) leaveDetail.get("deduction");
+	            Double balanceAfter = (Double) leaveDetail.get("balanceAfter");
+	            String cycleKey = (String) leaveDetail.get("cycleKey");
+	            Double availableCLBefore = (Double) leaveDetail.get("availableCLBefore");
+	            Double remainingCLAfterCycle = (Double) leaveDetail.get("remainingCLAfterCycle");
 	            
-	            // Increment absent count for this payroll cycle
-	            int absentCount = payrollCycleAbsentCount.get(payrollCycleKey) + 1;
-	            payrollCycleAbsentCount.put(payrollCycleKey, absentCount);
-	            
-	            // Calculate LOP based on absent count (1.5 days CL allowed per cycle)
-	            String displayStatus;
-	            String backgroundColor;
-	            double leaveUsed = payrollCycleLeaveUsed.get(payrollCycleKey);
-	            
-	            if (absentCount == 1) {
-	                // First absent: Full day counted against CL
-	                displayStatus = isHoliday ? "Absent (CL) on Holiday" : "Absent (CL)";
-	                backgroundColor = "#22c997"; // Green color for CL
-	                if (leaveUsed + 1.0 <= 1.5) {
-	                    payrollCycleLeaveUsed.put(payrollCycleKey, leaveUsed + 1.0);
-	                }
-	            } else if (absentCount == 2) {
-	                // Second absent: Half day LOP (0.5 CL + 0.5 LOP)
-	                displayStatus = isHoliday ? "Absent (0.5 LOP) on Holiday" : "Absent (0.5 LOP)";
-	                backgroundColor = "#ffa500"; // Orange color for 0.5 LOP
-	                if (leaveUsed + 0.5 <= 1.5) {
-	                    payrollCycleLeaveUsed.put(payrollCycleKey, leaveUsed + 0.5);
-	                }
-	            } else {
-	                // Third and subsequent absents: Full LOP
-	                displayStatus = isHoliday ? "Absent (LOP) on Holiday" : "Absent (LOP)";
-	                backgroundColor = "#ff4c4c"; // Red color for full LOP
-	                // No leave used for LOP days
-	            }
-	            
-	            // Build title
 	            String title;
 	            if (isHoliday) {
 	                WsslCalendarMod holiday = holidayMap.get(dateStr);
@@ -7563,22 +7687,34 @@ public class AppController {
 	            }
 	            
 	            event.put("title", title);
-	            event.put("backgroundColor", backgroundColor);
+	            event.put("backgroundColor", bgColor);
+	            
 	            extendedProps.put("status", displayStatus);
 	            extendedProps.put("originalStatus", status);
-	            extendedProps.put("absentCount", String.valueOf(absentCount));
-	            extendedProps.put("payrollCycle", payrollCycleKey);
-	            extendedProps.put("leaveUsed", String.format("%.1f", payrollCycleLeaveUsed.get(payrollCycleKey)));
-	            extendedProps.put("totalAbsents", String.valueOf(absentCount));
+	            extendedProps.put("leaveType", leaveType);
+	            extendedProps.put("deduction", String.format("%.1f", deduction));
+	            extendedProps.put("balanceAfterThisDay", String.format("%.1f", balanceAfter));
+	            extendedProps.put("availableCLBefore", String.format("%.1f", availableCLBefore));
+	            extendedProps.put("remainingCLAfterCycle", String.format("%.1f", remainingCLAfterCycle));
+	            extendedProps.put("payrollCycle", cycleKey);
 	            extendedProps.put("isHoliday", isHoliday ? "Yes" : "No");
 	            extendedProps.put("isWeekOff", isWeekOff ? "Yes" : "No");
-	            extendedProps.put("isWorkingDay", isWorkingDay ? "Yes" : "No");
-	            extendedProps.put("leaveType", absentCount == 1 ? "CL" : (absentCount == 2 ? "0.5 LOP" : "LOP"));
+	            
+	            boolean wasWithdrawn = checkIfLeaveWasWithdrawn(attendanceHistoryMap.get(dateStr));
+	            if (wasWithdrawn) {
+	                extendedProps.put("wasWithdrawn", "Yes");
+	                extendedProps.put("withdrawalMessage", "This leave was withdrawn and CL shifted to next leave");
+	            }
+	            
+	        } else if (hasAttendance && isAbsentDay) {
+	            event.put("title", "Absent");
+	            event.put("backgroundColor", "#ff4c4c");
+	            extendedProps.put("status", "Absent");
+	            extendedProps.put("originalStatus", status);
+	            extendedProps.put("isHoliday", isHoliday ? "Yes" : "No");
+	            extendedProps.put("isWeekOff", isWeekOff ? "Yes" : "No");
 	            
 	        } else if (hasAttendance) {
-	            // Other attendance statuses (present, early leave, etc.)
-	            String originalStatus = status;
-	            
 	            switch (status.toLowerCase()) {
 	                case "present":
 	                case "forgot":
@@ -7608,12 +7744,11 @@ public class AppController {
 	            }
 	            event.put("title", status);
 	            extendedProps.put("status", status);
-	            extendedProps.put("originalStatus", originalStatus);
-	            extendedProps.put("isHoliday", "No");
+	            extendedProps.put("originalStatus", status);
+	            extendedProps.put("isHoliday", isHoliday ? "Yes" : "No");
 	            extendedProps.put("isWeekOff", isWeekOff ? "Yes" : "No");
 	            
 	        } else {
-	            // No attendance record
 	            if (!currentDate.after(today.getTime())) {
 	                event.put("title", "Miss Punch");
 	                event.put("backgroundColor", "#ffff84");
@@ -7636,7 +7771,74 @@ public class AppController {
 	    return events;
 	}
 
+	class AbsentDay {
+	    String dateStr;
+	    Date date;
+	    String monthKey;
+	    boolean isHoliday;
+	    boolean isWeekOff;
+	    String originalStatus;
+	    boolean wasWithdrawn;
+	    
+	    AbsentDay(String dateStr, Date date, String monthKey, boolean isHoliday, 
+	              boolean isWeekOff, String originalStatus, boolean wasWithdrawn) {
+	        this.dateStr = dateStr;
+	        this.date = date;
+	        this.monthKey = monthKey;
+	        this.isHoliday = isHoliday;
+	        this.isWeekOff = isWeekOff;
+	        this.originalStatus = originalStatus;
+	        this.wasWithdrawn = wasWithdrawn;
+	    }
+	}
+
+	class CycleInfo {
+	    String cycleKey;
+	    double baseCL;
+	    double carryForwardIn;
+	    double carryForwardOut;
+	    List<AbsentDay> leaves;
+	    
+	    CycleInfo(String cycleKey, double baseCL) {
+	        this.cycleKey = cycleKey;
+	        this.baseCL = baseCL;
+	        this.carryForwardIn = 0.0;
+	        this.carryForwardOut = 0.0;
+	        this.leaves = new ArrayList<>();
+	    }
+	}
+
+	private boolean checkIfLeaveWasWithdrawn(List<UserMasterAttendanceMod> attendanceHistory) {
+	    if (attendanceHistory == null || attendanceHistory.isEmpty()) {
+	        return false;
+	    }
+	    
+	    UserMasterAttendanceMod latest = attendanceHistory.get(attendanceHistory.size() - 1);
+	    String latestStatus = latest.getStatus() != null ? latest.getStatus().trim().toLowerCase() : "";
+	    
+	    return !latestStatus.contains("absent");
+	}
+
 	private String getPayrollCycleKey(Date date) {
+	    Calendar cal = Calendar.getInstance();
+	    cal.setTime(date);
+	    int year = cal.get(Calendar.YEAR);
+	    int month = cal.get(Calendar.MONTH) + 1;
+	    int day = cal.get(Calendar.DAY_OF_MONTH);
+	    
+	    if (day >= 27) {
+	        return year + "-" + String.format("%02d", month) + "-27";
+	    } else {
+	        Calendar prevMonthCal = (Calendar) cal.clone();
+	        prevMonthCal.add(Calendar.MONTH, -1);
+	        int prevYear = prevMonthCal.get(Calendar.YEAR);
+	        int prevMonth = prevMonthCal.get(Calendar.MONTH) + 1;
+	        
+	        return prevYear + "-" + String.format("%02d", prevMonth) + "-27";
+	    }
+	}
+
+	private String getPayrollCycleKeyOld(Date date) {
 	    Calendar cal = Calendar.getInstance();
 	    cal.setTime(date);
 	    int year = cal.get(Calendar.YEAR);
@@ -7726,7 +7928,7 @@ public class AppController {
 	            return "#fd7e14";
 	        case "absent (cl)":
 	            return "#22c997";
-	        case "absent (0.5 lop)":
+	        case "absent (0.5 cl)":
 	            return "#ffa500";
 	        case "absent (lop)":
 	            return "#ff4c4c";
@@ -7796,9 +7998,6 @@ public class AppController {
 	    long diffInMillies = endDate.getTime() - startDate.getTime();
 	    int totalDays = (int) (diffInMillies / (1000 * 60 * 60 * 24)) + 1;
 	    List<Date> weekOffDays = getWeekOffsInRange(startDate, endDate);
-	    System.out.println("Total Days: " + totalDays);
-	    System.out.println("Week Offs: " + weekOffDays.size());
-	    System.out.println("Week Off Dates: " + weekOffDays);
 	    return totalDays - weekOffDays.size();
 	}
 
@@ -7807,7 +8006,6 @@ public class AppController {
 	    Calendar cal = Calendar.getInstance();
 	    cal.setTime(startDate);
 	    int saturdayCount = 0;
-	    List<Integer> saturdayTracker = new ArrayList<>();
 	    while (!cal.getTime().after(endDate)) {
 	        int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK);
 	        if (dayOfWeek == Calendar.SUNDAY) {
@@ -7850,7 +8048,6 @@ public class AppController {
 	        }
 	        cal.add(Calendar.DAY_OF_MONTH, 1);
 	    }
-	    System.out.println("Week off+++++++++++++++" + weekOffs);
 	    return weekOffs;
 	}
 	
