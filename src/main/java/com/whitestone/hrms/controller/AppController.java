@@ -6777,19 +6777,37 @@ public class AppController {
 	}
 
 	@GetMapping("/payslip/download/{employeeId}/{month}")
-	public ResponseEntity<ByteArrayResource> downloadPayslip(@PathVariable String employeeId,
-			@PathVariable String month) {
-		try {
-			ByteArrayResource payslipFile = payslipService.generatePayslip(employeeId, month);
+	public ResponseEntity<?> downloadPayslip(@PathVariable String employeeId,
+	        @PathVariable String month) {
+	    try {
+	        System.out.println("Downloading payslip for Employee: " + employeeId + ", Month: " + month);
+	        
+	        // Generate payslip using the service - this returns ByteArrayResource
+	        ByteArrayResource payslipFile = payslipService.generatePayslip(employeeId, month);
 
-			return ResponseEntity.ok()
-					.header(HttpHeaders.CONTENT_DISPOSITION,
-							"attachment; filename=payslip_" + employeeId + "_" + month + ".pdf")
-					.contentType(MediaType.APPLICATION_PDF).body(payslipFile); // No need for explicit casting
-		} catch (Exception e) {
-			e.printStackTrace();
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null); // Return an error response
-		}
+	        // Return PDF file for download
+	        return ResponseEntity.ok()
+	                .header(HttpHeaders.CONTENT_DISPOSITION,
+	                        "attachment; filename=payslip_" + employeeId + "_" + month.replace(" ", "_") + ".pdf")
+	                .contentType(MediaType.APPLICATION_PDF)
+	                .contentLength(payslipFile.contentLength())  // Get length from resource
+	                .body(payslipFile);
+	                
+	    } catch (RuntimeException e) {
+	        e.printStackTrace();
+	        Map<String, Object> errorResponse = new HashMap<>();
+	        errorResponse.put("status", "error");
+	        errorResponse.put("message", e.getMessage());
+	        errorResponse.put("timestamp", new Date().toString());
+	        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        Map<String, Object> errorResponse = new HashMap<>();
+	        errorResponse.put("status", "error");
+	        errorResponse.put("message", "Error generating payslip: " + e.getMessage());
+	        errorResponse.put("timestamp", new Date().toString());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+	    }
 	}
 
 	@Autowired
