@@ -58,6 +58,9 @@ public class PayslipGenerator {
     private static final Font HEADER_FONT = new Font(Font.FontFamily.HELVETICA, 10, Font.BOLD, BaseColor.BLACK);
     private static final Font BODY_FONT = new Font(Font.FontFamily.HELVETICA, 10);
     private static final Font FOOTER_FONT = new Font(Font.FontFamily.HELVETICA, 10, Font.ITALIC);
+    
+    // Constant for total days in month - always 31
+    private static final int TOTAL_DAYS_IN_MONTH = 31;
 
     public byte[] createPayslipPdf(String employeeId, String month) {
         
@@ -84,6 +87,7 @@ public class PayslipGenerator {
         System.out.println("Employee ID: " + employeeId);
         System.out.println("Requested Month: " + month);
         System.out.println("Formatted Month for DB: " + monthYearStr);
+        System.out.println("Total Days in Month: " + TOTAL_DAYS_IN_MONTH);
 
         // STEP 1: Check if employee exists in EmployeeSalaryTbl
         EmployeeSalaryTbl employeeSalary = employeeSalaryTblRepository.findByEmpid(employeeId);
@@ -92,8 +96,7 @@ public class PayslipGenerator {
         }
         System.out.println("✓ Employee found in EmployeeSalaryTbl");
 
-        // STEP 2: FIXED - Check if employee was employed DURING the requested month
-        // Now checks if employee joined BEFORE the END of the month
+        // STEP 2: Check if employee was employed DURING the requested month
         LocalDate doj = employeeSalary.getDateOfJoin();
         LocalDate lastDayOfMonth = LocalDate.of(year, requestedMonth, requestedMonth.length(YearMonth.of(year, requestedMonth).isLeapYear()));
         
@@ -101,12 +104,10 @@ public class PayslipGenerator {
         System.out.println("Last day of requested month: " + lastDayOfMonth);
         
         if (doj != null && doj.isAfter(lastDayOfMonth)) {
-            // Employee joined AFTER the month ended
             throw new RuntimeException("Employee was not employed during " + month + " (Joined on " + doj + ")");
         }
         
         if (doj != null && doj.isAfter(LocalDate.of(year, requestedMonth, 1))) {
-            // Employee joined DURING the month - calculate pro-rated salary
             System.out.println("⚠ Employee joined during this month on: " + doj);
             System.out.println("Will generate payslip from join date onwards");
         } else {
@@ -123,6 +124,7 @@ public class PayslipGenerator {
                 System.out.println("✓ Found payroll adjustment data");
                 System.out.println("  - LOP Days: " + payrollAdjustment.getLopDays());
                 System.out.println("  - Other Deductions: " + payrollAdjustment.getOtherDeductions());
+                System.out.println("  - Effective Working Days: " + payrollAdjustment.getEffectiveWorkingDays());
             } else {
                 System.out.println("ℹ No payroll adjustment found for this month");
             }
@@ -148,9 +150,12 @@ public class PayslipGenerator {
             document.add(subtitle);
             document.add(Chunk.NEWLINE);
 
+            // Calculate effective working days
+            int effectiveWorkingDays = calculateEffectiveWorkingDays(payrollAdjustment, year, requestedMonth);
+            
             // Employee Details Table
             addEmployeeDetails(document, employeeId, employeeSalary, employeeProfile, 
-                             payrollAdjustment, requestedMonth, year, doj);
+                             payrollAdjustment, requestedMonth, year, doj, effectiveWorkingDays);
 
             // Get earnings and deductions JSON from EmployeeSalaryTbl
             String earningsJson = employeeSalary.getEarnings();
@@ -174,10 +179,10 @@ public class PayslipGenerator {
             salaryDeductionTable.setWidthPercentage(100);
             salaryDeductionTable.setWidths(new int[] { 2, 2 });
 
-            // Process Earnings - FIXED: Calculate pro-rated earnings if employee joined mid-month
+            // Process Earnings
             totalEarnings = processEarnings(salaryDeductionTable, earnings, employeeSalary, doj, requestedMonth, year);
 
-            // Get LOP days and other deductions from Payroll Adjustment if available
+            // Get LOP days and other deductions from Payroll Adjustment
             Float lopDays = 0.0f;
             Double otherDeductions = 0.0;
             
@@ -187,11 +192,27 @@ public class PayslipGenerator {
                 System.out.println("✓ Using payroll adjustment data - LOP: " + lopDays + " days");
             }
             
-            Double lopDeductionAmount = calculateLopDeductionAmount(lopDays, totalEarnings, year, requestedMonth);
-
-            // Process Deductions
+            // Process Deductions FIRST (without LOP) to get base deductions
             totalDeductions = processDeductions(salaryDeductionTable, deductions, payrollDeductions, 
-                                               lopDeductionAmount, otherDeductions);
+                                               0.0, otherDeductions);
+            
+            // Calculate LOP deduction amount based on Effective Working Days
+            Double lopDeductionAmount = calculateLopDeductionAmount(lopDays, totalEarnings, totalDeductions, effectiveWorkingDays);
+            
+            // If there's LOP, reprocess deductions with LOP amount
+            if (lopDeductionAmount > 0) {
+                // Reset the table by creating a new one
+                salaryDeductionTable = new PdfPTable(2);
+                salaryDeductionTable.setWidthPercentage(100);
+                salaryDeductionTable.setWidths(new int[] { 2, 2 });
+                
+                // Reprocess earnings (they remain the same)
+                totalEarnings = processEarnings(salaryDeductionTable, earnings, employeeSalary, doj, requestedMonth, year);
+                
+                // Reprocess deductions WITH LOP
+                totalDeductions = processDeductions(salaryDeductionTable, deductions, payrollDeductions, 
+                                                   lopDeductionAmount, otherDeductions);
+            }
 
             document.add(salaryDeductionTable);
             document.add(Chunk.NEWLINE);
@@ -220,7 +241,25 @@ public class PayslipGenerator {
     }
 
     /**
-     * FIXED: Process earnings with pro-ration if employee joined mid-month
+     * Calculate effective working days from payroll adjustment or calculate them
+     * FIXED: Correctly handles double to int conversion
+     */
+    private int calculateEffectiveWorkingDays(PayrollAdjustment payrollAdjustment, int year, Month month) {
+        if (payrollAdjustment != null) {
+            // Get the value as double (since getEffectiveWorkingDays() returns double)
+            Double effectiveDays = payrollAdjustment.getEffectiveWorkingDays();
+            if (effectiveDays != null) {
+                return effectiveDays.intValue();
+            }
+        }
+        
+        // Calculate default effective working days
+        int[] daysData = calculateDaysForPayrollCycle(year, month);
+        return daysData[1];
+    }
+
+    /**
+     * Process earnings with pro-ration if employee joined mid-month
      */
     private double processEarnings(PdfPTable salaryDeductionTable, 
                                    List<Map<String, Object>> earnings,
@@ -240,11 +279,10 @@ public class PayslipGenerator {
         LocalDate lastDayOfMonth = LocalDate.of(year, requestedMonth, requestedMonth.length(YearMonth.of(year, requestedMonth).isLeapYear()));
         
         if (doj != null && doj.isAfter(firstDayOfMonth) && doj.isBefore(lastDayOfMonth)) {
-            // Employee joined after month started - calculate days from join date
             int totalDaysInMonth = lastDayOfMonth.getDayOfMonth();
             int daysFromJoin = lastDayOfMonth.getDayOfMonth() - doj.getDayOfMonth() + 1;
-            proRationFactor = (double) daysFromJoin / totalDaysInMonth;
-            System.out.println("Pro-ration factor: " + proRationFactor + " (" + daysFromJoin + "/" + totalDaysInMonth + " days)");
+            proRationFactor = (double) daysFromJoin / TOTAL_DAYS_IN_MONTH;
+            System.out.println("Pro-ration factor: " + proRationFactor + " (" + daysFromJoin + "/" + TOTAL_DAYS_IN_MONTH + " days)");
         }
         
         String[] earningFields = {
@@ -256,49 +294,91 @@ public class PayslipGenerator {
             "Flat Allowance"
         };
 
+        // Enhanced field mapping with misspellings
         java.util.Map<String, String> fieldMapping = new java.util.HashMap<>();
+        
         fieldMapping.put("monthly basic salary", "Monthly Basic Salary");
         fieldMapping.put("basic", "Monthly Basic Salary");
         fieldMapping.put("basic salary", "Monthly Basic Salary");
+        fieldMapping.put("basicsalary", "Monthly Basic Salary");
+        
         fieldMapping.put("house rent allowance", "House Rent Allowance");
         fieldMapping.put("hra", "House Rent Allowance");
         fieldMapping.put("house rent", "House Rent Allowance");
+        fieldMapping.put("houserentallowance", "House Rent Allowance");
+        
         fieldMapping.put("conveyance allowance", "Conveyance Allowance");
         fieldMapping.put("conveyance", "Conveyance Allowance");
+        fieldMapping.put("conv allowance", "Conveyance Allowance");
+        fieldMapping.put("conv", "Conveyance Allowance");
+        fieldMapping.put("conveyanceallowance", "Conveyance Allowance");
+        fieldMapping.put("convinence allowance", "Conveyance Allowance");
+        fieldMapping.put("convinence", "Conveyance Allowance");
+        fieldMapping.put("convince allowance", "Conveyance Allowance");
+        fieldMapping.put("convince", "Conveyance Allowance");
+        
         fieldMapping.put("special allowance", "Special Allowance");
         fieldMapping.put("special", "Special Allowance");
+        fieldMapping.put("specialallowance", "Special Allowance");
+        
         fieldMapping.put("project allowance", "Project Allowance");
         fieldMapping.put("project", "Project Allowance");
+        
         fieldMapping.put("flat allowance", "Flat Allowance");
         fieldMapping.put("flat", "Flat Allowance");
 
+        // Build earnings map from JSON
         java.util.Map<String, Double> earningsMap = new java.util.HashMap<>();
+        System.out.println("=== Processing Earnings from JSON ===");
+        
         for (Map<String, Object> earning : earnings) {
             String name = (String) earning.get("name");
             Double amount = parseAmount(earning.get("monthlyAmount"));
-            if (name != null) {
-                earningsMap.put(name.toLowerCase().trim(), amount);
+            
+            if (name != null && amount > 0) {
+                String normalizedName = name.toLowerCase().trim();
+                earningsMap.put(normalizedName, amount);
+                System.out.println("Found earning: '" + name + "' = ₹" + amount);
+                
+                String noSpaceName = normalizedName.replaceAll("\\s+", "");
+                if (!noSpaceName.equals(normalizedName)) {
+                    earningsMap.put(noSpaceName, amount);
+                }
             }
         }
 
         for (String field : earningFields) {
             Double amount = 0.0;
+            String fieldLower = field.toLowerCase();
+            String fieldNoSpace = fieldLower.replaceAll("\\s+", "");
             
-            for (java.util.Map.Entry<String, String> mapping : fieldMapping.entrySet()) {
-                if (mapping.getValue().equals(field)) {
-                    String searchKey = mapping.getKey();
-                    if (earningsMap.containsKey(searchKey)) {
-                        amount = earningsMap.get(searchKey);
-                        break;
+            if (earningsMap.containsKey(fieldLower)) {
+                amount = earningsMap.get(fieldLower);
+                System.out.println("Direct match for '" + field + "' = ₹" + amount);
+            } 
+            else if (earningsMap.containsKey(fieldNoSpace)) {
+                amount = earningsMap.get(fieldNoSpace);
+                System.out.println("Match without spaces for '" + field + "' = ₹" + amount);
+            }
+            else {
+                for (java.util.Map.Entry<String, String> mapping : fieldMapping.entrySet()) {
+                    if (mapping.getValue().equals(field)) {
+                        String searchKey = mapping.getKey();
+                        if (earningsMap.containsKey(searchKey)) {
+                            amount = earningsMap.get(searchKey);
+                            System.out.println("Mapped '" + searchKey + "' to " + field + " = ₹" + amount);
+                            break;
+                        }
+                        String searchKeyNoSpace = searchKey.replaceAll("\\s+", "");
+                        if (earningsMap.containsKey(searchKeyNoSpace)) {
+                            amount = earningsMap.get(searchKeyNoSpace);
+                            System.out.println("Mapped (no spaces) '" + searchKey + "' to " + field + " = ₹" + amount);
+                            break;
+                        }
                     }
                 }
             }
             
-            if (amount == 0.0) {
-                amount = earningsMap.getOrDefault(field.toLowerCase(), 0.0);
-            }
-            
-            // Apply pro-ration if needed
             double finalAmount = amount;
             if (proRationFactor < 1.0) {
                 finalAmount = amount * proRationFactor;
@@ -308,8 +388,12 @@ public class PayslipGenerator {
             if (finalAmount > 0) {
                 addTableRow(salaryTable, field, String.format("%.2f", finalAmount));
                 totalEarnings += finalAmount;
+                System.out.println("✓ Added to table: " + field + " = ₹" + finalAmount);
             }
         }
+
+        System.out.println("=== Total Earnings Calculated: ₹" + totalEarnings + " ===");
+        System.out.println("======================================");
 
         PdfPCell salaryCell = new PdfPCell(salaryTable);
         salaryCell.setBorder(Rectangle.BOX);
@@ -319,20 +403,30 @@ public class PayslipGenerator {
     }
 
     /**
-     * Calculate LOP deduction amount
+     * Calculate LOP deduction amount using Effective Working Days
      */
-    private Double calculateLopDeductionAmount(Float lopDays, double totalEarnings, int year, Month month) {
-        if (lopDays == null || lopDays <= 0) {
+    private Double calculateLopDeductionAmount(Float lopDays, double totalEarnings, double totalDeductions, int effectiveWorkingDays) {
+        if (lopDays == null || lopDays <= 0 || effectiveWorkingDays <= 0) {
             return 0.0;
         }
         
-        int daysInMonth = YearMonth.of(year, month).lengthOfMonth();
-        double perDaySalary = totalEarnings / daysInMonth;
+        // Calculate Net Pay (Total Earnings - Total Deductions)
+        double netPay = totalEarnings - totalDeductions;
+        
+        // Calculate per-day salary based on Net Pay and Effective Working Days
+        double perDaySalary = netPay / effectiveWorkingDays;
+        
+        // Multiply by number of LOP days
         double lopDeductionAmount = perDaySalary * lopDays;
         
-        System.out.println("✓ LOP Calculation: " + lopDays + " days × " + 
-                         String.format("%.2f", perDaySalary) + " = " + 
-                         String.format("%.2f", lopDeductionAmount));
+        System.out.println("✓ LOP Calculation:");
+        System.out.println("  - Gross Earnings: ₹" + String.format("%.2f", totalEarnings));
+        System.out.println("  - Total Deductions (before LOP): ₹" + String.format("%.2f", totalDeductions));
+        System.out.println("  - Net Pay (before LOP): ₹" + String.format("%.2f", netPay));
+        System.out.println("  - Effective Working Days: " + effectiveWorkingDays);
+        System.out.println("  - Per Day (based on Net Pay): ₹" + String.format("%.2f", perDaySalary));
+        System.out.println("  - LOP Days: " + lopDays);
+        System.out.println("  - LOP Deduction Amount: ₹" + String.format("%.2f", lopDeductionAmount));
         
         return lopDeductionAmount;
     }
@@ -384,40 +478,34 @@ public class PayslipGenerator {
                                    EmployeeProfile employeeProfile, 
                                    PayrollAdjustment payrollAdjustment,
                                    Month requestedMonth, int year,
-                                   LocalDate doj) throws Exception {
+                                   LocalDate doj, int effectiveWorkingDays) throws Exception {
         
         PdfPTable detailsTable = new PdfPTable(4);
         detailsTable.setWidthPercentage(100);
         detailsTable.setSpacingBefore(10f);
 
-        // Get LOP days from payroll adjustment if available
         Float lopDays = (payrollAdjustment != null) ? payrollAdjustment.getLopDays() : 0.0f;
 
-        // Format Date of Joining
         String dateOfJoining = "";
         if (doj != null) {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
             dateOfJoining = doj.format(formatter);
         }
 
-        // Get PAN and UAN from EmployeeProfile
         String panNumber = employeeProfile != null && employeeProfile.getPannumber() != null ? 
                           employeeProfile.getPannumber() : "";
         String uanNumber = employeeProfile != null && employeeProfile.getUannumber() != null ? 
                           employeeProfile.getUannumber() : "";
 
-        // Use employee name from current record
         String employeeName = employeeSalary.getFirstname() + " " + (employeeSalary.getLastname() != null ? employeeSalary.getLastname() : "");
         
         addDetailsRow(detailsTable, "Employee ID", employeeId, "Employee Name", employeeName);
         
-        // Bank details
         String bankName = employeeSalary.getBankName() != null ? employeeSalary.getBankName() : "";
         String accountNumber = employeeSalary.getAccountNumber() != null ? employeeSalary.getAccountNumber() : "";
         
         addDetailsRow(detailsTable, "Bank Name", bankName, "Bank Account No", accountNumber);
         
-        // Designation and Location
         String department = employeeSalary.getDepartment() != null ? employeeSalary.getDepartment() : "";
         String locationType = employeeSalary.getLocationType() != null ? employeeSalary.getLocationType() : "";
         
@@ -425,12 +513,9 @@ public class PayslipGenerator {
         addDetailsRow(detailsTable, "Date of Joining", dateOfJoining, "PAN", panNumber);
         addDetailsRow(detailsTable, "PF Number", "", "UAN", uanNumber);
         
-        // Calculate days for the requested month
-        int[] daysData = calculateDaysForMonth(YearMonth.of(year, requestedMonth));
-        addDetailsRow(detailsTable, "Days in Month", String.valueOf(daysData[0]), "Effective Working Days",
-                String.valueOf(daysData[1]));
+        addDetailsRow(detailsTable, "Days in Month", String.valueOf(TOTAL_DAYS_IN_MONTH), "Effective Working Days",
+                String.valueOf(effectiveWorkingDays));
         
-        // Display LOP days
         String lopDisplay = String.format("%.1f", lopDays);
         addDetailsRow(detailsTable, "LOP", lopDisplay, "", "");
 
@@ -443,6 +528,42 @@ public class PayslipGenerator {
 
         document.add(outerDetailsTable);
         document.add(Chunk.NEWLINE);
+    }
+
+    /**
+     * Calculate effective working days for the payroll cycle
+     */
+    private int[] calculateDaysForPayrollCycle(int year, Month month) {
+        LocalDate startDate = LocalDate.of(year, month, 1);
+        LocalDate endDate = LocalDate.of(year, month, 26);
+        
+        int totalDays = TOTAL_DAYS_IN_MONTH;
+        int workingDays = 0;
+        int saturdayCount = 0;
+
+        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+            DayOfWeek day = date.getDayOfWeek();
+
+            if (day == DayOfWeek.SUNDAY) {
+                continue;
+            }
+
+            if (day == DayOfWeek.SATURDAY) {
+                saturdayCount++;
+                if (saturdayCount == 2 || saturdayCount == 4) {
+                    continue;
+                }
+            }
+
+            workingDays++;
+        }
+        
+        int effectiveWorkingDays = workingDays + 5; // Adding days from previous month
+        
+        System.out.println("Payroll cycle days calculation: Total=" + totalDays + 
+                         ", Effective Working Days=" + effectiveWorkingDays);
+
+        return new int[] { totalDays, effectiveWorkingDays };
     }
 
     /**
@@ -462,41 +583,45 @@ public class PayslipGenerator {
 
         java.util.Map<String, Double> deductionsMap = new java.util.HashMap<>();
         
-        // Add from regular deductions
+        System.out.println("=== Processing Deductions ===");
+        
         for (Map<String, Object> deduction : deductions) {
             String name = (String) deduction.get("name");
             Double amount = parseAmount(deduction.get("monthlyAmount"));
-            if (name != null) {
-                deductionsMap.put(name.toLowerCase().trim(), amount);
+            if (name != null && amount > 0) {
+                String key = name.toLowerCase().trim();
+                deductionsMap.put(key, amount);
+                System.out.println("Regular Deduction: '" + name + "' = ₹" + amount);
             }
         }
 
-        // Add from payroll_deductions
         for (Map<String, Object> deduction : payrollDeductions) {
             String name = (String) deduction.get("name");
             Double amount = parseAmount(deduction.get("monthlyAmount"));
-            if (name != null) {
-                deductionsMap.put(name.toLowerCase().trim(), amount);
+            if (name != null && amount > 0) {
+                String key = name.toLowerCase().trim();
+                deductionsMap.put(key, amount);
+                System.out.println("Payroll Deduction: '" + name + "' = ₹" + amount);
             }
         }
 
         java.util.Map<String, String> deductionFieldMapping = new java.util.HashMap<>();
         deductionFieldMapping.put("pf", "PF");
         deductionFieldMapping.put("provident fund", "PF");
+        deductionFieldMapping.put("providentfund", "PF");
         deductionFieldMapping.put("prof tax", "Prof Tax");
         deductionFieldMapping.put("professional tax", "Prof Tax");
         deductionFieldMapping.put("pt", "Prof Tax");
+        deductionFieldMapping.put("tax", "Prof Tax");
         deductionFieldMapping.put("mis", "Miscellaneous deduction");
         deductionFieldMapping.put("misc", "Miscellaneous deduction");
+        deductionFieldMapping.put("miscellaneous", "Miscellaneous deduction");
         deductionFieldMapping.put("lop deduction", "Lop Deduction");
         deductionFieldMapping.put("lop", "Lop Deduction");
         deductionFieldMapping.put("loss of pay", "Lop Deduction");
-        deductionFieldMapping.put("advance", "Advance");
-        deductionFieldMapping.put("tds", "TDS Deduction");
 
         String[] requiredDeductions = {
-            "PF", "Prof Tax", "Miscellaneous deduction", 
-            "Lop Deduction", "Advance", "TDS Deduction"
+            "PF", "Prof Tax", "Miscellaneous deduction", "Lop Deduction"
         };
 
         java.util.Map<String, Double> finalDeductionMap = new java.util.HashMap<>();
@@ -509,37 +634,55 @@ public class PayslipGenerator {
                     String searchKey = mapping.getKey();
                     if (deductionsMap.containsKey(searchKey)) {
                         amount = deductionsMap.get(searchKey);
+                        System.out.println("Found: '" + searchKey + "' → " + fieldName + " = ₹" + amount);
                         break;
                     }
                 }
             }
             
-            if (amount == 0.0) {
-                amount = deductionsMap.getOrDefault(fieldName.toLowerCase(), 0.0);
-            }
-            
             finalDeductionMap.put(fieldName, amount);
         }
 
-        // Use LOP Deduction if available
-        if (lopDeductionAmount > 0) {
-            finalDeductionMap.put("Lop Deduction", lopDeductionAmount);
+        if (lopDeductionAmount != null && lopDeductionAmount > 0) {
+            Double existingLop = finalDeductionMap.getOrDefault("Lop Deduction", 0.0);
+            if (existingLop == 0) {
+                finalDeductionMap.put("Lop Deduction", lopDeductionAmount);
+                System.out.println("Added LOP Deduction: ₹" + lopDeductionAmount);
+            }
         }
 
-        // Add other deductions from payroll adjustment
         if (otherDeductionsFromPA != null && otherDeductionsFromPA > 0) {
-            Double currentMisc = finalDeductionMap.getOrDefault("Miscellaneous deduction", 0.0);
-            finalDeductionMap.put("Miscellaneous deduction", currentMisc + otherDeductionsFromPA);
+            boolean alreadyIncluded = false;
+            for (Map<String, Object> deduction : payrollDeductions) {
+                String name = (String) deduction.get("name");
+                Double amount = parseAmount(deduction.get("monthlyAmount"));
+                if (name != null && amount > 0 && Math.abs(amount - otherDeductionsFromPA) < 0.01) {
+                    alreadyIncluded = true;
+                    System.out.println("Other deductions ₹" + otherDeductionsFromPA + 
+                                     " already included as '" + name + "'");
+                    break;
+                }
+            }
+            
+            if (!alreadyIncluded) {
+                Double currentMisc = finalDeductionMap.getOrDefault("Miscellaneous deduction", 0.0);
+                finalDeductionMap.put("Miscellaneous deduction", currentMisc + otherDeductionsFromPA);
+                System.out.println("Added one-time Other Deduction: ₹" + otherDeductionsFromPA);
+            }
         }
 
-        // Add rows to table
+        System.out.println("=== Final Deductions ===");
         for (String fieldName : requiredDeductions) {
             Double amount = finalDeductionMap.getOrDefault(fieldName, 0.0);
             if (amount > 0) {
                 addTableRow(deductionTable, fieldName, String.format("%.2f", amount));
                 totalDeductions += amount;
+                System.out.println("Added: " + fieldName + " = ₹" + amount);
             }
         }
+        
+        System.out.println("Total Deductions: ₹" + totalDeductions);
+        System.out.println("========================");
 
         PdfPCell deductionCell = new PdfPCell(deductionTable);
         deductionCell.setBorder(Rectangle.BOX);
@@ -645,7 +788,7 @@ public class PayslipGenerator {
     }
 
     /**
-     * Calculate days for a specific month
+     * Calculate days for a specific month - KEPT FOR BACKWARD COMPATIBILITY
      */
     private int[] calculateDaysForMonth(YearMonth yearMonth) {
         LocalDate startDate = yearMonth.atDay(1);
