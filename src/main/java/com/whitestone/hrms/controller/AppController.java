@@ -3819,7 +3819,7 @@ public class AppController {
 	             emailBody.append("Whitestone Software Solution Pvt Ltd.\n");
 	             
 	             
-	              emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, emailBody.toString());
+//	              emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, emailBody.toString());
 	             response.put("emailStatus", "Email sent to manager: " + managerEmail);
 	         } else {
 	             response.put("emailStatus", "Manager email not found");
@@ -6261,8 +6261,7 @@ public class AppController {
 	        List<PayrollAdjustment> allAdjustments = payrollAdjustmentRepository.findByMonth(currentMonth.toString());
 	 
 	        if (allAdjustments.isEmpty()) {
-	            response.put("status", "Payroll blocked: Adjustments not generated yet. Please run /generate first.");
-	            response.put("error", "Payroll blocked: Adjustments not generated yet. Please run /generate first. " + currentMonth);
+	            response.put("status", "Payroll blocked: Adjustments not generated yet");
 	            return ResponseEntity.badRequest().body(response);
 	        }
 	 
@@ -6274,7 +6273,6 @@ public class AppController {
 	                    .count();
 	 
 	            response.put("status", "Payroll blocked: Manager approval pending");
-	            response.put("error", pendingCount + " employee(s)/trainee(s) not approved yet. All must be APPROVED before running payroll.");
 	            response.put("pending_count", pendingCount);
 	            return ResponseEntity.status(400).body(response);
 	        }
@@ -6291,56 +6289,60 @@ public class AppController {
 	            payrollRepository.deleteByMonth(previousMonth.toString());
 	        }
 	 
-	        // STEP 2: Generate payroll using APPROVED adjustment values
-	        LocalDate periodStart = LocalDate.of(previousMonth.getYear(), previousMonth.getMonth(), 27);
-	        LocalDate periodEnd = LocalDate.of(currentMonth.getYear(), currentMonth.getMonth(), 26);
-	 
+	        // STEP 2: Calculate working days
+	        LocalDate periodStart = LocalDate.of(currentMonth.getYear(), currentMonth.getMonth(), 1);
+	        LocalDate periodEnd = currentMonth.atEndOfMonth();
+	        
+	        int totalWorkingDays = calculateWorkingDays(periodStart, periodEnd);
+	        
 	        List<WsslCalendarMod> holidays = wsslCalendarModRepository
 	                .findByEventDateBetween(java.sql.Date.valueOf(periodStart), java.sql.Date.valueOf(periodEnd));
-	        List<Date> weekOffDates = getWeekOffsInRange(java.sql.Date.valueOf(periodStart),
-	                java.sql.Date.valueOf(periodEnd));
+	        
+	        totalWorkingDays = totalWorkingDays - holidays.size();
+	        
+	        System.out.println("========== PAYROLL PROCESSING ==========");
+	        System.out.println("Total Working Days: " + totalWorkingDays);
 	 
-	        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-	        Set<String> holidaySet = holidays.stream().map(h -> sdf.format(h.getEventDate())).collect(Collectors.toSet());
-	        Set<String> weekOffSet = weekOffDates.stream().map(d -> sdf.format(d)).collect(Collectors.toSet());
-	 
-	        // Fetch all employee IDs from usermaintenance for reference
+	        // Fetch all employee IDs
 	        Set<String> employeeIdSet = usermaintenanceRepository.findAll()
 	                .stream()
 	                .map(usermaintenance::getEmpid)
 	                .collect(Collectors.toSet());
 	        
-	        System.out.println("Total employees in usermaintenance: " + employeeIdSet.size());
+	        List<Map<String, Object>> employeeCalculations = new ArrayList<>();
 	 
 	        for (PayrollAdjustment adj : allAdjustments) {
 	            String empId = adj.getEmpId();
-	            System.out.println("\nProcessing ID: " + empId);
+	            System.out.println("\n>>> Processing ID: " + empId);
 	            
-	            // Determine if this is an employee or trainee
 	            boolean isEmployee = employeeIdSet.contains(empId);
 	            
-	            // Get user details based on type
 	            String employeeName = "";
 	            String emailId = "";
 	            String phoneNumber = "";
 	            String accountNumber = "";
 	            String ifscCode = "";
 	            String bankName = "";
+	            double netSalary = 0;
+	            double basicSalary = 0;
+	            
+	            Map<String, Object> empCalcDetails = new HashMap<>();
+	            empCalcDetails.put("empId", empId);
 	            
 	            if (isEmployee) {
-	                // Fetch from usermaintenance for employees
+	                // EMPLOYEE PROCESSING
 	                usermaintenance user = usermaintenanceRepository.findByEmpid(empId);
 	                if (user == null) {
-	                    System.out.println("Employee not found: " + empId);
+	                    System.out.println("⚠️ Employee not found: " + empId);
 	                    continue;
 	                }
+	                
 	                employeeName = (user.getFirstname() + " " + 
 	                              (user.getLastname() != null ? user.getLastname() : "")).trim();
 	                
-	                // Get salary details
 	                EmployeeSalaryTbl empSalary = employeeSalaryTblRepository.findByEmpid(empId);
 	                if (empSalary == null) {
-	                    System.out.println("Salary not found for employee: " + empId);
+	                    System.out.println("⚠️ Salary not found for employee: " + empId);
 	                    continue;
 	                }
 	                
@@ -6350,27 +6352,38 @@ public class AppController {
 	                ifscCode = empSalary.getIfscCode();
 	                bankName = empSalary.getBankName();
 	                
-	                // Process payroll for this employee
-	                processPayrollForUser(empId, employeeName, adj, empSalary, 
+	                // Get BASIC salary (this is the original salary before deductions)
+	                basicSalary = extractBasicSalary(empSalary.getEarnings(), objectMapper);
+	                
+	                // Calculate net salary (basic - deductions)
+	                netSalary = calculateNetSalary(empSalary, basicSalary, objectMapper);
+	                
+	                // Process payroll with YOUR LOP method (NOW INCLUDING PROFESSIONAL TAX)
+	                Payroll payroll = processPayrollWithYourLOPMethod(empId, employeeName, adj, empSalary, 
 	                                    emailId, phoneNumber, accountNumber, 
 	                                    ifscCode, bankName, currentMonth, 
-	                                    lastDayOfMonth, objectMapper, payrollList);
+	                                    lastDayOfMonth, totalWorkingDays,
+	                                    netSalary, basicSalary, objectMapper, empCalcDetails);
+	                
+	                if (payroll != null) {
+	                    payrollList.add(payroll);
+	                    employeeCalculations.add(empCalcDetails);
+	                }
 	                
 	            } else {
-	                // Treat as trainee - fetch from trainee master using trng_id
+	                // TRAINEE PROCESSING
 	                TraineeMaster trainee = traineemasterRepository.findByTrngid(empId);
 	                if (trainee == null) {
-	                    System.out.println("Trainee not found with trng_id: " + empId);
+	                    System.out.println("⚠️ Trainee not found: " + empId);
 	                    continue;
 	                }
 	                
 	                employeeName = (trainee.getFirstname() + " " + 
 	                              (trainee.getLastname() != null ? trainee.getLastname() : "")).trim();
 	                
-	                // Get salary details for trainee (same table)
 	                EmployeeSalaryTbl empSalary = employeeSalaryTblRepository.findByEmpid(empId);
 	                if (empSalary == null) {
-	                    System.out.println("Salary not found for trainee: " + empId);
+	                    System.out.println("⚠️ Salary not found for trainee: " + empId);
 	                    continue;
 	                }
 	                
@@ -6380,44 +6393,34 @@ public class AppController {
 	                ifscCode = empSalary.getIfscCode();
 	                bankName = empSalary.getBankName();
 	                
-	                System.out.println("Processing trainee: " + employeeName + " with trng_id: " + empId);
+	                basicSalary = extractBasicSalary(empSalary.getEarnings(), objectMapper);
+	                netSalary = calculateNetSalary(empSalary, basicSalary, objectMapper);
 	                
-	                // Process payroll for this trainee
-	                processPayrollForUser(empId, employeeName, adj, empSalary,
+	                Payroll payroll = processPayrollWithYourLOPMethod(empId, employeeName, adj, empSalary,
 	                                    emailId, phoneNumber, accountNumber,
 	                                    ifscCode, bankName, currentMonth,
-	                                    lastDayOfMonth, objectMapper, payrollList);
+	                                    lastDayOfMonth, totalWorkingDays,
+	                                    netSalary, basicSalary, objectMapper, empCalcDetails);
+	                
+	                if (payroll != null) {
+	                    payrollList.add(payroll);
+	                    employeeCalculations.add(empCalcDetails);
+	                }
 	            }
 	        }
 	 
-	        // STEP 3: SAVE ALL PAYROLL RECORDS
 	        if (!payrollList.isEmpty()) {
 	            payrollRepository.saveAllAndFlush(payrollList);
 	            
-	            // Separate counts for response
-	            long employeeCount = payrollList.stream()
-	                    .filter(p -> employeeIdSet.contains(p.getEmpid()))
-	                    .count();
-	            long traineeCount = payrollList.size() - employeeCount;
-	            
-	            response.put("status", "Payroll processed successfully for " + currentMonth);
+	            response.put("status", "Payroll processed successfully");
 	            response.put("processed_count", payrollList.size());
-	            response.put("employee_count", employeeCount);
-	            response.put("trainee_count", traineeCount);
-	            response.put("message", "All " + payrollList.size() + " users processed using manager-approved values");
-	            
-	            System.out.println("\n=== PAYROLL SUMMARY ===");
-	            System.out.println("Total processed: " + payrollList.size());
-	            System.out.println("Employees: " + employeeCount);
-	            System.out.println("Trainees: " + traineeCount);
-	            
-	        } else {
-	            response.put("status", "No payroll records processed");
+	            response.put("message", "LOP calculated including PF and Professional Tax");
+	            response.put("calculation_details", employeeCalculations);
 	        }
 	 
 	    } catch (Exception e) {
 	        e.printStackTrace();
-	        response.put("error", "Payroll processing failed: " + e.getMessage());
+	        response.put("error", "Payroll failed: " + e.getMessage());
 	        return ResponseEntity.status(500).body(response);
 	    }
 	 
@@ -6425,9 +6428,9 @@ public class AppController {
 	}
 
 	/**
-	 * Helper method to process payroll for a single user (employee or trainee)
+	 * UPDATED LOP METHOD - Now including Professional Tax
 	 */
-	private void processPayrollForUser(String empId, 
+	private Payroll processPayrollWithYourLOPMethod(String empId, 
 	                                   String employeeName,
 	                                   PayrollAdjustment adj,
 	                                   EmployeeSalaryTbl empSalary,
@@ -6438,32 +6441,33 @@ public class AppController {
 	                                   String bankName,
 	                                   YearMonth currentMonth,
 	                                   LocalDate lastDayOfMonth,
+	                                   int totalWorkingDays,
+	                                   double netSalary,
+	                                   double basicSalary,
 	                                   ObjectMapper objectMapper,
-	                                   List<Payroll> payrollList) throws Exception {
+	                                   Map<String, Object> empCalcDetails) throws Exception {
 	    
-	    // Use manager-approved values from adjustment
-	    long allowanceDays = adj.getAllowanceDays();
+	    System.out.println("\n========== YOUR LOP METHOD (WITH PROFESSIONAL TAX) ==========");
+	    System.out.println("Employee: " + employeeName);
+	    
+	    // Get values from adjustment
 	    float lopDays = adj.getLopDays();
 	    double otherDeductions = adj.getOtherDeductions();
+	    long allowanceDays = adj.getAllowanceDays();
 	    double effectiveWorkingDays = adj.getEffectiveWorkingDays();
-	 
-	    // Parse Earnings & Deductions
+	    
+	    int presentDays = totalWorkingDays - (int)lopDays;
+	    
+	    // Parse JSON to get components
 	    String earningsJson = cleanJson(empSalary.getEarnings());
 	    String deductionsJson = cleanJson(empSalary.getDeductions());
-	    String payrolldetuctionJson = cleanJson(empSalary.getPayrollDeductions());
+	    String payrolldeductionsJson = cleanJson(empSalary.getPayrollDeductions());
 
 	    JsonNode earningsNode = objectMapper.readTree(earningsJson);
 	    JsonNode deductionsNode = objectMapper.readTree(deductionsJson);
-	    JsonNode payrollNode = objectMapper.readTree(payrolldetuctionJson);
-	 
-	    double totalEarnings = StreamSupport.stream(earningsNode.spliterator(), false)
-	            .mapToDouble(e -> e.get("monthlyAmount").asDouble(0.0)).sum();
-	    double totalDeductions = StreamSupport.stream(deductionsNode.spliterator(), false)
-	            .mapToDouble(d -> d.get("monthlyAmount").asDouble(0.0)).sum();
-	    double totalPayRollDeductions = StreamSupport.stream(payrollNode.spliterator(), false)
-	            .mapToDouble(d -> d.get("monthlyAmount").asDouble(0.0)).sum();
-	 
-	    // Identify allowances
+	    JsonNode payrollNode = objectMapper.readTree(payrolldeductionsJson);
+	    
+	    // Get allowances
 	    double perDayRate = 0, pgRentAllowance = 0;
 	    for (JsonNode e : earningsNode) {
 	        String name = e.get("name").asText();
@@ -6474,35 +6478,152 @@ public class AppController {
 	            pgRentAllowance = amount;
 	        }
 	    }
-	 
-	    double totalPerDayAllowance = perDayRate * allowanceDays; // Approved days
-	    double baseSalary = (totalEarnings - totalPayRollDeductions) - (totalPerDayAllowance + pgRentAllowance);
-	 
-	    double perDayBaseRate = effectiveWorkingDays > 0 ? baseSalary / effectiveWorkingDays : 0;
-	    double lopDeduction = perDayBaseRate * lopDays;
-	 
-	    double Deductions = lopDeduction + otherDeductions;
-	    double netPay = baseSalary + totalPerDayAllowance + pgRentAllowance - Deductions;
-	 
-	    // Round all values
-	    baseSalary = round(baseSalary);
-	    totalPerDayAllowance = round(totalPerDayAllowance);
-	    pgRentAllowance = round(pgRentAllowance);
-	    lopDeduction = round(lopDeduction);
-	    netPay = round(netPay);
-	    totalEarnings = round(netPay + Deductions + totalPayRollDeductions);
-	    totalDeductions = round(totalDeductions);
-	 
-	    // Save Payroll
+	    
+	    double totalPerDayAllowance = perDayRate * presentDays;
+	    
+	    // Get PF components
+	    double employeePf = 0;
+	    double employerPf = 0;
+	    
+	    for (JsonNode d : deductionsNode) {
+	        String name = d.get("name").asText();
+	        if (name.toLowerCase().contains("pf")) {
+	            employeePf = d.get("monthlyAmount").asDouble(0.0);
+	            System.out.println("📌 Employee PF: ₹" + round(employeePf));
+	        }
+	    }
+	    
+	    for (JsonNode p : payrollNode) {
+	        String name = p.get("name").asText();
+	        if (name.toLowerCase().contains("pf")) {
+	            employerPf = p.get("monthlyAmount").asDouble(0.0);
+	            System.out.println("📌 Employer PF: ₹" + round(employerPf));
+	        }
+	    }
+	    
+	    // ===== NEW: Get Professional Tax component =====
+	    double professionalTax = 0;
+	    for (JsonNode d : deductionsNode) {
+	        String name = d.get("name").asText();
+	        if (name.toLowerCase().contains("prof") && name.toLowerCase().contains("tax")) {
+	            professionalTax = d.get("monthlyAmount").asDouble(0.0);
+	            System.out.println("📌 Professional Tax: ₹" + round(professionalTax));
+	        }
+	    }
+	    
+	    System.out.println("\n💰 STEP 1: START WITH NET SALARY");
+	    System.out.println("   Net Salary: ₹" + round(netSalary));
+	    System.out.println("   Employee PF: ₹" + round(employeePf));
+	    System.out.println("   Employer PF: ₹" + round(employerPf));
+	    System.out.println("   Professional Tax: ₹" + round(professionalTax));
+	    
+	    // ===== UPDATED METHOD: Net Salary + PF + PF + Professional Tax =====
+	    double totalBase = netSalary + employeePf + employerPf + professionalTax;
+	    System.out.println("\n💰 STEP 2: TOTAL BASE = Net Salary + Employee PF + Employer PF + Professional Tax");
+	    System.out.println("   = ₹" + round(netSalary) + " + ₹" + round(employeePf) + " + ₹" + round(employerPf) + 
+	                      " + ₹" + round(professionalTax) + " = ₹" + round(totalBase));
+	    
+	    double perDayTotalRate = totalBase / totalWorkingDays;
+	    System.out.println("   Per Day Rate = ₹" + round(totalBase) + " ÷ " + totalWorkingDays + 
+	                      " = ₹" + round(perDayTotalRate));
+	    
+	    double salaryLopDeduction = perDayTotalRate * lopDays;
+	    System.out.println("   Salary LOP Deduction = ₹" + round(perDayTotalRate) + " × " + lopDays + 
+	                      " = ₹" + round(salaryLopDeduction));
+	    
+	    double salaryAfterLOP = netSalary - salaryLopDeduction;
+	    System.out.println("   Salary after LOP = ₹" + round(netSalary) + " - ₹" + round(salaryLopDeduction) + 
+	                      " = ₹" + round(salaryAfterLOP));
+	    
+	    // ===== PF LOP CALCULATION =====
+	    double totalPf = employeePf + employerPf;
+	    double pfPerDay = totalPf / totalWorkingDays;
+	    double pfLopDeduction = pfPerDay * lopDays;
+	    double finalTotalPf = totalPf - pfLopDeduction;
+	    double finalEmployeePf = finalTotalPf / 2;
+	    double finalEmployerPf = finalTotalPf / 2;
+	    
+	    System.out.println("\n🏢 STEP 3: PF LOP CALCULATION");
+	    System.out.println("   Total PF = ₹" + round(employeePf) + " + ₹" + round(employerPf) + 
+	                      " = ₹" + round(totalPf));
+	    System.out.println("   PF Per Day = ₹" + round(totalPf) + " ÷ " + totalWorkingDays + 
+	                      " = ₹" + round(pfPerDay));
+	    System.out.println("   PF LOP Deduction = ₹" + round(pfPerDay) + " × " + lopDays + 
+	                      " = ₹" + round(pfLopDeduction));
+	    System.out.println("   Final Total PF = ₹" + round(totalPf) + " - ₹" + round(pfLopDeduction) + 
+	                      " = ₹" + round(finalTotalPf));
+	    System.out.println("   └─ Final Employee PF: ₹" + round(finalEmployeePf));
+	    System.out.println("   └─ Final Employer PF: ₹" + round(finalEmployerPf));
+	    
+	    // ===== NEW: Professional Tax LOP CALCULATION =====
+	    double profTaxPerDay = professionalTax / totalWorkingDays;
+	    double profTaxLopDeduction = profTaxPerDay * lopDays;
+	    double finalProfessionalTax = professionalTax - profTaxLopDeduction;
+	    
+	    System.out.println("\n📊 STEP 4: PROFESSIONAL TAX LOP CALCULATION");
+	    System.out.println("   Professional Tax = ₹" + round(professionalTax));
+	    System.out.println("   Prof Tax Per Day = ₹" + round(professionalTax) + " ÷ " + totalWorkingDays + 
+	                      " = ₹" + round(profTaxPerDay));
+	    System.out.println("   Prof Tax LOP Deduction = ₹" + round(profTaxPerDay) + " × " + lopDays + 
+	                      " = ₹" + round(profTaxLopDeduction));
+	    System.out.println("   Final Professional Tax = ₹" + round(professionalTax) + " - ₹" + round(profTaxLopDeduction) + 
+	                      " = ₹" + round(finalProfessionalTax));
+	    
+	    // ===== UPDATED FINAL TAKE-HOME (including Professional Tax) =====
+	    double finalTakeHome = salaryAfterLOP - finalEmployeePf - finalProfessionalTax - otherDeductions;
+	    
+	    System.out.println("\n💰 STEP 5: FINAL TAKE-HOME");
+	    System.out.println("   Salary after LOP: ₹" + round(salaryAfterLOP));
+	    System.out.println("   Less: Employee PF: ₹" + round(finalEmployeePf));
+	    System.out.println("   Less: Professional Tax: ₹" + round(finalProfessionalTax));
+	    System.out.println("   Less: Other Deductions: ₹" + round(otherDeductions));
+	    System.out.println("   = FINAL TAKE-HOME: ₹" + round(finalTakeHome));
+	    
+	    // Calculate Gross Earnings (for display)
+	    double totalEarnings = StreamSupport.stream(earningsNode.spliterator(), false)
+	            .mapToDouble(e -> e.get("monthlyAmount").asDouble(0.0)).sum();
+	    double totalPayRollDeductions = StreamSupport.stream(payrollNode.spliterator(), false)
+	            .mapToDouble(d -> d.get("monthlyAmount").asDouble(0.0)).sum();
+	    
+	    double baseSalary_calculated = (totalEarnings - totalPayRollDeductions) - (totalPerDayAllowance + pgRentAllowance);
+	    double grossEarnings = baseSalary_calculated + totalPerDayAllowance + pgRentAllowance;
+	    
+	    // Store calculation details (UPDATED with Professional Tax)
+	    empCalcDetails.put("employeeName", employeeName);
+	    empCalcDetails.put("netSalary", round(netSalary));
+	    empCalcDetails.put("basicSalary", round(basicSalary));
+	    empCalcDetails.put("employeePf", round(employeePf));
+	    empCalcDetails.put("employerPf", round(employerPf));
+	    empCalcDetails.put("professionalTax", round(professionalTax));
+	    empCalcDetails.put("totalBase", round(totalBase));
+	    empCalcDetails.put("perDayTotalRate", round(perDayTotalRate));
+	    empCalcDetails.put("lopDays", lopDays);
+	    empCalcDetails.put("salaryLopDeduction", round(salaryLopDeduction));
+	    empCalcDetails.put("salaryAfterLOP", round(salaryAfterLOP));
+	    empCalcDetails.put("totalPf", round(totalPf));
+	    empCalcDetails.put("pfPerDay", round(pfPerDay));
+	    empCalcDetails.put("pfLopDeduction", round(pfLopDeduction));
+	    empCalcDetails.put("finalEmployeePf", round(finalEmployeePf));
+	    empCalcDetails.put("finalEmployerPf", round(finalEmployerPf));
+	    empCalcDetails.put("profTaxPerDay", round(profTaxPerDay));
+	    empCalcDetails.put("profTaxLopDeduction", round(profTaxLopDeduction));
+	    empCalcDetails.put("finalProfessionalTax", round(finalProfessionalTax));
+	    empCalcDetails.put("otherDeductions", round(otherDeductions));
+	    empCalcDetails.put("finalTakeHome", round(finalTakeHome));
+	    empCalcDetails.put("grossEarnings", round(grossEarnings));
+	    
+	    // Save to database
 	    Payroll payroll = payrollRepository.findByEmpidAndMonth(empId, currentMonth.toString());
-	    if (payroll == null)
+	    if (payroll == null) {
 	        payroll = new Payroll();
-	 
+	    }
+	    
+	    // Set all fields (UPDATED with Professional Tax in total deductions)
 	    payroll.setEmpid(empId);
 	    payroll.setMonth(currentMonth.toString());
 	    payroll.setPymtDate(lastDayOfMonth);
 	    payroll.setStatus("PROCESSED");
-	    payroll.setAmount(baseSalary);
+	    payroll.setAmount(baseSalary_calculated);
 	    payroll.setBnfName(employeeName);
 	    payroll.setBeneAccNo(accountNumber);
 	    payroll.setBeneIfsc(ifscCode);
@@ -6514,32 +6635,124 @@ public class AppController {
 	    payroll.setPymtMode(bankName != null && bankName.toLowerCase().contains("icic") ? "FT" : "NEFT");
 	    payroll.setPymtProdTypeCode("PAB_VENDOR");
 	    payroll.setRemark(currentMonth.getMonth().name() + " " + currentMonth.getYear() + " Salary");
-	 
-	    // Store all calculated values
+	    
+	    // Store calculation values (UPDATED to include Professional Tax)
 	    payroll.setLopDays(lopDays);
 	    payroll.setTotalEarnings(totalEarnings);
-	    payroll.setTotalDeductions(totalDeductions);
-	    payroll.setLopDeduction(lopDeduction);
-	    payroll.setDeductions(Deductions);
+	    // UPDATED: Added finalProfessionalTax to total deductions
+	    payroll.setTotalDeductions(salaryLopDeduction + otherDeductions + finalEmployeePf + finalProfessionalTax);
+	    payroll.setLopDeduction(salaryLopDeduction);
+	    // UPDATED: Added finalProfessionalTax to deductions
+	    payroll.setDeductions(salaryLopDeduction + otherDeductions + finalEmployeePf + finalProfessionalTax);
 	    payroll.setOtherDeductions(otherDeductions);
-	    payroll.setPayrollDeductions(totalPayRollDeductions);
+	    payroll.setPayrollDeductions(finalEmployerPf);
 	    payroll.setPerDayRate(perDayRate);
 	    payroll.setPerDayAllowance(totalPerDayAllowance);
-	    payroll.setPerDayAllowanceDays(allowanceDays);
+	    payroll.setPerDayAllowanceDays((long)presentDays);
 	    payroll.setPgRentAllowance(pgRentAllowance);
 	    payroll.setEffectiveWorkingDays(effectiveWorkingDays);
-	    payroll.setNetPay(netPay);
+	    payroll.setNetPay(finalTakeHome);
 	    payroll.setOtherDeductionsRemarks(adj.getOtherDeductionsRemarks());
 	    payroll.setCreatedDate(LocalDateTime.now());
-	 
-	    payrollList.add(payroll);
-	    System.out.println("Added payroll for: " + empId + " - " + employeeName);
+	    
+	    // If your Payroll entity has these fields, uncomment them:
+	    // payroll.setProfessionalTax(professionalTax);
+	    // payroll.setFinalProfessionalTax(finalProfessionalTax);
+	    // payroll.setProfTaxLopDeduction(profTaxLopDeduction);
+	    
+	    System.out.println("\n✅ Payroll record created for: " + employeeName);
+	    System.out.println("==========================================\n");
+	    
+	    return payroll;
 	}
-	 
-	// Helper method
+
+	/**
+	 * Calculate Net Salary from components (UPDATED - already includes Professional Tax)
+	 */
+	private double calculateNetSalary(EmployeeSalaryTbl empSalary, double basicSalary, ObjectMapper objectMapper) {
+	    try {
+	        String deductionsJson = cleanJson(empSalary.getDeductions());
+	        JsonNode deductionsNode = objectMapper.readTree(deductionsJson);
+	        
+	        double totalDeductions = 0;
+	        for (JsonNode d : deductionsNode) {
+	            totalDeductions += d.get("monthlyAmount").asDouble(0.0);
+	        }
+	        
+	        // Net Salary = Basic Salary - Total Deductions (including PF and Professional Tax)
+	        return basicSalary - totalDeductions;
+	    } catch (Exception e) {
+	        System.err.println("Error calculating net salary: " + e.getMessage());
+	        return basicSalary;
+	    }
+	}
+
+	/**
+	 * Extract Basic Salary from earnings JSON
+	 */
+	private double extractBasicSalary(String earningsJson, ObjectMapper objectMapper) {
+	    try {
+	        if (earningsJson == null || earningsJson.trim().isEmpty()) {
+	            return 0.0;
+	        }
+	        String cleanedJson = cleanJson(earningsJson);
+	        JsonNode earningsNode = objectMapper.readTree(cleanedJson);
+	        
+	        for (JsonNode e : earningsNode) {
+	            String name = e.get("name").asText();
+	            if ("Basic".equalsIgnoreCase(name) || "Basic Salary".equalsIgnoreCase(name)) {
+	                return e.get("monthlyAmount").asDouble(0.0);
+	            }
+	        }
+	        return 0.0;
+	    } catch (Exception e) {
+	        System.err.println("Error extracting basic salary: " + e.getMessage());
+	        return 0.0;
+	    }
+	}
+
+	/**
+	 * Calculate working days
+	 */
+	private int calculateWorkingDays(LocalDate start, LocalDate end) {
+	    int workingDays = 0;
+	    LocalDate current = start;
+	    while (!current.isAfter(end)) {
+	        if (current.getDayOfWeek().getValue() != 7) {
+	            workingDays++;
+	        }
+	        current = current.plusDays(1);
+	    }
+	    return workingDays;
+	}
+
+	/**
+	 * Round to 2 decimal places
+	 */
 	private double round(double value) {
 	    return Math.round(value * 100.0) / 100.0;
 	}
+
+	/**
+	 * Clean JSON string
+	 */
+	private String cleanJson2(String json) {
+	    if (json == null || json.trim().isEmpty()) {
+	        return "[]";
+	    }
+	    String cleaned = json.replace("\\", "");
+	    cleaned = cleaned.replace("\"{", "{");
+	    cleaned = cleaned.replace("}\"", "}");
+	    return cleaned;
+	}
+
+	/**
+	 * Get week-offs in range
+	 */
+	private List<Date> getWeekOffsInRange2(Date start, Date end) {
+	    return new ArrayList<>();
+	}
+	
  
 
 	/** ✅ 2️⃣ PAYROLL PREVIEW — Fetch all payroll for current month */

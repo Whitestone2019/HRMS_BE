@@ -29,6 +29,7 @@ public class ExitFormMaster {
     private String attachment;
     
  // Withdraw details
+    @Column(name = "WITHDRAW_PURPOSE", length = 455)
     private String withdrawPurpose;
     private LocalDate withdrawDate;
     private String withdrawBy;
@@ -195,6 +196,7 @@ public class ExitFormMaster {
 		this.attachment = attachment;
 	}
 
+	
 	public String getWithdrawPurpose() {
 		return withdrawPurpose;
 	}

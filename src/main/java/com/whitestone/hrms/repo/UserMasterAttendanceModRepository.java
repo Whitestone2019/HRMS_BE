@@ -9,11 +9,16 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import com.whitestone.entity.UserMasterAttendance;
 import com.whitestone.entity.UserMasterAttendanceMod;
 
 @Repository
 public interface UserMasterAttendanceModRepository extends JpaRepository<UserMasterAttendanceMod, String> {
+	
+	// ADD THIS METHOD - Find by userid
+	List<UserMasterAttendanceMod> findByUserid(String userid);
+	
+	// Optional: Add method to find by userid and date range
+	List<UserMasterAttendanceMod> findByUseridAndAttendancedateBetween(String userid, Date startDate, Date endDate);
 	
 	@Query("SELECT u FROM UserMasterAttendanceMod u WHERE u.attendanceid = :attendanceid AND TRUNC(u.attendancedate) = TRUNC(:attendancedate)")
 	Optional<UserMasterAttendanceMod> findByAttendanceidAndAttendancedate(@Param("attendanceid") String attendanceid,
@@ -53,7 +58,6 @@ public interface UserMasterAttendanceModRepository extends JpaRepository<UserMas
 	    @Param("end") Date end,
 	    @Param("attendanceIds") List<String> attendanceIds
 	);
-
 
 	@Query("SELECT u FROM UserMasterAttendanceMod u WHERE u.attendanceid = :attendanceid AND TRUNC(u.srlnum) = TRUNC(:srlnum)")
 	Optional<UserMasterAttendanceMod> findByAttendanceidAndSrlnum(@Param("attendanceid") String attendanceid,
