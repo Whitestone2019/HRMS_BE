@@ -9100,6 +9100,51 @@ public class AppController {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
 		}
 	}
+	
+	
+	@GetMapping("/get-direct-reports/{managerEmpId}")
+	public ResponseEntity<?> getDirectReportee(@PathVariable String managerEmpId) {
+	    try {
+	        List<Map<String, Object>> directReports = new ArrayList<>();
+	        
+	        // 1️⃣ Get regular employees who directly report to this manager
+	        List<usermaintenance> reportingEmployees = usermaintenanceRepository.findByRepoteTo(managerEmpId);
+	        for (usermaintenance emp : reportingEmployees) {
+	            Map<String, Object> reportee = new HashMap<>();
+	            reportee.put("empid", emp.getEmpid());
+	            reportee.put("name", emp.getFirstname() + " " + (emp.getLastname() != null ? emp.getLastname() : ""));
+	            reportee.put("email", emp.getEmailid());
+	            reportee.put("type", "Employee");
+	            directReports.add(reportee);
+	        }
+	        
+	        // 2️⃣ Get trainees who directly report to this manager
+	        List<TraineeMaster> reportingTrainees = traineemasterRepository.findByRepoteTo(managerEmpId);
+	        for (TraineeMaster trainee : reportingTrainees) {
+	            Map<String, Object> reportee = new HashMap<>();
+	            reportee.put("empid", trainee.getTrngid());
+	            reportee.put("name", trainee.getFirstname() + " " + (trainee.getLastname() != null ? trainee.getLastname() : ""));
+	            reportee.put("email", trainee.getEmailid());
+	            reportee.put("type", "Trainee");
+	            directReports.add(reportee);
+	        }
+	        
+	        Map<String, Object> response = new HashMap<>();
+	        response.put("status", "success");
+	        response.put("data", directReports);
+	        response.put("count", directReports.size());
+	        response.put("managerId", managerEmpId);
+	        
+	        return ResponseEntity.ok(response);
+	        
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        Map<String, Object> errorResponse = new HashMap<>();
+	        errorResponse.put("status", "error");
+	        errorResponse.put("message", "Error fetching direct reports: " + e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+	    }
+	}
 
 	@GetMapping("/employees/reporting-to/{managerEmpId}")
 	public ResponseEntity<?> getReportingEmployees(@PathVariable String managerEmpId) {
