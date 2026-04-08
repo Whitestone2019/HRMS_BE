@@ -5,6 +5,8 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 import javax.mail.MessagingException;
 import javax.mail.internet.InternetAddress;
@@ -44,13 +46,13 @@ public class EmailService {
     @Value("${email.sridharan:sridharan.ramar@whitestones.in}")
     private String sridharanEmail;
     
-    @Value("${email.hr:hr@whitestones.co.in}")
+    @Value("${email.hr:hr@whitestones.in}")
     private String hrEmail;
     
-    @Value("${email.accounts:accounts@whitestones.co.in}")
+    @Value("${email.accounts:accounts@whitestones.in}")
     private String accountsEmail;
     
-    @Value("${email.systemadmin:systemadmin@whitestones.co.in}")
+    @Value("${email.systemadmin:systemadmin@whitestones.in}")
     private String systemAdminEmail;
     
     @Value("${email.payroll:payroll@whitestones.co.in}")
@@ -78,52 +80,62 @@ public class EmailService {
     // ==================== BASIC EMAIL METHODS ====================
 
     public void sendVerificationEmail(String toEmail, String subject, String body) {
-    	 try {
-			MimeMessage message = mailSender.createMimeMessage();
-			 MimeMessageHelper helper = new MimeMessageHelper(message, true);
-			 helper.setTo(toEmail);
-			 helper.setSubject(subject);
-			 helper.setText(body);
-			 helper.setFrom("career@whitestones.co.in"); // Replace with your sender email
-			 mailSender.send(message);
-		} catch (MailException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (MessagingException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true);
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(body);
+            helper.setFrom("career@whitestones.co.in");
+            mailSender.send(message);
+        } catch (MailException | MessagingException e) {
+            e.printStackTrace();
+        }
     }
     
     public void sendPayslipEmail(String email, ByteArrayResource payslip, String month) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true);
-			helper.setFrom("payroll@whitestones.co.in");
+            helper.setFrom("payroll@whitestones.co.in");
             helper.setTo(email);
             helper.setSubject("Payslip for " + month);
             helper.setText("Dear Employee, \n\nPlease find attached your payslip for " + month + ".");
             helper.addAttachment("Payslip_" + month + ".pdf", payslip);
-
-           mailSender.send(message);
+            mailSender.send(message);
         } catch (MessagingException e) {
             throw new RuntimeException("Failed to send payslip email", e);
         }
     }
     
-    public void sendLeaveEmail(String From,String email, String subject, String body) {
+    // FIXED: sendLeaveEmail with duplicate protection
+    public void sendLeaveEmail(String From, String email, String subject, String body) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true);
-			helper.setFrom(From);
-			helper.setCc("hr@whitestones.in");
-            helper.setTo(email);
+            helper.setFrom(From);
+            
+            // Use Set to avoid duplicate recipients
+            Set<String> allRecipients = new HashSet<>();
+            allRecipients.add(email);
+            allRecipients.add("hr@whitestones.in");
+            
+            // Remove null or empty
+            allRecipients.removeIf(e -> e == null || e.trim().isEmpty());
+            
+            // Set recipients (no separate CC to avoid duplicates)
+            if (!allRecipients.isEmpty()) {
+                helper.setTo(allRecipients.toArray(new String[0]));
+            }
+            
             helper.setSubject(subject);
             helper.setText(body);
-
             mailSender.send(message);
+            
+            System.out.println("✅ Leave email sent to: " + String.join(", ", allRecipients));
+            
         } catch (MessagingException e) {
-            throw new RuntimeException("Failed to send payslip email", e);
+            throw new RuntimeException("Failed to send leave email", e);
         }
     }
     
@@ -132,12 +144,10 @@ public class EmailService {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             
-            // Set FROM with name - THIS IS THE KEY FIX
             helper.setFrom(new InternetAddress(fromEmail, fromName));
-            
             helper.setTo(toEmail);
             helper.setSubject(subject);
-            helper.setText(htmlBody, true); // true indicates HTML
+            helper.setText(htmlBody, true);
             
             mailSender.send(message);
             System.out.println("🎉 Celebration email sent successfully!");
@@ -150,19 +160,34 @@ public class EmailService {
         }
     }
     
-    public void sendAdvanceEmail(String From,String email, String subject, String body) {
+    // FIXED: sendAdvanceEmail with duplicate protection
+    public void sendAdvanceEmail(String From, String email, String subject, String body) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true);
-			helper.setFrom(From);
-			helper.setCc("accounts@whitestones.in");
-            helper.setTo(email);
+            helper.setFrom(From);
+            
+            // Use Set to avoid duplicate recipients
+            Set<String> allRecipients = new HashSet<>();
+            allRecipients.add(email);
+            allRecipients.add("accounts@whitestones.in");
+            
+            // Remove null or empty
+            allRecipients.removeIf(e -> e == null || e.trim().isEmpty());
+            
+            // Set recipients (no separate CC to avoid duplicates)
+            if (!allRecipients.isEmpty()) {
+                helper.setTo(allRecipients.toArray(new String[0]));
+            }
+            
             helper.setSubject(subject);
             helper.setText(body);
-
             mailSender.send(message);
+            
+            System.out.println("✅ Advance email sent to: " + String.join(", ", allRecipients));
+            
         } catch (MessagingException e) {
-            throw new RuntimeException("Failed to send payslip email", e);
+            throw new RuntimeException("Failed to send advance email", e);
         }
     }
     
@@ -184,13 +209,6 @@ public class EmailService {
 
     /**
      * Unified method for ALL exit process email notifications
-     * 
-     * @param exitForm The exit form
-     * @param employee The employee
-     * @param manager The manager (can be null for steps that don't need manager)
-     * @param step The exit process step (CREATION, MANAGER_REVIEW, HR_ROUND1, etc.)
-     * @param action The action taken (APPROVE, REJECT, ON-HOLD, null for steps without action)
-     * @param remarks Additional remarks (can be null)
      */
     public void sendExitProcessEmail(ExitFormMaster exitForm, 
                                      usermaintenance employee,
@@ -199,6 +217,13 @@ public class EmailService {
                                      String action,
                                      String remarks) {
         try {
+            // Log warning if manager and HR are same person
+            String managerEmail = manager != null ? getEmployeeEmail(manager) : null;
+            if (managerEmail != null && managerEmail.equalsIgnoreCase(hrEmail)) {
+                System.out.println("⚠️ Warning: Manager email (" + managerEmail + 
+                                 ") matches HR email. Duplicates will be prevented automatically.");
+            }
+            
             // 1. Determine recipients based on step
             String[] recipients = getRecipientsForStep(step, employee, manager);
             
@@ -385,7 +410,6 @@ public class EmailService {
                            exitForm.getAssetSubmittedBy() : "System Admin").append("\n");
                 body.append("Asset Clearance Date: ").append(exitForm.getAssetSubmittedOn()).append("\n\n");
                 
-                // Asset Clearance Display
                 String assetClearance = exitForm.getAssetClearance();
                 if (assetClearance != null && !assetClearance.trim().isEmpty()) {
                     body.append("Assets Returned:\n");
@@ -406,7 +430,6 @@ public class EmailService {
                 appendCommonDetails(body, employeeName, employee, exitForm);
                 body.append("HR Action: ").append(actionText).append("\n");
                 
-                // Offboarding Checklist Display
                 String offboardingChecks = exitForm.getHrOffboardingChecks();
                 if (offboardingChecks != null && !offboardingChecks.trim().isEmpty()) {
                     body.append("\n📋 Offboarding Checklist:\n");
@@ -558,7 +581,7 @@ public class EmailService {
             helper.setSubject(subject);
             helper.setText(body);
             
-            // Set multiple TO recipients
+            // Set multiple TO recipients (all unique already)
             InternetAddress[] toAddresses = new InternetAddress[recipients.length];
             for (int i = 0; i < recipients.length; i++) {
                 toAddresses[i] = new InternetAddress(recipients[i]);
@@ -567,6 +590,8 @@ public class EmailService {
             
             mailSender.send(message);
             
+            System.out.println("📧 Email sent to " + recipients.length + " recipient(s)");
+            
         } catch (Exception e) {
             System.err.println("❌ Failed to send email to multiple recipients: " + e.getMessage());
             e.printStackTrace();
@@ -574,17 +599,32 @@ public class EmailService {
     }
 
     /**
-     * Prepare unique recipients list (removes duplicates and nulls)
+     * Prepare unique recipients list (removes duplicates, nulls, and handles case-insensitive comparison)
      */
     private String[] prepareUniqueRecipients(String... emails) {
         if (emails == null || emails.length == 0) {
             return new String[0];
         }
 
-        return Arrays.stream(emails)
-            .filter(email -> email != null && !email.trim().isEmpty())
-            .distinct()
-            .toArray(String[]::new);
+        // Use Set for automatic duplicate removal with case-insensitive comparison
+        Set<String> uniqueEmails = new HashSet<>();
+        
+        for (String email : emails) {
+            if (email != null && !email.trim().isEmpty()) {
+                // Store in lowercase for case-insensitive uniqueness
+                uniqueEmails.add(email.trim().toLowerCase());
+            }
+        }
+        
+        // Convert back to array (emails are now in lowercase)
+        String[] result = uniqueEmails.toArray(new String[0]);
+        
+        // Log duplicate prevention if needed
+        if (emails.length > result.length) {
+            System.out.println("🔍 Duplicate prevention: Removed " + (emails.length - result.length) + " duplicate email(s)");
+        }
+        
+        return result;
     }
 
     /**
@@ -688,7 +728,7 @@ public class EmailService {
                             exitForm.getFinalHrRemarks());
     }
 
-    // ==================== EXISTING NOTIFICATION METHODS ====================
+    // ==================== FIXED NOTIFICATION METHODS ====================
 
     public void sendExpenseNotificationEmail(String empId, String action, String expenseId) {
         usermaintenance employee = usermaintenanceRepository.findByEmpid(empId);
@@ -704,7 +744,8 @@ public class EmailService {
                             "\nAmount: " + expense.getAmount() +
                             "\n\nPlease review it at your earliest convenience.\n\nRegards,\nHRMS System";
 
-                   this.sendAdvanceEmail(employee.getEmailid(), manager.getEmailid(), subject, body);
+                    // Use the fixed sendAdvanceEmail which has duplicate protection
+                    this.sendAdvanceEmail(employee.getEmailid(), manager.getEmailid(), subject, body);
                 }
             }
         }
@@ -723,7 +764,8 @@ public class EmailService {
                         "\nAmount: " + amount +
                         "\n\nPlease review it at your earliest convenience.\n\nRegards,\nHRMS System";
 
-               this.sendAdvanceEmail(employee.getEmailid(), manager.getEmailid(), subject, body);
+                // Use the fixed sendAdvanceEmail which has duplicate protection
+                this.sendAdvanceEmail(employee.getEmailid(), manager.getEmailid(), subject, body);
             }
         }
     }
@@ -765,12 +807,13 @@ public class EmailService {
                           "HR & Payroll System\n" +
                           "Whitestones Solutions Pvt Ltd";
 
+            // Use the fixed sendLeaveEmail which has duplicate protection
             sendLeaveEmail("payroll@whitestones.in", manager.getEmailid(), subject, body);
-            System.out.println("Rejection email sent to: " + manager.getEmailid());
+            System.out.println("✅ Rejection email sent to: " + manager.getEmailid());
 
         } catch (Exception e) {
             e.printStackTrace();
-            System.out.println("Failed to send rejection email for adjustment ID: " + pa.getId());
+            System.out.println("❌ Failed to send rejection email for adjustment ID: " + pa.getId());
         }
     }
 
