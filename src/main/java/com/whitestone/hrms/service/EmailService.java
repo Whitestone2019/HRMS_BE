@@ -318,23 +318,23 @@ public class EmailService {
     private String getSubjectForStep(ExitStep step, String employeeName, String actionText) {
         switch(step) {
             case CREATION:
-                return "New Exit Form Submitted - " + employeeName;
+                return "Resignation Submitted - " + employeeName;
             case WITHDRAWAL:
-                return "Exit Form WITHDRAWN - " + employeeName;
+                return "Resignation WITHDRAWN - " + employeeName;
             case MANAGER_REVIEW:
-                return "Exit Form " + actionText + " by Manager - " + employeeName;
+                return "Resignation " + actionText + " by Manager - " + employeeName;
             case HR_ROUND1:
-                return "Exit Form " + actionText + " by HR (Round 1) - " + employeeName;
+                return "Resignation " + actionText + " by HR (Round 1) - " + employeeName;
             case ASSET_CLEARANCE:
                 return "Asset Clearance Completed - " + employeeName;
             case HR_ROUND2:
-                return "Exit Form " + actionText + " by HR (Round 2/Offboarding) - " + employeeName;
+                return "Resignation " + actionText + " by HR (Round 2/Offboarding) - " + employeeName;
             case PAYROLL_CLEARANCE:
                 return "Payroll Clearance Completed - " + employeeName;
             case FINAL_HR:
-                return "Exit Process COMPLETED - " + employeeName;
+                return "Resignation Process COMPLETED - " + employeeName;
             default:
-                return "Exit Form Notification";
+                return "Resignation Notification";
         }
     }
 
@@ -356,7 +356,7 @@ public class EmailService {
         
         switch(step) {
             case CREATION:
-                body.append("A new exit form has been submitted by:\n\n");
+                body.append("A new resignation has been submitted by:\n\n");
                 appendCommonDetails(body, employeeName, employee, exitForm);
                 body.append("Submitted On: ").append(exitForm.getUserSubmittedOn()).append("\n");
                 body.append("Reason: ").append(exitForm.getReason() != null ? exitForm.getReason() : "Not specified").append("\n\n");
@@ -365,7 +365,7 @@ public class EmailService {
                 break;
                 
             case WITHDRAWAL:
-                body.append("An exit form has been WITHDRAWN by the employee:\n\n");
+                body.append("An resignation has been WITHDRAWN by the employee:\n\n");
                 appendCommonDetails(body, employeeName, employee, exitForm);
                 body.append("Submitted On: ").append(exitForm.getUserSubmittedOn()).append("\n");
                 body.append("Withdrawn On: ").append(exitForm.getWithdrawDate() != null ? 
@@ -377,11 +377,11 @@ public class EmailService {
                                           exitForm.getWithdrawPurpose() : "Employee has withdrawn the exit form");
                 appendRemarks(body, withdrawalRemarks, "Withdrawal Purpose");
                 
-                body.append("\nThe exit process has been cancelled and the form is no longer active.\n\n");
+                body.append("\nThe resignation process has been cancelled and the form is no longer active.\n\n");
                 break;
                 
             case MANAGER_REVIEW:
-                body.append("The exit form has been ").append(actionText.toLowerCase()).append(" by the manager.\n\n");
+                body.append("The resignation has been ").append(actionText.toLowerCase()).append(" by the manager.\n\n");
                 appendCommonDetails(body, employeeName, employee, exitForm);
                 body.append("Manager Name: ").append(managerName).append("\n");
                 body.append("Manager Action: ").append(actionText).append("\n");
@@ -393,7 +393,7 @@ public class EmailService {
                 break;
                 
             case HR_ROUND1:
-                body.append("The exit form has been ").append(actionText.toLowerCase()).append(" by HR in Round 1.\n\n");
+                body.append("The resignation has been ").append(actionText.toLowerCase()).append(" by HR in Round 1.\n\n");
                 appendCommonDetails(body, employeeName, employee, exitForm);
                 body.append("HR Action: ").append(actionText).append("\n");
                 
@@ -426,7 +426,7 @@ public class EmailService {
                 break;
                 
             case HR_ROUND2:
-                body.append("The exit form has been ").append(actionText.toLowerCase()).append(" by HR in Round 2 (Offboarding).\n\n");
+                body.append("The resignation has been ").append(actionText.toLowerCase()).append(" by HR in Round 2 (Offboarding).\n\n");
                 appendCommonDetails(body, employeeName, employee, exitForm);
                 body.append("HR Action: ").append(actionText).append("\n");
                 
@@ -468,7 +468,7 @@ public class EmailService {
                 break;
                 
             case FINAL_HR:
-                body.append("The exit process has been successfully COMPLETED for the following employee:\n\n");
+                body.append("The resignation process has been successfully COMPLETED for the following employee:\n\n");
                 appendCommonDetails(body, employeeName, employee, exitForm);
                 body.append("Manager Name: ").append(managerName).append("\n");
                 body.append("Final HR Approved By: ").append(exitForm.getFinalHrApprovedBy() != null ? 

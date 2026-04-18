@@ -3819,7 +3819,7 @@ public class AppController {
 	             emailBody.append("Whitestone Software Solution Pvt Ltd.\n");
 	             
 	             
-//	              emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, emailBody.toString());
+	              emailService.sendLeaveEmail(employeeEmail, managerEmail, subject, emailBody.toString());
 	             response.put("emailStatus", "Email sent to manager: " + managerEmail);
 	         } else {
 	             response.put("emailStatus", "Manager email not found");
