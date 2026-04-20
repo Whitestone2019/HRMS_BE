@@ -1,5 +1,6 @@
 package com.whitestone.hrms.service;
 
+import org.springframework.beans.factory.annotation.Value;  // ADD THIS IMPORT
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -14,15 +15,17 @@ import java.util.*;
 @Service
 public class FileService {
     
-    private final String UPLOAD_DIR = "uploads";
+    // CHANGE THIS - Use value from application.properties instead of hardcoded
+    @Value("${file.upload.dir}")
+    private String UPLOAD_DIR;  // This will read "/opt/hrms/uploads" from properties
+    
     private final Set<String> ALLOWED_EXTENSIONS = new HashSet<>(Arrays.asList(
         "pdf", "doc", "docx", "txt", "xls", "xlsx", "jpg", "jpeg", "png", "ppt", "pptx"
     ));
 
     public String saveFile(MultipartFile file) throws IOException {
-        // Get upload directory
-        String basePath = System.getProperty("user.dir");
-        Path uploadPath = Paths.get(basePath, UPLOAD_DIR);
+        // CHANGE THIS - Use absolute path directly, don't use user.dir
+        Path uploadPath = Paths.get(UPLOAD_DIR);  // Direct absolute path
         
         // Create directory if it doesn't exist
         if (!Files.exists(uploadPath)) {
@@ -54,19 +57,19 @@ public class FileService {
         Path filePath = uploadPath.resolve(uniqueFilename);
         Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-        // Return relative path
-        return UPLOAD_DIR + File.separator + uniqueFilename;
+        // CHANGE THIS - Return just filename, not full path
+        return uniqueFilename;  // Just return filename
     }
 
     public File getFile(String filename) {
-        String basePath = System.getProperty("user.dir");
-        Path filePath = Paths.get(basePath, UPLOAD_DIR, filename);
+        // CHANGE THIS - Use absolute path directly
+        Path filePath = Paths.get(UPLOAD_DIR, filename);
         return filePath.toFile();
     }
 
     public List<Map<String, Object>> getAllFiles() throws IOException {
-        String basePath = System.getProperty("user.dir");
-        Path uploadPath = Paths.get(basePath, UPLOAD_DIR);
+        // CHANGE THIS - Use absolute path directly
+        Path uploadPath = Paths.get(UPLOAD_DIR);
         
         List<Map<String, Object>> fileList = new ArrayList<>();
         
