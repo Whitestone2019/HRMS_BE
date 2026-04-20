@@ -126,35 +126,31 @@ public class FileController {
             
             if (!file.exists()) {
                 logger.warn("File not found: {}", filename);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(("File not found: " + filename).getBytes());
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
             }
 
             byte[] fileContent = Files.readAllBytes(file.toPath());
-            String mimeType = Files.probeContentType(file.toPath());
             
             HttpHeaders headers = new HttpHeaders();
             
             if (filename.toLowerCase().endsWith(".pdf")) {
                 headers.setContentType(MediaType.APPLICATION_PDF);
-                headers.setContentDispositionFormData("inline", filename);
+                // CORRECT: Use inline disposition for viewing
+                headers.add(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"");
             } else {
+                String mimeType = Files.probeContentType(file.toPath());
                 headers.setContentType(MediaType.parseMediaType(mimeType != null ? mimeType : "application/octet-stream"));
-                headers.setContentDispositionFormData("attachment", filename);
+                headers.add(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"");
             }
             
             headers.setContentLength(fileContent.length);
-            headers.setCacheControl("no-cache, no-store, must-revalidate");
-            headers.setPragma("no-cache");
-            headers.setExpires(0);
             
             logger.info("Serving file: {} (Size: {} bytes)", filename, fileContent.length);
             return new ResponseEntity<>(fileContent, headers, HttpStatus.OK);
             
         } catch (Exception e) {
             logger.error("Failed to serve file {}: {}", filename, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(("Error serving file: " + e.getMessage()).getBytes());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
 
