@@ -6219,6 +6219,58 @@ public class AppController {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
 		}
 	}
+	
+	
+	@DeleteMapping("/employeesalarydetail/{empid}")
+	@Transactional  // ADD THIS ANNOTATION
+	public ResponseEntity<Map<String, Object>> softDeleteEmployeeSalaryDetail(@PathVariable String empid) {
+	    Map<String, Object> response = new HashMap<>();
+	    try {
+	        // Check if salary record exists
+	        EmployeeSalaryTbl salaryRecord = employeeSalaryTblRepository.findByEmpid(empid);
+	        
+	        if (salaryRecord == null) {
+	            response.put("success", false);
+	            response.put("message", "Salary record not found for employee: " + empid);
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+	        }
+	        
+	        // Move to history before soft delete
+	        EmployeeSalaryHistory history = new EmployeeSalaryHistory();
+	        history.setEmpId(salaryRecord.getEmpid());
+	        history.setFirstName(salaryRecord.getFirstname());
+	        history.setLastName(salaryRecord.getLastname());
+	        history.setDateOfBirth(salaryRecord.getDateofbirth());
+	        history.setDateOfJoin(salaryRecord.getDateOfJoin());
+	        history.setOfficialEmail(salaryRecord.getOfficialemail());
+	        history.setEmailId(salaryRecord.getEmailid());
+	        history.setPhonenumber(salaryRecord.getPhonenumber());
+	        history.setLocationType(salaryRecord.getLocationType());
+	        history.setDepartment(salaryRecord.getDepartment());
+	        history.setAnnualCTC(salaryRecord.getAnnualCTC());
+	        history.setEarnings(salaryRecord.getEarnings());
+	        history.setDeductions(salaryRecord.getDeductions());
+	        history.setBankName(salaryRecord.getBankName());
+	        history.setAccountNumber(salaryRecord.getAccountNumber());
+	        history.setIfscCode(salaryRecord.getIfscCode());
+	        history.setModifiedBy(salaryRecord.getModifiedBy());
+	        history.setModifiedAt(LocalDateTime.now());
+	        employeeSalaryHistoryTblRepository.save(history);
+	        
+	        // Soft delete - delete from main table
+	        employeeSalaryTblRepository.deleteByEmpid(empid);
+	        
+	        response.put("success", true);
+	        response.put("message", "Salary record deleted successfully for employee: " + empid);
+	        return ResponseEntity.ok(response);
+	        
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        response.put("success", false);
+	        response.put("message", "Error deleting salary record: " + e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+	    }
+	}
 
 	@GetMapping("/employeesalarydetail") // Ensure this annotation exists
 	public ResponseEntity<List<EmployeeSalaryTbl>> getAllEmployeeSalaries() {
@@ -11398,6 +11450,7 @@ public class AppController {
 	    return master;
 	}
 	
+//	For TMS
 	
 	@GetMapping("/trainee/attendance/{traineeId}")
 	public ResponseEntity<Map<String, Object>> getTraineeAttendanceSummary(
