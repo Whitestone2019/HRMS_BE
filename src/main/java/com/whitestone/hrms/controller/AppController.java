@@ -11397,5 +11397,249 @@ public class AppController {
 	    master.setDelflg(mod.getDelflg());
 	    return master;
 	}
+	
+	
+	@GetMapping("/trainee/attendance/{traineeId}")
+	public ResponseEntity<Map<String, Object>> getTraineeAttendanceSummary(
+	        @PathVariable String traineeId,
+	        @RequestParam(required = false) Integer month,
+	        @RequestParam(required = false) Integer year) {
+	    
+	    Map<String, Object> response = new HashMap<>();
+	    
+	    try {
+	        // ========== 1️⃣ VALIDATE TRAINEE EXISTS ==========
+	        TraineeMaster trainee = traineemasterRepository.findByTrngid(traineeId);
+	        if (trainee == null) {
+	            response.put("success", false);
+	            response.put("message", "Trainee not found with ID: " + traineeId);
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+	        }
+	        
+	        // ========== 2️⃣ SET DATE RANGE ==========
+	        LocalDate now = LocalDate.now();
+	        int targetYear = (year != null) ? year : now.getYear();
+	        int targetMonth = (month != null) ? month : now.getMonthValue();
+	        
+	        // Validate month range
+	        if (targetMonth < 1 || targetMonth > 12) {
+	            response.put("success", false);
+	            response.put("message", "Invalid month. Must be between 1 and 12");
+	            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+	        }
+	        
+	        LocalDate startDate = LocalDate.of(targetYear, targetMonth, 1);
+	        LocalDate endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
+	        
+	        // If end date is in future, cap at today
+	        if (endDate.isAfter(now)) {
+	            endDate = now;
+	        }
+	        
+	        Date fromDate = Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+	        Date toDate = Date.from(endDate.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant());
+	        
+	        // ========== 3️⃣ GET HOLIDAYS ==========
+	        Set<String> holidayDates = new HashSet<>();
+	        List<WsslCalendarMod> holidays = wsslCalendarModRepository.findByEventDateBetween(fromDate, toDate);
+	        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	        for (WsslCalendarMod holiday : holidays) {
+	            holidayDates.add(sdf.format(holiday.getEventDate()));
+	        }
+	        
+	        // ========== 4️⃣ GET WEEK-OFFS (Sundays + 2nd/4th Saturdays) ==========
+	        Set<String> weekOffDates = calculateWeekOffsInRange(startDate, endDate);
+	        
+	        // ========== 5️⃣ GET ATTENDANCE RECORDS ==========
+	        List<UserMasterAttendanceMod> attendanceRecords = usermasterattendancemodrepository
+	                .findByAttendanceidAndDateRange(traineeId, fromDate, toDate);
+	        
+	        Map<String, UserMasterAttendanceMod> attendanceMap = new HashMap<>();
+	        for (UserMasterAttendanceMod record : attendanceRecords) {
+	            String dateStr = sdf.format(record.getAttendancedate());
+	            attendanceMap.put(dateStr, record);
+	        }
+	        
+	        // ========== 6️⃣ GET APPROVED LEAVES ==========
+	        List<EmployeeLeaveMasterTbl> approvedLeaves = employeeLeaveMasterRepository
+	                .findByEmpidAndStatusIgnoreCase(traineeId, "Approved");
+	        
+	        // ========== 7️⃣ CALCULATE STATISTICS ==========
+	        double daysAttended = 0.0;
+	        double leavesTaken = 0.0;
+	        int totalWorkingDays = 0;
+	        int holidayCount = 0;
+	        int weekOffCount = 0;
+	        int absentDays = 0;
+	        
+	        List<Map<String, Object>> dailyBreakdown = new ArrayList<>();
+	        
+	        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+	            String dateStr = date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+	            boolean isHoliday = holidayDates.contains(dateStr);
+	            boolean isWeekOff = weekOffDates.contains(dateStr);
+	            
+	            Map<String, Object> dayData = new HashMap<>();
+	            dayData.put("date", dateStr);
+	            dayData.put("dayOfWeek", date.getDayOfWeek().toString());
+	            dayData.put("isHoliday", isHoliday);
+	            dayData.put("isWeekOff", isWeekOff);
+	            
+	            // Skip holidays and week-offs from working days count
+	            if (isHoliday) {
+	                holidayCount++;
+	                dayData.put("status", "Holiday");
+	                dayData.put("attended", false);
+	                dailyBreakdown.add(dayData);
+	                continue;
+	            }
+	            
+	            if (isWeekOff) {
+	                weekOffCount++;
+	                dayData.put("status", "Week Off");
+	                dayData.put("attended", false);
+	                dailyBreakdown.add(dayData);
+	                continue;
+	            }
+	            
+	            // This is a working day
+	            totalWorkingDays++;
+	            
+	            // Check if on approved leave
+	            boolean onLeave = false;
+	            for (EmployeeLeaveMasterTbl leave : approvedLeaves) {
+	                LocalDate leaveStart = leave.getStartdate().toInstant()
+	                        .atZone(ZoneId.systemDefault()).toLocalDate();
+	                LocalDate leaveEnd = leave.getEnddate().toInstant()
+	                        .atZone(ZoneId.systemDefault()).toLocalDate();
+	                
+	                if (!date.isBefore(leaveStart) && !date.isAfter(leaveEnd)) {
+	                    onLeave = true;
+	                    float leaveDays = leave.getNoofdays() != null ? leave.getNoofdays() : 1.0f;
+	                    leavesTaken += leaveDays;
+	                    dayData.put("status", "On Leave - " + leave.getLeavetype());
+	                    dayData.put("leaveType", leave.getLeavetype());
+	                    dayData.put("attended", false);
+	                    break;
+	                }
+	            }
+	            
+	            if (onLeave) {
+	                dailyBreakdown.add(dayData);
+	                continue;
+	            }
+	            
+	            // Check attendance
+	            UserMasterAttendanceMod attendance = attendanceMap.get(dateStr);
+	            if (attendance != null && attendance.getStatus() != null) {
+	                String status = attendance.getStatus().toLowerCase();
+	                
+	                if (status.contains("present") || status.contains("early") || 
+	                    status.contains("od") || status.contains("comp")) {
+	                    daysAttended += 1.0;
+	                    dayData.put("status", "Present");
+	                    dayData.put("attended", true);
+	                } else if (status.contains("half")) {
+	                    daysAttended += 0.5;
+	                    dayData.put("status", "Half Day");
+	                    dayData.put("attended", true);
+	                } else if (status.contains("absent")) {
+	                    absentDays++;
+	                    dayData.put("status", "Absent");
+	                    dayData.put("attended", false);
+	                    dayData.put("isAbsent", true);
+	                } else {
+	                    dayData.put("status", status);
+	                    dayData.put("attended", false);
+	                }
+	                
+	                dayData.put("checkInTime", attendance.getCheckintime());
+	                dayData.put("checkOutTime", attendance.getCheckouttime());
+	                dayData.put("hoursWorked", attendance.getTotalhoursworked());
+	            } else {
+	                // No attendance record - count as absent
+	                absentDays++;
+	                dayData.put("status", "Not Marked");
+	                dayData.put("attended", false);
+	                dayData.put("isAbsent", true);
+	            }
+	            
+	            dailyBreakdown.add(dayData);
+	        }
+	        
+	        // ========== 8️⃣ CALCULATE ATTENDANCE PERCENTAGE ==========
+	        double attendancePercentage = totalWorkingDays > 0 
+	                ? Math.round((daysAttended / totalWorkingDays) * 10000.0) / 100.0 
+	                : 0.0;
+	        
+	        // ========== 9️⃣ GET LEAVE BALANCE ==========
+	        int currentYear = startDate.getYear();
+	        Optional<EmployeeLeaveSummary> summaryOpt = employeeLeaveSummaryRepository
+	                .findByEmpIdAndYear(traineeId, currentYear);
+	        
+	        float availableLeaves = 6.0f; // Default for trainees (WS employees)
+	        if (summaryOpt.isPresent() && summaryOpt.get().getCasualLeaveBalance() != null) {
+	            availableLeaves = summaryOpt.get().getCasualLeaveBalance();
+	        }
+	        
+	        // ========== 🔟 BUILD RESPONSE ==========
+	        response.put("success", true);
+	        response.put("traineeId", traineeId);
+	        response.put("traineeName", trainee.getFirstname() + " " + 
+	                      (trainee.getLastname() != null ? trainee.getLastname() : ""));
+	        response.put("month", targetMonth);
+	        response.put("monthName", startDate.getMonth().toString());
+	        response.put("year", targetYear);
+	        response.put("period", startDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")) + 
+	                      " to " + endDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")));
+	        
+	        // Statistics
+	        response.put("totalWorkingDays", totalWorkingDays);
+	        response.put("daysAttended", daysAttended);
+	        response.put("leavesTaken", leavesTaken);
+	        response.put("absentDays", absentDays);
+	        response.put("holidays", holidayCount);
+	        response.put("weekOffs", weekOffCount);
+	        response.put("attendancePercentage", attendancePercentage);
+	        response.put("availableLeaves", availableLeaves);
+	        
+	        // Daily breakdown (optional - can be removed if not needed)
+	        response.put("dailyBreakdown", dailyBreakdown);
+	        
+	        return ResponseEntity.ok(response);
+	        
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        response.put("success", false);
+	        response.put("message", "Error fetching attendance: " + e.getMessage());
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+	    }
+	}
+
+	/**
+	 * Helper method to calculate week-offs in date range
+	 * Week-offs: All Sundays + 2nd and 4th Saturdays
+	 */
+	private Set<String> calculateWeekOffsInRange1(LocalDate start, LocalDate end) {
+	    Set<String> weekOffs = new HashSet<>();
+	    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	    
+	    for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
+	        DayOfWeek dow = date.getDayOfWeek();
+	        int dayOfMonth = date.getDayOfMonth();
+	        
+	        // Sunday is always week off
+	        boolean isSunday = dow == DayOfWeek.SUNDAY;
+	        
+	        // 2nd or 4th Saturday is week off
+	        boolean is2ndOr4thSat = dow == DayOfWeek.SATURDAY &&
+	                ((dayOfMonth >= 8 && dayOfMonth <= 14) || (dayOfMonth >= 22 && dayOfMonth <= 28));
+	        
+	        if (isSunday || is2ndOr4thSat) {
+	            weekOffs.add(sdf.format(java.sql.Date.valueOf(date)));
+	        }
+	    }
+	    return weekOffs;
+	}
 }
 

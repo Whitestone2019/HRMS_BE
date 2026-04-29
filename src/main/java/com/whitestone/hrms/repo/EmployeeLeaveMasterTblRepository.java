@@ -100,4 +100,6 @@ public interface EmployeeLeaveMasterTblRepository extends JpaRepository<Employee
  	    @Param("year") int year, 
  	    @Param("month") int month);
 	
+ // In EmployeeLeaveMasterTblRepository.java
+ 	List<EmployeeLeaveMasterTbl> findByEmpidAndStatusIn(String empid, List<String> statuses);
 }
