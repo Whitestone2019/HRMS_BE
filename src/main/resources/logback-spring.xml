@@ -32,7 +32,7 @@
     </root>
 
     <!-- Package-specific log level -->
-    <logger name="com.whitestone" level="DEBUG" additivity="false">
+    <logger name="com.whitestone.hrms" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </logger>
